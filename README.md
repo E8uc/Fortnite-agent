@@ -74,10 +74,10 @@ It is meant to make Fortnite asset research faster, easier and accessible from a
 Links
 
 Website
-https://a39328122-hue.github.io/Fortnite-agent/
+https://e8uc.github.io/Fortnite-agent/
 
 ⸻
 
-Developed by YT @27lf
+Developed by YT @e8uc
 
 NovaSparx is still being actively developed, with more tools, asset support and improvements planned.
