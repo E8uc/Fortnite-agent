@@ -5,7 +5,7 @@
     "https://fortnite-ai-agent-api.a39328122.workers.dev";
 
   const SITE =
-    "https://a39328122-hue.github.io/Fortnite-agent/";
+    "https://e8uc.github.io/Fortnite-agent/";
 
   const BASE =
     "/Fortnite-agent/";
