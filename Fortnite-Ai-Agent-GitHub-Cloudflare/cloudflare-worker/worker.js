@@ -10,10 +10,10 @@ const DILLY_EXPORT_BASE =
   "https://export-service-new.dillyapis.com/v1/export";
 
 const SITE_URL =
-  "https://a39328122-hue.github.io/Fortnite-agent/";
+  "https://e8uc.github.io/Fortnite-agent/";
 
 const SITE_ORIGIN =
-  "https://a39328122-hue.github.io";
+  "https://e8uc.github.io";
 
 const SITE_PATH_PREFIX =
   "/Fortnite-agent/";
@@ -39,7 +39,7 @@ const STATELESS_AUTH_AAD =
   "FNAA-STATELESS-OPENROUTER-AUTH";
 
 const SYSTEM_PROMPT = `
-You are Fortnite Ai Agent (FNAA), developed by YT @27lf.
+You are Fortnite Ai Agent (FNAA), developed by YT @E8uc.
 
 PRIMARY USE
 - You are mainly for Fortnite Creative 1.0 users.
@@ -2044,29 +2044,65 @@ function normalizeBaseUrl(
     .replace(/\/+$/, "");
 }
 
+function novaTokenList(
+  ...values
+) {
+  const output = [];
+  const seen = new Set();
+
+  for (const value of values) {
+    const token =
+      String(value || "")
+        .trim();
+
+    if (
+      !token ||
+      token.length > 4096 ||
+      seen.has(token)
+    ) {
+      continue;
+    }
+
+    seen.add(token);
+    output.push(token);
+  }
+
+  return output;
+}
+
 function novaConfig(env) {
+  const sharedTokens =
+    novaTokenList(
+      env.NOVASPARX_SHARED_TOKEN,
+      env.NOVASPARX_SHARED_TOKEN_PREVIOUS
+    );
+
   return {
     autoLinkUrl:
       normalizeBaseUrl(
         env.NOVASPARX_AUTOLINK_URL
       ),
 
-    autoLinkToken:
-      String(
-        env.NOVASPARX_LINK_TOKEN ||
-        ""
-      ).trim(),
+    autoLinkTokens:
+      novaTokenList(
+        ...sharedTokens,
+        env.NOVASPARX_LINK_TOKEN,
+        env.NOVASPARX_LINK_TOKEN_PREVIOUS
+      ),
 
     directUrl:
       normalizeBaseUrl(
         env.NOVASPARX_BACKEND_URL
       ),
 
-    directToken:
-      String(
-        env.NOVASPARX_BACKEND_TOKEN ||
-        ""
-      ).trim()
+    directTokens:
+      novaTokenList(
+        ...sharedTokens,
+        env.NOVASPARX_BACKEND_TOKEN,
+        env.NOVASPARX_BACKEND_TOKEN_PREVIOUS,
+        env.NOVASPARX_LINK_TOKEN,
+        env.NOVASPARX_LINK_TOKEN_PREVIOUS
+      )
   };
 }
 
@@ -2077,9 +2113,12 @@ function novaConfigured(env) {
   return (
     !!(
       config.autoLinkUrl &&
-      config.autoLinkToken
+      config.autoLinkTokens.length
     ) ||
-    !!config.directUrl
+    !!(
+      config.directUrl &&
+      config.directTokens.length
+    )
   );
 }
 
@@ -2091,7 +2130,7 @@ function safeNovaRoute(
       .trim();
 
   if (
-    !/^\/v1\/(?:health|resolve|preview|inspect|references|texture|warmup|refresh)$/
+    !/^\/v1\/(?:health|resolve|inspect|references|texture|warmup|refresh)$/
       .test(value)
   ) {
     throw new Error(
@@ -2210,11 +2249,64 @@ async function fetchNovaUpstream(
   return response;
 }
 
+async function fetchNovaWithTokenFallback(
+  base,
+  tokens,
+  route,
+  options
+) {
+  const candidates =
+    Array.isArray(tokens) &&
+    tokens.length
+      ? tokens
+      : [""];
+
+  let response = null;
+
+  for (
+    let index = 0;
+    index < candidates.length;
+    index++
+  ) {
+    response =
+      await fetchNovaUpstream(
+        base,
+        candidates[index],
+        route,
+        options
+      );
+
+    if (
+      ![
+        401,
+        403
+      ].includes(
+        response.status
+      ) ||
+      index ===
+        candidates.length - 1
+    ) {
+      return response;
+    }
+
+    try {
+      await response.body
+        ?.cancel();
+    } catch {
+      // Retry the next configured rotation token.
+    }
+  }
+
+  return response;
+}
+
 function shouldFallbackNova(
   response
 ) {
   return (
     !response ||
+    response.status === 401 ||
+    response.status === 403 ||
     response.status === 502 ||
     response.status === 503 ||
     response.status === 504
@@ -2234,13 +2326,13 @@ async function novaFetch(
 
   if (
     config.autoLinkUrl &&
-    config.autoLinkToken
+    config.autoLinkTokens.length
   ) {
     try {
       const response =
-        await fetchNovaUpstream(
+        await fetchNovaWithTokenFallback(
           config.autoLinkUrl,
-          config.autoLinkToken,
+          config.autoLinkTokens,
           route,
           {
             ...options,
@@ -2277,11 +2369,12 @@ async function novaFetch(
   }
 
   if (
-    config.directUrl
+    config.directUrl &&
+    config.directTokens.length
   ) {
-    return fetchNovaUpstream(
+    return fetchNovaWithTokenFallback(
       config.directUrl,
-      config.directToken,
+      config.directTokens,
       route,
       {
         ...options,
@@ -2622,9 +2715,6 @@ async function handleNovaProxy(
     "/nova/resolve":
       "/v1/resolve",
 
-    "/nova/preview":
-      "/v1/preview",
-
     "/nova/inspect":
       "/v1/inspect",
 
@@ -2912,38 +3002,6 @@ function addUnique(
   list.push(clean);
 }
 
-function dillyPackagePath(
-  rawValue
-) {
-  let value =
-    String(rawValue || "")
-      .trim()
-      .replace(/\\/g, "/")
-      .replace(
-        /\.(?:uasset|uexp|ubulk)$/i,
-        ""
-      );
-
-  const slash =
-    value.lastIndexOf("/");
-
-  const objectDot =
-    value.indexOf(
-      ".",
-      slash + 1
-    );
-
-  if (objectDot > slash) {
-    value =
-      value.slice(
-        0,
-        objectDot
-      );
-  }
-
-  return value;
-}
-
 function dillyPathCandidates(
   rawValue
 ) {
@@ -2961,7 +3019,10 @@ function dillyPathCandidates(
     new Set();
 
   const clean =
-    dillyPackagePath(raw);
+    raw.replace(
+      /\.(?:uasset|uexp|ubulk)$/i,
+      ""
+    );
 
   const pushForms = (
     base
@@ -3016,12 +3077,6 @@ function dillyPathCandidates(
         output,
         seen,
         `${objectBase}.${name}`
-      );
-
-      addUnique(
-        output,
-        seen,
-        `${objectBase}.${name}_C`
       );
     }
   };
@@ -3428,7 +3483,7 @@ async function fetchDillyImage(
           "image/png,image/webp,image/*;q=0.9,application/json;q=0.3,*/*;q=0.1"
       }
     },
-    6_000
+    8_000
   );
 }
 
@@ -3437,12 +3492,12 @@ async function fetchDillyJson(
 ) {
   const attempts = [
     {
-      pathKey: "path",
-      rawKey: "raw"
-    },
-    {
       pathKey: "Path",
       rawKey: "Raw"
+    },
+    {
+      pathKey: "path",
+      rawKey: "raw"
     }
   ];
 
@@ -3532,9 +3587,6 @@ async function tryDillyImageCandidates(
   candidates
 ) {
   const attempts = [];
-  const queued = [];
-  const seen =
-    new Set();
 
   for (
     const raw of candidates
@@ -3545,103 +3597,59 @@ async function tryDillyImageCandidates(
         raw
       )
     ) {
-      const key =
-        candidate.toLowerCase();
+      attempts.push(
+        candidate
+      );
 
-      if (!seen.has(key)) {
-        seen.add(key);
-        queued.push(candidate);
+      try {
+        const response =
+          await fetchDillyImage(
+            candidate
+          );
+
+        const type =
+          String(
+            response.headers
+              .get(
+                "content-type"
+              ) || ""
+          ).toLowerCase();
+
+        if (
+          response.ok &&
+          type.startsWith(
+            "image/"
+          )
+        ) {
+          return {
+            state: "ready",
+            response,
+            contentType: type,
+            resolvedPath:
+              candidate,
+            attempts
+          };
+        }
+
+        try {
+          await response.body
+            ?.cancel();
+        } catch {}
+      } catch {
+        // Continue through deterministic candidates.
       }
 
-      if (queued.length >= 20) {
+      if (
+        attempts.length >= 20
+      ) {
         break;
       }
     }
 
-    if (queued.length >= 20) {
+    if (
+      attempts.length >= 20
+    ) {
       break;
-    }
-  }
-
-  for (
-    let offset = 0;
-    offset < queued.length;
-    offset += 4
-  ) {
-    const batch =
-      queued.slice(
-        offset,
-        offset + 4
-      );
-
-    attempts.push(...batch);
-
-    const results =
-      await Promise.all(
-        batch.map(
-          async (candidate) => {
-            try {
-              const response =
-                await fetchDillyImage(
-                  candidate
-                );
-
-              const type =
-                String(
-                  response.headers
-                    .get(
-                      "content-type"
-                    ) || ""
-                ).toLowerCase();
-
-              if (
-                response.ok &&
-                type.startsWith(
-                  "image/"
-                )
-              ) {
-                return {
-                  response,
-                  contentType: type,
-                  resolvedPath:
-                    candidate
-                };
-              }
-
-              try {
-                await response.body
-                  ?.cancel();
-              } catch {}
-            } catch {
-              // Another normalized candidate may still resolve.
-            }
-
-            return null;
-          }
-        )
-      );
-
-    const ready =
-      results.find(Boolean);
-
-    if (ready) {
-      for (const result of results) {
-        if (
-          result &&
-          result !== ready
-        ) {
-          try {
-            await result.response
-              .body?.cancel();
-          } catch {}
-        }
-      }
-
-      return {
-        state: "ready",
-        ...ready,
-        attempts
-      };
     }
   }
 
@@ -3675,46 +3683,32 @@ async function resolveDillyImage(
       rawPath
     );
 
-  const jsonResults =
-    await Promise.all(
-      jsonCandidates
-        .slice(0, 3)
-        .map(
-          async (candidate) => ({
-            candidate,
-            data:
-              await fetchDillyJson(
-                candidate
-              )
-          })
-        )
-    );
-
-  const refs = [];
-  const seenRefs =
-    new Set();
-
   for (
-    const result of jsonResults
+    const candidate of
+    jsonCandidates.slice(
+      0,
+      4
+    )
   ) {
-    if (!result.data) continue;
-
-    for (
-      const ref of
-      extractImageCandidates(
-        result.data,
-        rawPath
-      )
-    ) {
-      addUnique(
-        refs,
-        seenRefs,
-        ref
+    const data =
+      await fetchDillyJson(
+        candidate
       );
-    }
-  }
 
-  if (refs.length) {
+    if (!data) {
+      continue;
+    }
+
+    const refs =
+      extractImageCandidates(
+        data,
+        rawPath
+      );
+
+    if (!refs.length) {
+      continue;
+    }
+
     const viaJson =
       await tryDillyImageCandidates(
         refs
@@ -5121,7 +5115,7 @@ export default {
           ok: true,
           service: "FNAA",
           version:
-            "1.0.2",
+            "1.0.3",
           fortnite:
             CURRENT_FORTNITE_VERSION,
           authProvider:
@@ -5141,12 +5135,15 @@ export default {
             autoLinkConfigured:
               !!(
                 nova.autoLinkUrl &&
-                nova.autoLinkToken
+                nova.autoLinkTokens.length
               ),
             directFallbackConfigured:
-              !!nova.directUrl,
+              !!(
+                nova.directUrl &&
+                nova.directTokens.length
+              ),
             directTokenConfigured:
-              !!nova.directToken
+              !!nova.directTokens.length
           }
         }
       );
@@ -5598,4 +5595,3 @@ export default {
     );
   }
 };
-
