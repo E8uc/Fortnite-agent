@@ -89,6 +89,11 @@ a { color: inherit; text-decoration: none; }
 .e8-muted { color: var(--muted); font-size: 14px; line-height: 1.5; }
 .e8-muted.error { color: #8d1515; }
 
+.e8-support-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.e8-danger-button { width: 100%; height: 46px; border: 1px solid #d7b6b6; border-radius: 14px; background: #fff; color: #8d1515; font-weight: 700; cursor: pointer; }
+.e8-danger-button:hover, .e8-danger-button:focus-visible { background: #fff4f4; outline: none; }
+.e8-danger-button:disabled { opacity: .5; cursor: not-allowed; }
+
 .e8-tool-count { font-size: 13px; font-weight: 750; }
 .e8-tool-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .e8-tool-choice { min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
@@ -101,6 +106,7 @@ a { color: inherit; text-decoration: none; }
   .e8-suggestion-items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .e8-suggestion { width: 100%; }
   .e8-row { grid-template-columns: 88px 1fr auto; }
+  .e8-support-actions { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 520px) { .e8-tool-list { grid-template-columns: 1fr; } }
