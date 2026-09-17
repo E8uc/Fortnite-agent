@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://fortnite-ai-agent-api.a39328122.workers.dev; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
+  <title>E8 Support</title>
+  <link rel="stylesheet" href="../e8/e8.css?v=1" />
+</head>
+<body>
+  <header class="e8-topbar">
+    <a class="e8-icon-btn e8-back" href="../E8Hub/" aria-label="Back to E8Hub">‹</a>
+    <div class="e8-topbar-title">E8 Support</div>
+    <div></div>
+  </header>
+
+  <main class="e8-account">
+    <h1>Subscription Panel</h1>
+    <section class="e8-card">
+      <label class="e8-key" for="staffToken">Staff token</label>
+      <input id="staffToken" class="e8-search-input" type="password" autocomplete="off" spellcheck="false" placeholder="Session-only staff token" />
+      <p class="e8-muted">The token is kept only in this page's memory and is never saved to localStorage.</p>
+    </section>
+
+    <form id="subscriptionForm" class="e8-card" autocomplete="off">
+      <label class="e8-key" for="e8Id">E8 ID</label>
+      <input id="e8Id" class="e8-search-input" type="text" maxlength="19" pattern="E8[A-Za-z0-9]{15}uC" placeholder="E8...............uC" required spellcheck="false" />
+
+      <label class="e8-key" for="planSelect">Plan</label>
+      <select id="planSelect" class="e8-search-input" required>
+        <option value="plus">Plus</option>
+        <option value="premium">Premium</option>
+      </select>
+
+      <label class="e8-key" for="durationDays">Duration (days)</label>
+      <input id="durationDays" class="e8-search-input" type="number" min="1" max="730" step="1" value="30" required />
+
+      <button class="e8-login" type="submit">Activate / Extend</button>
+      <p id="result" class="e8-muted" role="status" aria-live="polite"></p>
+    </form>
+  </main>
+
+  <script src="../e8/e8-support.js?v=1"></script>
+</body>
+</html>
