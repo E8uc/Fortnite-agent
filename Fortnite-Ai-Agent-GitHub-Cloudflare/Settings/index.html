@@ -26,6 +26,15 @@
       <div class="e8-row"><div class="e8-key">API</div><div id="apiState" class="e8-value">Not connected</div><div></div></div>
     </section>
 
+    <section id="plusToolsCard" class="e8-card" hidden>
+      <h2>Choose your 5 tools</h2>
+      <p class="e8-muted">Plus lets you select up to five eligible tools for the active subscription period. The selection is cleared after the subscription expires.</p>
+      <div class="e8-tool-count"><span id="plusToolCount">0</span>/5 selected</div>
+      <div id="plusToolsList" class="e8-tool-list"></div>
+      <button id="savePlusTools" class="e8-login" type="button">Save tools</button>
+      <p id="plusToolsStatus" class="e8-muted" role="status" aria-live="polite"></p>
+    </section>
+
     <section class="e8-card">
       <button id="accountButton" class="e8-login" type="button">Log in</button>
       <p class="e8-muted">Guest and legacy logged-in access stay available. Plus and Premium are extra subscription layers and are verified by the E8 API.</p>
