@@ -4,6 +4,7 @@
   const HISTORY_KEY = "e8.ai.localHistory.v1";
   const MAX_HISTORY = 20;
   const MAX_MESSAGES = 12;
+  const MAX_MESSAGE_CHARS = 6000;
   const MAX_TOTAL_CHARS = 24000;
   const SUGGESTION_LIMIT = 5;
 
@@ -53,15 +54,35 @@
   let messages = [];
   let busy = false;
   let activeId = "";
+  let activeRequest = null;
+  let conversationGeneration = 0;
 
   function safeParse(value, fallback) {
     try { return JSON.parse(value); } catch { return fallback; }
   }
 
+  function cleanStoredMessages(input) {
+    if (!Array.isArray(input)) return [];
+    return input
+      .filter((message) => message && ["user", "assistant"].includes(message.role) && typeof message.content === "string")
+      .map((message) => ({
+        role: message.role,
+        content: message.content.slice(0, MAX_MESSAGE_CHARS)
+      }))
+      .filter((message) => message.content.trim())
+      .slice(-MAX_MESSAGES);
+  }
+
   function readHistory() {
     try {
       const parsed = safeParse(localStorage.getItem(HISTORY_KEY), []);
-      return Array.isArray(parsed) ? parsed.slice(0, MAX_HISTORY) : [];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.slice(0, MAX_HISTORY).map((item) => ({
+        id: String(item?.id || "").slice(0, 120),
+        title: String(item?.title || "Chat").replace(/\s+/g, " ").trim().slice(0, 54) || "Chat",
+        updatedAt: Number(item?.updatedAt || 0),
+        messages: cleanStoredMessages(item?.messages)
+      }));
     } catch { return []; }
   }
 
@@ -142,21 +163,21 @@
     if (!messages.length) return;
     if (!activeId) activeId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
     const history = readHistory().filter((item) => item.id !== activeId);
-    history.unshift({ id: activeId, title: conversationTitle(), updatedAt: Date.now(), messages: messages.slice(-MAX_MESSAGES) });
+    history.unshift({ id: activeId, title: conversationTitle(), updatedAt: Date.now(), messages: cleanStoredMessages(messages) });
     writeHistory(history);
     renderRecents();
   }
 
   function renderRecents(filter = "", targetOverride = null) {
     const query = filter.trim().toLowerCase();
-    const items = readHistory().filter((item) => !query || String(item.title || "").toLowerCase().includes(query));
+    const items = readHistory().filter((item) => !query || item.title.toLowerCase().includes(query));
     const target = targetOverride || els.recentList;
     target.replaceChildren();
     for (const item of items) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "e8-search-result";
-      button.textContent = item.title || "Chat";
+      button.textContent = item.title;
       button.addEventListener("click", () => loadConversation(item));
       target.append(button);
     }
@@ -168,20 +189,31 @@
     }
   }
 
+  function cancelPendingRequest() {
+    conversationGeneration += 1;
+    if (activeRequest) activeRequest.abort();
+    activeRequest = null;
+    busy = false;
+    els.chatSend.disabled = false;
+  }
+
+  function closeDrawer() {
+    window.E8Shell?.closeDrawer?.({ restoreFocus: false });
+  }
+
   function loadConversation(item) {
-    activeId = String(item.id || "");
-    messages = Array.isArray(item.messages)
-      ? item.messages
-          .filter((message) => message && ["user", "assistant"].includes(message.role) && typeof message.content === "string")
-          .slice(-MAX_MESSAGES)
-      : [];
+    cancelPendingRequest();
+    activeId = String(item.id || "").slice(0, 120);
+    messages = cleanStoredMessages(item.messages);
     els.chat.replaceChildren();
     for (const message of messages) appendMessage(message.role, message.content);
     setChatMode(true);
     closeSearch();
+    closeDrawer();
   }
 
   function resetChat() {
+    cancelPendingRequest();
     messages = [];
     activeId = "";
     els.chat.replaceChildren();
@@ -189,6 +221,8 @@
     els.chatInput.value = "";
     setChatMode(false);
     renderSuggestions();
+    closeSearch();
+    closeDrawer();
   }
 
   function totalChars(nextUserText) {
@@ -209,9 +243,14 @@
     busy = true;
     els.chatSend.disabled = true;
     const thinking = appendMessage("assistant", "Thinking…");
+    const generation = conversationGeneration;
+    const controller = new AbortController();
+    activeRequest = controller;
 
     try {
       await window.E8Auth.ready;
+      if (generation !== conversationGeneration) return;
+
       const headers = {
         "Content-Type": "application/json",
         "X-FNAA-Client": "web-v6",
@@ -223,6 +262,8 @@
       const clientContext = window.E8Database
         ? await window.E8Database.buildClientContext(content)
         : null;
+      if (generation !== conversationGeneration) return;
+
       const body = { messages: messages.slice(-MAX_MESSAGES), mode: "chat" };
       if (clientContext) body.client_context = clientContext;
 
@@ -230,24 +271,35 @@
         method: "POST",
         mode: "cors",
         cache: "no-store",
+        credentials: "omit",
+        referrerPolicy: "no-referrer",
         headers,
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
+        signal: controller.signal
       });
       const data = await response.json().catch(() => ({}));
+      if (generation !== conversationGeneration) return;
       if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
 
       const answer = String(data.reply || data.answer || data.message || data.choices?.[0]?.message?.content || "").trim();
       if (!answer) throw new Error("E8AI returned an empty response.");
       thinking.textContent = answer;
-      messages.push({ role: "assistant", content: answer });
+      messages.push({ role: "assistant", content: answer.slice(0, MAX_MESSAGE_CHARS) });
       saveConversation();
     } catch (error) {
+      if (controller.signal.aborted || generation !== conversationGeneration) {
+        thinking.remove();
+        return;
+      }
       thinking.classList.add("error");
       thinking.textContent = error?.message || "Couldn't reach E8AI. Try again.";
     } finally {
-      busy = false;
-      els.chatSend.disabled = false;
-      els.chatInput.focus();
+      if (activeRequest === controller) activeRequest = null;
+      if (generation === conversationGeneration) {
+        busy = false;
+        els.chatSend.disabled = false;
+        if (!els.chatComposer.hidden) els.chatInput.focus();
+      }
     }
   }
 
@@ -304,8 +356,10 @@
     if (window.E8Auth.getState().connected) await window.E8Auth.signOut();
     else window.E8Auth.signIn();
     updateLoginButton();
+    closeDrawer();
   });
   window.addEventListener("e8-auth-changed", updateLoginButton);
+  window.addEventListener("pagehide", cancelPendingRequest);
 
   renderSuggestions();
   renderRecents();
