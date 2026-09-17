@@ -1,0 +1,8 @@
+name = "fortnite-ai-agent-api"
+main = "e8-entry.js"
+compatibility_date = "2026-09-17"
+workers_dev = true
+
+# Runtime secrets are intentionally not stored here.
+# Existing legacy Worker secrets remain in Cloudflare.
+# New E8 secrets/variables are documented in E8-DEPLOYMENT.md.
