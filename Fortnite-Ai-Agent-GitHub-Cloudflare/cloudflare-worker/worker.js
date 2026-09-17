@@ -2130,7 +2130,7 @@ function safeNovaRoute(
       .trim();
 
   if (
-    !/^\/v1\/(?:health|resolve|inspect|references|texture|warmup|refresh)$/
+    !/^\/v1\/(?:health|resolve|preview|client-mesh|inspect|references|texture|warmup|refresh)$/
       .test(value)
   ) {
     throw new Error(
@@ -2204,7 +2204,9 @@ async function fetchNovaUpstream(
     "Accept",
     route === "/v1/texture"
       ? "image/png,image/webp,image/*;q=0.9,application/json;q=0.5"
-      : "application/json"
+      : route === "/v1/client-mesh"
+        ? "application/vnd.novasparx.mesh-v1,application/octet-stream;q=0.9,application/json;q=0.5"
+        : "application/json"
   );
 
   if (token) {
@@ -2240,7 +2242,13 @@ async function fetchNovaUpstream(
       },
       route === "/v1/texture"
         ? 65_000
-        : 45_000
+        : (
+            route === "/v1/resolve" ||
+            route === "/v1/preview" ||
+            route === "/v1/client-mesh"
+          )
+          ? 125_000
+          : 45_000
     );
 
   response.__fnaaNovaSource =
@@ -2715,6 +2723,12 @@ async function handleNovaProxy(
     "/nova/resolve":
       "/v1/resolve",
 
+    "/nova/preview":
+      "/v1/preview",
+
+    "/nova/client-mesh":
+      "/v1/client-mesh",
+
     "/nova/inspect":
       "/v1/inspect",
 
@@ -2879,6 +2893,71 @@ async function handleNovaProxy(
 
       if (etag) {
         headers.ETag = etag;
+      }
+
+      return new Response(
+        upstream.body,
+        {
+          status: 200,
+          headers
+        }
+      );
+    }
+
+    if (
+      novaRoute ===
+        "/v1/client-mesh" &&
+      upstream.ok
+    ) {
+      const length =
+        Number(
+          upstream.headers.get(
+            "content-length"
+          ) || 0
+        );
+
+      if (
+        length >
+        MAX_NOVA_BINARY_BYTES
+      ) {
+        try {
+          await upstream.body
+            ?.cancel();
+        } catch {}
+
+        return json(
+          request,
+          env,
+          {
+            state: "error",
+            error:
+              "NovaSparx mesh package is too large."
+          },
+          413
+        );
+      }
+
+      const meshType =
+        type.startsWith(
+          "application/vnd.novasparx.mesh-v1"
+        )
+          ? type
+          : "application/vnd.novasparx.mesh-v1";
+
+      const headers = {
+        ...publicBinaryHeaders(
+          meshType,
+          "no-store"
+        ),
+
+        "X-FNAA-Nova-Source":
+          source
+      };
+
+      if (length > 0) {
+        headers[
+          "Content-Length"
+        ] = String(length);
       }
 
       return new Response(
