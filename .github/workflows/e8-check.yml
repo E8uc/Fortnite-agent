@@ -44,17 +44,18 @@ jobs:
         run: |
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-auth.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-shell.js
+          node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-database.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-ai.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-settings.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-support.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-entry.js
 
       - name: Validate E8 static references and invariants
-        shell: python
+        shell: bash
         run: |
+          python - <<'PY'
           from html.parser import HTMLParser
           from pathlib import Path
-          import re
 
           root = Path("Fortnite-Ai-Agent-GitHub-Cloudflare")
           html_files = [
@@ -99,9 +100,12 @@ jobs:
           ai = (root / "e8/e8-ai.js").read_text(encoding="utf-8")
           if "return copy.slice(0, 5);" not in ai:
               raise SystemExit("E8AI must show exactly five randomized suggestions")
+          if "buildClientContext(content)" not in ai:
+              raise SystemExit("E8AI asset context integration is missing")
 
           hub = (root / "E8Hub/index.html").read_text(encoding="utf-8")
           if '<div class="e8-label"><span>Soon</span></div>' not in hub:
               raise SystemExit("Soon must remain a non-clickable label")
 
           print("E8 static checks passed")
+          PY
