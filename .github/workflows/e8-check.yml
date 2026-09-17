@@ -103,6 +103,7 @@ jobs:
           settings = (root / "e8/e8-settings.js").read_text(encoding="utf-8")
           support = (root / "e8/e8-support.js").read_text(encoding="utf-8")
           support_html = (root / "Support/index.html").read_text(encoding="utf-8")
+          support_css = (root / "e8/e8-support.css").read_text(encoding="utf-8")
           frame_guard = (root / "e8/e8-frame-guard.js").read_text(encoding="utf-8")
           admin_guard = (worker_dir / "e8-admin-guard.js").read_text(encoding="utf-8")
           gateway = (worker_dir / "e8-gateway.js").read_text(encoding="utf-8")
@@ -133,18 +134,22 @@ jobs:
           if '<div class="e8-label"><span>Soon</span></div>' not in hub:
               raise SystemExit("Soon must remain a non-clickable label")
 
-          if 'id="revokeSubscription"' not in support_html:
-              raise SystemExit("Support revoke control is missing")
-          if 'autocomplete="new-password"' not in support_html:
-              raise SystemExit("Support credential input must discourage password-manager autofill")
-          if '"/e8/admin/subscription/revoke"' not in support or '"/e8/admin/subscription/revoke"' not in worker:
-              raise SystemExit("Support revoke flow is incomplete")
+          if 'id="plansTab"' not in support_html or 'id="redeemTab"' not in support_html:
+              raise SystemExit("Support Plans/Redeem navigation is missing")
+          if 'id="planE8Id"' not in support_html or 'id="planDuration"' not in support_html:
+              raise SystemExit("Support plan form is incomplete")
+          if 'id="redeemUses"' not in support_html or 'id="redeemCode"' not in support_html:
+              raise SystemExit("Support redeem-code form is incomplete")
+          if "durationOptions" not in support or 'value: "3", label: "3 Days"' not in support or 'value: "7", label: "7 Days"' not in support:
+              raise SystemExit("Support Plus duration presets are incomplete")
+          if 'plan === "premium"' not in support or 'value: "30", label: "1 Month"' not in support:
+              raise SystemExit("Support Premium duration behavior is incomplete")
+          if "fetch(" in support or "XMLHttpRequest" in support:
+              raise SystemExit("Support frontend preview must not mutate backend state yet")
           if "localStorage" in support or "sessionStorage" in support:
-              raise SystemExit("Support staff tokens must never be persisted in web storage")
-          if "TOKEN_IDLE_MS" not in support or support.count("window.confirm") < 2:
-              raise SystemExit("Support confirmation/token-idle safeguards are missing")
-          if "newOperationId" not in support or support.count("operationId: newOperationId()") < 2:
-              raise SystemExit("Support mutation operation IDs are missing")
+              raise SystemExit("Support preview must not persist sensitive admin state")
+          if "e8-support.css" not in support_html or ".e8-support-tabs" not in support_css:
+              raise SystemExit("Support-specific frontend styling is missing")
           if 'class="e8-frame-guard"' not in support_html or "e8-frame-guard.js" not in support_html:
               raise SystemExit("Sensitive support page frame guard is missing")
           if "window.top === window.self" not in frame_guard:
