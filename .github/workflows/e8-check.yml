@@ -155,6 +155,14 @@ jobs:
               raise SystemExit("E8 gateway context sanitization is missing")
           if "OPERATION_RE" not in admin_guard or "inFlight" not in admin_guard or "completed" not in admin_guard:
               raise SystemExit("E8 admin replay guard invariants are missing")
+          if "configuredAdminTokens" not in admin_guard or "authorizedScope" not in admin_guard:
+              raise SystemExit("E8 admin replay guard must revalidate the current staff credential")
+          if 'const cacheKey = `${authScope}:${operationId}`;' not in admin_guard:
+              raise SystemExit("E8 admin replay cache must be scoped to the authorized staff token")
+          if 'if (!allowedOrigins(env).has(origin)) return handler(request);' not in admin_guard:
+              raise SystemExit("E8 admin replay guard must not bypass origin checks")
+          if "completed.get(operationId)" in admin_guard or "inFlight.get(operationId)" in admin_guard:
+              raise SystemExit("E8 admin replay cache must never be globally keyed by operation ID alone")
           if 'import legacyWorker from "./worker.js";' not in worker:
               raise SystemExit("E8 Worker must preserve the legacy Worker fallback")
           if 'account.effectivePlan !== "plus" && account.effectivePlan !== "premium"' not in worker:
