@@ -73,7 +73,15 @@
     try {
       const data = await request("/auth/session");
       let account = null;
-      try { account = await request("/e8/account"); } catch {}
+      try {
+        account = await request("/e8/account");
+      } catch (accountError) {
+        if (accountError.status === 401) {
+          sessionToken = "";
+          removeStorage(SESSION_KEY);
+          return publish({ mode: "guest", connected: false, user: null, account: null, error: null });
+        }
+      }
       return publish({ mode: "authenticated", connected: true, user: data.user || null, account, error: null });
     } catch (error) {
       if (error.status === 401) {
