@@ -178,12 +178,18 @@
       const token = window.E8Auth.getSessionToken();
       if (token) headers.Authorization = `Bearer ${token}`;
 
+      const clientContext = window.E8Database
+        ? await window.E8Database.buildClientContext(content)
+        : null;
+      const body = { messages: messages.slice(-MAX_MESSAGES), mode: "chat" };
+      if (clientContext) body.client_context = clientContext;
+
       const response = await fetch(window.E8Auth.API_ENDPOINT, {
         method: "POST",
         mode: "cors",
         cache: "no-store",
         headers,
-        body: JSON.stringify({ messages: messages.slice(-MAX_MESSAGES) })
+        body: JSON.stringify(body)
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
