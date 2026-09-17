@@ -2,17 +2,21 @@ import legacyWorker from "./worker.js";
 
 const SITE_ORIGIN = "https://e8uc.github.io";
 const E8_CLASS = "E8Account";
+const E8_AUDIT_CLASS = "E8Audit";
 const E8_ID_RE = /^E8[A-Za-z0-9]{15}uC$/;
 const E8_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 const SESSION_RE = /^or_sess_v1\.[A-Za-z0-9_-]{12,64}\.[A-Za-z0-9_-]{40,2200}$/;
 const AUTH_AAD = "FNAA-STATELESS-OPENROUTER-AUTH";
 const HUB_CLIENT = "hub-v1";
+const DEFAULT_ENHANCED_MODEL = "nvidia/nemotron-3-ultra-550b-a55b-20260604:free";
 const ABUSE_WINDOW_MS = 60_000;
 const ABUSE_MAX = 60;
 const ADMIN_ABUSE_MAX = 12;
 const CHAT_MAX_BYTES = 140_000;
 const CHAT_MAX_CHARS = 24_000;
+const E8_BODY_MAX_BYTES = 16_384;
 const BUCKETS = new Map();
+let lastBucketSweep = 0;
 
 const E8AI_ENHANCED_SYSTEM = `
 You are E8AI, the AI assistant inside the E8 platform, developed by YT @E8uc.
@@ -90,6 +94,8 @@ function cors(request, env) {
     "Content-Type": "application/json; charset=utf-8",
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Cross-Origin-Resource-Policy": "same-site",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
     "Vary": "Origin"
   };
@@ -108,9 +114,18 @@ function requestIp(request) {
   return String(request.headers.get("CF-Connecting-IP") || "unknown").slice(0, 96);
 }
 
+function sweepBuckets(now) {
+  if (now - lastBucketSweep < 5 * 60_000 && BUCKETS.size < 5000) return;
+  lastBucketSweep = now;
+  for (const [key, record] of BUCKETS) {
+    if (!record || now - record.startedAt >= ABUSE_WINDOW_MS * 2) BUCKETS.delete(key);
+  }
+}
+
 function allow(request, max = ABUSE_MAX, namespace = "e8") {
   const key = `${namespace}:${requestIp(request)}:${new URL(request.url).pathname}`;
   const now = Date.now();
+  sweepBuckets(now);
   const record = BUCKETS.get(key);
   if (!record || now - record.startedAt >= ABUSE_WINDOW_MS) {
     BUCKETS.set(key, { startedAt: now, count: 1 });
@@ -193,6 +208,7 @@ async function validateOpenRouterKey(apiKey, expectedUid = "") {
     const response = await fetch("https://openrouter.ai/api/v1/key", {
       method: "GET",
       headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+      cache: "no-store",
       signal: AbortSignal.timeout(10_000)
     });
     const data = await response.json().catch(() => ({}));
@@ -226,6 +242,7 @@ async function db(env, path, init = {}) {
       "X-Parse-Master-Key": config.masterKey,
       "Content-Type": "application/json"
     },
+    cache: "no-store",
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
     signal: AbortSignal.timeout(10_000)
   });
@@ -379,8 +396,27 @@ async function adminAuthorized(request, env) {
   if (!configured.length) return false;
   const provided = String(request.headers.get("Authorization") || "").match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || "";
   if (provided.length < 32) return false;
-  for (const expected of configured) if (await secureEqual(provided, expected)) return true;
-  return false;
+  let authorized = false;
+  for (const expected of configured) authorized = (await secureEqual(provided, expected)) || authorized;
+  return authorized;
+}
+
+async function writeAudit(env, event, details = {}) {
+  try {
+    const body = {
+      event: String(event || "unknown").slice(0, 80),
+      targetId: E8_ID_RE.test(String(details.targetId || "")) ? String(details.targetId) : null,
+      plan: normalizePlan(details.plan),
+      durationDays: Number.isInteger(details.durationDays) ? details.durationDays : null,
+      expiresAt: details.expiresAt || null,
+      occurredAt: new Date().toISOString(),
+      source: "support-panel",
+      ACL: {}
+    };
+    await db(env, `/classes/${encodeURIComponent(E8_AUDIT_CLASS)}`, { method: "POST", body });
+  } catch (error) {
+    console.error("E8 audit write:", error);
+  }
 }
 
 async function activate(env, e8Id, plan, days) {
@@ -398,12 +434,35 @@ async function activate(env, e8Id, plan, days) {
   return summary({ ...record, ...patch });
 }
 
-function toolCatalog(env) {
-  const values = String(env.E8_PLUS_TOOL_CATALOG || "")
+async function revokeSubscription(env, e8Id) {
+  const record = await findBy(env, "e8Id", e8Id);
+  if (!record?.objectId) return null;
+  const patch = {
+    plan: "free",
+    status: "active",
+    expiresAt: null,
+    selectedTools: []
+  };
+  await db(env, `/classes/${encodeURIComponent(E8_CLASS)}/${encodeURIComponent(record.objectId)}`, { method: "PUT", body: patch });
+  return summary({ ...record, ...patch });
+}
+
+function parseCatalog(value) {
+  return String(value || "")
     .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter((value) => /^[a-z0-9][a-z0-9_-]{1,63}$/.test(value));
-  return [...new Set(values)].slice(0, 200);
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => /^[a-z0-9][a-z0-9_-]{1,63}$/.test(item));
+}
+
+function plusToolCatalog(env) {
+  return [...new Set(parseCatalog(env.E8_PLUS_TOOL_CATALOG))].slice(0, 200);
+}
+
+function premiumToolCatalog(env) {
+  return [...new Set([
+    ...plusToolCatalog(env),
+    ...parseCatalog(env.E8_PREMIUM_TOOL_CATALOG)
+  ])].slice(0, 300);
 }
 
 function cleanMessages(messages) {
@@ -452,9 +511,7 @@ function shouldUseLegacyResearch(messages, body) {
 }
 
 async function enhancedChat(request, env, session, account, body) {
-  const model = String(env.E8_ENHANCED_MODEL || "").trim();
-  if (!model) return null;
-
+  const model = String(env.E8_ENHANCED_MODEL || DEFAULT_ENHANCED_MODEL).trim();
   const messages = cleanMessages(body?.messages);
   if (!messages.length) return json(request, env, { error: "Message is required." }, 400);
   const totalChars = messages.reduce((total, message) => total + message.content.length, 0);
@@ -476,6 +533,7 @@ async function enhancedChat(request, env, session, account, body) {
         "HTTP-Referer": "https://e8uc.github.io/",
         "X-Title": "E8AI"
       },
+      cache: "no-store",
       body: JSON.stringify({
         model,
         messages: promptMessages,
@@ -486,7 +544,8 @@ async function enhancedChat(request, env, session, account, body) {
       signal: AbortSignal.timeout(50_000)
     });
   } catch (error) {
-    return json(request, env, { error: error?.name === "TimeoutError" ? "The AI request timed out. Try again." : "Couldn't reach E8AI. Try again shortly." }, 502);
+    console.error("E8 enhanced model request:", error);
+    return null;
   }
 
   const data = await response.json().catch(() => ({}));
@@ -495,14 +554,12 @@ async function enhancedChat(request, env, session, account, body) {
       await invalidateAccountId(env, session.uid);
       return json(request, env, { error: "OpenRouter authorization was rejected. Log in with OpenRouter again.", code: "OPENROUTER_INVALID" }, 401);
     }
-    if (response.status === 429) {
-      return json(request, env, { error: "The E8AI model is rate limited right now. Try again shortly." }, 429, { "Retry-After": response.headers.get("retry-after") || "30" });
-    }
-    return json(request, env, { error: data?.error?.message || data?.error || `AI request failed (${response.status}).` }, 502);
+    console.error("E8 enhanced model fallback:", response.status, data?.error?.message || data?.error || "unknown error");
+    return null;
   }
 
   const reply = String(data?.choices?.[0]?.message?.content || "").trim();
-  if (!reply) return json(request, env, { error: "The AI returned an empty response." }, 502);
+  if (!reply) return null;
   return json(request, env, {
     reply,
     meta: {
@@ -549,24 +606,23 @@ async function handleHubChat(request, env, ctx) {
     return enhanced || forwardLegacy(fallback, env, ctx, session);
   } catch (error) {
     console.error("E8 paid chat routing:", error);
-    // Subscription/storage failures must never break legacy Free access.
+    // Subscription/storage/model failures must never break legacy Free access.
     return forwardLegacy(fallback, env, ctx, session);
   }
 }
 
-async function handleE8(request, env) {
+async function handleE8(request, env, ctx) {
   const url = new URL(request.url);
   if (!isAllowedOrigin(request, env)) return json(request, env, { error: "Origin not allowed." }, 403);
   if (!allow(request)) return json(request, env, { error: "Too many requests. Try again shortly." }, 429, { "Retry-After": "60" });
 
+  const length = Number(request.headers.get("Content-Length") || 0);
+  if (request.method !== "GET" && length > E8_BODY_MAX_BYTES) {
+    return json(request, env, { error: "Request is too large." }, 413);
+  }
+
   if (request.method === "GET" && url.pathname === "/e8/health") {
-    return json(request, env, {
-      ok: true,
-      service: "E8 account layer",
-      storageConfigured: back4app(env).configured,
-      adminConfigured: String(env.E8_ADMIN_PANEL_TOKENS || env.E8_ADMIN_PANEL_SECRET || "").trim().length >= 32,
-      enhancedModelConfigured: !!String(env.E8_ENHANCED_MODEL || "").trim()
-    });
+    return json(request, env, { ok: true, service: "E8 account layer" });
   }
 
   if (request.method === "GET" && url.pathname === "/e8/account") {
@@ -584,13 +640,21 @@ async function handleE8(request, env) {
     try {
       const live = await liveAccount(request, env);
       if (live.error) return json(request, env, { error: live.error, code: live.code }, live.status);
-      const catalog = toolCatalog(env);
       const plan = live.account.effectivePlan;
+      const plusCatalog = plusToolCatalog(env);
+      const premiumCatalog = premiumToolCatalog(env);
+      const selected = plan === "plus"
+        ? live.account.selectedTools.filter((tool) => plusCatalog.includes(tool))
+        : [];
+      const catalog = plan === "premium" ? premiumCatalog : plan === "plus" ? plusCatalog : [];
+      const allowed = plan === "premium" ? premiumCatalog : selected;
       return json(request, env, {
         plan,
+        accessMode: plan === "premium" ? "all" : plan === "plus" ? "selected" : "none",
         selectableLimit: plan === "plus" ? 5 : 0,
-        selected: plan === "plus" ? live.account.selectedTools.filter((tool) => catalog.includes(tool)) : [],
-        catalog: plan === "plus" || plan === "premium" ? catalog : []
+        selected,
+        allowed,
+        catalog
       });
     } catch (error) {
       console.error("E8 tools route:", error);
@@ -608,7 +672,7 @@ async function handleE8(request, env) {
     let body;
     try { body = await request.json(); }
     catch { return json(request, env, { error: "Invalid request." }, 400); }
-    const catalog = toolCatalog(env);
+    const catalog = plusToolCatalog(env);
     const selected = Array.isArray(body?.tools)
       ? [...new Set(body.tools.map((tool) => String(tool || "").trim().toLowerCase()))]
       : [];
@@ -638,10 +702,39 @@ async function handleE8(request, env) {
     try {
       const account = await activate(env, e8Id, plan, days);
       if (!account) return json(request, env, { error: "E8 ID was not found." }, 404);
+      const audit = writeAudit(env, "subscription.activate", {
+        targetId: e8Id,
+        plan,
+        durationDays: days,
+        expiresAt: account.expiresAt
+      });
+      if (ctx?.waitUntil) ctx.waitUntil(audit); else await audit;
       return json(request, env, { ok: true, account });
     } catch (error) {
       console.error("E8 subscription update:", error);
       return json(request, env, { error: "Couldn't update the subscription." }, 503);
+    }
+  }
+
+  if (request.method === "POST" && url.pathname === "/e8/admin/subscription/revoke") {
+    if (!allow(request, ADMIN_ABUSE_MAX, "admin")) return json(request, env, { error: "Too many admin attempts." }, 429, { "Retry-After": "60" });
+    if (!(await adminAuthorized(request, env))) return json(request, env, { error: "Unauthorized." }, 401);
+
+    let body;
+    try { body = await request.json(); }
+    catch { return json(request, env, { error: "Invalid request." }, 400); }
+    const e8Id = String(body?.id || "").trim();
+    if (!E8_ID_RE.test(e8Id)) return json(request, env, { error: "Invalid E8 ID." }, 400);
+
+    try {
+      const account = await revokeSubscription(env, e8Id);
+      if (!account) return json(request, env, { error: "E8 ID was not found." }, 404);
+      const audit = writeAudit(env, "subscription.revoke", { targetId: e8Id, plan: "free" });
+      if (ctx?.waitUntil) ctx.waitUntil(audit); else await audit;
+      return json(request, env, { ok: true, account });
+    } catch (error) {
+      console.error("E8 subscription revoke:", error);
+      return json(request, env, { error: "Couldn't revoke the subscription." }, 503);
     }
   }
 
@@ -651,7 +744,13 @@ async function handleE8(request, env) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const e8Route = url.pathname === "/e8/health" || url.pathname === "/e8/account" || url.pathname === "/e8/tools" || url.pathname === "/e8/account/tools" || url.pathname === "/e8/admin/subscription";
+    const e8Route =
+      url.pathname === "/e8/health" ||
+      url.pathname === "/e8/account" ||
+      url.pathname === "/e8/tools" ||
+      url.pathname === "/e8/account/tools" ||
+      url.pathname === "/e8/admin/subscription" ||
+      url.pathname === "/e8/admin/subscription/revoke";
     const hubRequest = request.headers.get("X-E8-Client") === HUB_CLIENT;
 
     if (request.method === "OPTIONS" && (e8Route || hubRequest)) {
@@ -659,7 +758,7 @@ export default {
       return new Response(null, { status: 204, headers: cors(request, env) });
     }
 
-    if (e8Route) return handleE8(request, env);
+    if (e8Route) return handleE8(request, env, ctx);
     if (request.method === "POST" && url.pathname === "/" && hubRequest) return handleHubChat(request, env, ctx);
     return legacyWorker.fetch(request, env, ctx);
   }
