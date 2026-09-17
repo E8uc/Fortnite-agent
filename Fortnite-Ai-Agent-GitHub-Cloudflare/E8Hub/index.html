@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://fortnite-ai-agent-api.a39328122.workers.dev; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
+  <title>E8Hub</title>
+  <link rel="stylesheet" href="../e8/e8.css?v=1" />
+</head>
+<body>
+  <div class="e8-app">
+    <header class="e8-topbar">
+      <button class="e8-icon-btn" type="button" data-e8-open-drawer aria-label="Open menu">☰</button>
+      <div class="e8-topbar-title">E8Hub</div>
+      <a class="e8-icon-btn" href="../Settings/" aria-label="Settings">⚙</a>
+    </header>
+
+    <main class="e8-main">
+      <section class="e8-hero" aria-labelledby="hubTitle">
+        <h1 id="hubTitle">E8</h1>
+        <a class="e8-primary" href="../E8AI/">Chat With E8AI</a>
+      </section>
+    </main>
+  </div>
+
+  <aside class="e8-drawer" data-e8-drawer aria-hidden="true">
+    <div class="e8-drawer-head">
+      <strong class="e8-drawer-title">E8</strong>
+      <button class="e8-icon-btn" type="button" data-e8-close-drawer aria-label="Close menu">×</button>
+    </div>
+    <nav class="e8-nav" aria-label="E8 navigation">
+      <a href="../Settings/"><span>Settings</span><span>›</span></a>
+      <a href="./"><span>Hub</span><span>›</span></a>
+      <button type="button"><span>More Fortnite Tools</span><span>›</span></button>
+      <a href="../E8AI/"><span>E8AI</span><span>›</span></a>
+      <button type="button"><span>Python Tools</span></button>
+      <button type="button"><span>Designs</span></button>
+      <button type="button"><span>Verse Codes</span></button>
+      <div class="e8-label"><span>Soon</span></div>
+    </nav>
+  </aside>
+  <button class="e8-scrim" data-e8-scrim type="button" aria-label="Close menu"></button>
+
+  <script src="../e8/e8-shell.js?v=1"></script>
+</body>
+</html>
