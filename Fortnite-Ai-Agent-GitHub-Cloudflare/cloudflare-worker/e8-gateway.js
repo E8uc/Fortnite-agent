@@ -2,7 +2,18 @@ import e8Worker from "./e8-entry.js";
 import { withAdminReplayGuard } from "./e8-admin-guard.js";
 
 const HUB_CLIENT = "hub-v1";
+const SITE_ORIGIN = "https://e8uc.github.io";
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
+
+function allowedOrigins(env) {
+  const set = new Set([SITE_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"]);
+  String(env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .forEach((value) => set.add(value));
+  return set;
+}
 
 function cleanText(value, maxLength) {
   return String(value || "")
@@ -41,6 +52,37 @@ function sanitizeClientContext(input) {
   return output;
 }
 
+function isE8Request(request) {
+  const url = new URL(request.url);
+  return url.pathname.startsWith("/e8/") ||
+    (request.method === "POST" && url.pathname === "/" && request.headers.get("X-E8-Client") === HUB_CLIENT);
+}
+
+function back4AppEndpointIsSafe(env) {
+  const configured = String(env.BACK4APP_SERVER_URL || "").trim();
+  if (!configured) return true;
+  try {
+    const url = new URL(configured);
+    return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash;
+  } catch {
+    return false;
+  }
+}
+
+function configurationError(request, env) {
+  const origin = String(request.headers.get("Origin") || "");
+  const headers = new Headers({
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Vary": "Origin"
+  });
+  if (allowedOrigins(env).has(origin)) headers.set("Access-Control-Allow-Origin", origin);
+  return new Response(JSON.stringify({ error: "E8 storage configuration is invalid." }), { status: 503, headers });
+}
+
 async function sanitizeHubRequest(request) {
   const url = new URL(request.url);
   if (request.method !== "POST" || url.pathname !== "/" || request.headers.get("X-E8-Client") !== HUB_CLIENT) {
@@ -76,6 +118,7 @@ async function sanitizeHubRequest(request) {
 
 export default {
   async fetch(request, env, ctx) {
+    if (isE8Request(request) && !back4AppEndpointIsSafe(env)) return configurationError(request, env);
     const safeRequest = await sanitizeHubRequest(request);
     return withAdminReplayGuard(safeRequest, env, (nextRequest) => e8Worker.fetch(nextRequest, env, ctx));
   }
