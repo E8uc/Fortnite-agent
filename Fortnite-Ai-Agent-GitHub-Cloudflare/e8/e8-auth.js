@@ -29,6 +29,15 @@
     return TOKEN_RE.test(token) ? token : "";
   }
 
+  function normalizePath(path) {
+    const value = String(path || "");
+    if (!value) return "";
+    if (!value.startsWith("/") || value.startsWith("//") || /[\u0000-\u001f\u007f]/.test(value)) {
+      throw new Error("Invalid E8 API path.");
+    }
+    return value;
+  }
+
   function publish(next) {
     state = Object.freeze({ ...state, ...next });
     window.dispatchEvent(new CustomEvent("e8-auth-changed", { detail: state }));
@@ -47,21 +56,34 @@
     if (status && status !== "success") publish({ error: status });
   }
 
-  async function requestWithToken(path, options = {}, tokenOverride = "") {
+  async function fetchWithToken(path, options = {}, tokenOverride = "") {
+    const safePath = normalizePath(path);
     const headers = { "X-FNAA-Client": "e8-web-v1", ...(options.headers || {}) };
     const cleanOverride = cleanToken(tokenOverride);
     if (cleanOverride) headers.Authorization = `Bearer ${cleanOverride}`;
-    if (options.body !== undefined) headers["Content-Type"] = "application/json";
 
-    const response = await fetch(`${API_ENDPOINT}${path}`, {
+    let body;
+    if (options.body !== undefined) {
+      if (!Object.keys(headers).some((name) => name.toLowerCase() === "content-type")) {
+        headers["Content-Type"] = "application/json";
+      }
+      body = typeof options.body === "string" ? options.body : JSON.stringify(options.body);
+    }
+
+    return fetch(`${API_ENDPOINT}${safePath}`, {
       method: options.method || "GET",
       mode: "cors",
       cache: "no-store",
       credentials: "omit",
       referrerPolicy: "no-referrer",
       headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body)
+      body,
+      signal: options.signal
     });
+  }
+
+  async function requestWithToken(path, options = {}, tokenOverride = "") {
+    const response = await fetchWithToken(path, options, tokenOverride);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       const error = new Error(data.error || `Request failed (${response.status})`);
@@ -74,6 +96,10 @@
 
   function request(path, options = {}) {
     return requestWithToken(path, options, sessionToken);
+  }
+
+  function fetchApi(path, options = {}) {
+    return fetchWithToken(path, options, sessionToken);
   }
 
   async function refresh() {
@@ -138,8 +164,8 @@
   window.E8Auth = Object.freeze({
     API_ENDPOINT,
     getState: () => state,
-    getSessionToken: () => sessionToken,
     request,
+    fetchApi,
     refresh,
     signIn,
     signOut,
