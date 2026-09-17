@@ -39,12 +39,13 @@ Optional:
 - `E8_PLUS_TOOL_CATALOG` — comma-separated tool IDs eligible for Plus 5-tool selection.
 - `E8_PREMIUM_TOOL_CATALOG` — comma-separated additional Premium tool IDs. Premium inherits the Plus catalog automatically.
 - `ALLOWED_ORIGINS` — comma-separated additional trusted origins when needed. Use exact origins only (scheme + hostname + optional port), prefer HTTPS, and do not add an origin merely to work around a CORS error. The E8 GitHub Pages origin and local development origins are already handled by the Worker.
+- `E8_ALLOW_LOCAL_AUTH=true` — development-only escape hatch that permits OAuth `return_to` URLs on `localhost`/`127.0.0.1`. Leave this unset in production. Local OAuth redirects are blocked by the E8 gateway by default.
 
 ## Support-operation safety
 
 Subscription activation/extension and revocation use random operation IDs. The gateway keeps a short in-memory replay cache and also records a bounded recent-operation history plus a short safety lease on the target `E8Account` record. This reduces accidental duplicate subscription changes when a browser retries a request or Cloudflare handles requests in different Worker isolates.
 
-Do not bypass `e8-gateway.js` by deploying `e8-entry.js` directly, because doing so would remove the gateway replay/idempotency and client-context hardening layers.
+Do not bypass `e8-gateway.js` by deploying `e8-entry.js` directly, because doing so would remove the gateway replay/idempotency, OAuth redirect, storage-endpoint, and client-context hardening layers.
 
 ## Validation
 
