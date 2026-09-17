@@ -13,6 +13,7 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+body.e8-drawer-open { overflow: hidden; }
 button, textarea, input, select { font: inherit; }
 button { color: inherit; }
 a { color: inherit; text-decoration: none; }
