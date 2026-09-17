@@ -21,7 +21,7 @@
     <section class="e8-card">
       <label class="e8-key" for="staffToken">Staff token</label>
       <input id="staffToken" class="e8-search-input" type="password" autocomplete="off" spellcheck="false" placeholder="Session-only staff token" />
-      <p class="e8-muted">The token is kept only in this page's memory and is never saved to localStorage.</p>
+      <p class="e8-muted">The token is kept only in this page's memory and is never saved to localStorage or sessionStorage.</p>
     </section>
 
     <form id="subscriptionForm" class="e8-card" autocomplete="off">
@@ -37,7 +37,11 @@
       <label class="e8-key" for="durationDays">Duration (days)</label>
       <input id="durationDays" class="e8-search-input" type="number" min="1" max="730" step="1" value="30" required />
 
-      <button class="e8-login" type="submit">Activate / Extend</button>
+      <div class="e8-support-actions">
+        <button id="activateSubscription" class="e8-login" type="submit">Activate / Extend</button>
+        <button id="revokeSubscription" class="e8-danger-button" type="button">Revoke to Free</button>
+      </div>
+      <p class="e8-muted">Revoking removes paid benefits and selected Plus tools, but keeps the user's login/account on the Free layer.</p>
       <p id="result" class="e8-muted" role="status" aria-live="polite"></p>
     </form>
   </main>
