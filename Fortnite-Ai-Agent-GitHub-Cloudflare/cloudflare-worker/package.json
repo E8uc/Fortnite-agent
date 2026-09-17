@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check e8-admin-guard.js && node --check e8-gateway.js && node --check e8-entry.js && node --check worker.js && wrangler deploy --dry-run --outdir .wrangler-dist",
+    "test": "node --test e8-admin-guard.test.mjs",
+    "check": "node --check e8-admin-guard.js && node --check e8-gateway.js && node --check e8-entry.js && node --check worker.js && npm test && wrangler deploy --dry-run --outdir .wrangler-dist",
     "deploy": "npm run check && wrangler deploy"
   },
   "devDependencies": {
