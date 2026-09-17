@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://fortnite-ai-agent-api.a39328122.workers.dev; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
+  <title>E8AI</title>
+  <link rel="stylesheet" href="../e8/e8.css?v=1" />
+</head>
+<body>
+  <div class="e8-app">
+    <header class="e8-topbar">
+      <a class="e8-icon-btn e8-back" href="../E8Hub/" aria-label="Back to E8Hub">‹</a>
+      <div class="e8-topbar-title">E8AI</div>
+      <div>
+        <button id="searchButton" class="e8-icon-btn" type="button" aria-label="Search chats">⌕</button>
+        <button class="e8-icon-btn" type="button" data-e8-open-drawer aria-label="Open chat menu">☰</button>
+      </div>
+    </header>
+
+    <main class="e8-ai-main">
+      <section id="welcome" class="e8-welcome">
+        <h1>What can I help with?</h1>
+        <form id="welcomeComposer" class="e8-composer-box" autocomplete="off">
+          <textarea id="welcomeInput" rows="2" maxlength="12000" placeholder="Ask E8AI" aria-label="Message E8AI"></textarea>
+          <button class="e8-send" type="submit" aria-label="Send">↑</button>
+        </form>
+        <section class="e8-suggestions" aria-label="Suggestions">
+          <div class="e8-suggestions-title">Suggestions :</div>
+          <div id="suggestionGrid" class="e8-suggestion-grid"></div>
+        </section>
+      </section>
+
+      <section id="chat" class="e8-chat" aria-live="polite" hidden></section>
+    </main>
+
+    <form id="chatComposer" class="e8-chat-composer" autocomplete="off" hidden>
+      <div class="e8-composer-box">
+        <textarea id="chatInput" rows="1" maxlength="12000" placeholder="Ask E8AI" aria-label="Message E8AI"></textarea>
+        <button id="chatSend" class="e8-send" type="submit" aria-label="Send">↑</button>
+      </div>
+    </form>
+  </div>
+
+  <section id="searchPanel" class="e8-search-panel" hidden aria-label="Search E8AI chats">
+    <div class="e8-search-wrap">
+      <input id="searchInput" class="e8-search-input" type="search" maxlength="100" placeholder="Search chats" autocomplete="off" />
+      <div id="searchResults" class="e8-search-results"></div>
+    </div>
+  </section>
+
+  <aside class="e8-drawer" data-e8-drawer aria-hidden="true">
+    <div class="e8-drawer-head">
+      <a class="e8-icon-btn e8-back" href="../E8Hub/" aria-label="Back to E8Hub">‹</a>
+      <strong class="e8-drawer-title">E8AI</strong>
+      <button class="e8-icon-btn" type="button" data-e8-close-drawer aria-label="Close menu">×</button>
+    </div>
+    <nav class="e8-nav" aria-label="E8AI navigation">
+      <button id="newChatButton" type="button"><span>New Chat</span><span>＋</span></button>
+      <a href="../Settings/"><span>Settings</span><span>›</span></a>
+      <button id="loginButton" type="button"><span>Log in</span></button>
+      <div class="e8-label"><span>Recents</span></div>
+      <div id="recentList"></div>
+    </nav>
+  </aside>
+  <button class="e8-scrim" data-e8-scrim type="button" aria-label="Close menu"></button>
+
+  <script src="../e8/e8-shell.js?v=1"></script>
+  <script src="../e8/e8-auth.js?v=1"></script>
+  <script src="../e8/e8-ai.js?v=1"></script>
+</body>
+</html>
