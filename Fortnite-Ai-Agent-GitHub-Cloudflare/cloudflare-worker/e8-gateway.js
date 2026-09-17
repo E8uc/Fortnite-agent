@@ -69,6 +69,22 @@ function back4AppEndpointIsSafe(env) {
   }
 }
 
+function localOAuthRedirectBlocked(request, env) {
+  const url = new URL(request.url);
+  if (request.method !== "GET" || url.pathname !== "/auth/openrouter/start") return false;
+  const raw = String(url.searchParams.get("return_to") || "").trim();
+  if (!raw) return false;
+
+  try {
+    const target = new URL(raw);
+    const local = target.hostname === "localhost" || target.hostname === "127.0.0.1";
+    if (!local) return false;
+    return String(env.E8_ALLOW_LOCAL_AUTH || "").trim().toLowerCase() !== "true";
+  } catch {
+    return false;
+  }
+}
+
 function configurationError(request, env) {
   const origin = String(request.headers.get("Origin") || "");
   const headers = new Headers({
@@ -81,6 +97,19 @@ function configurationError(request, env) {
   });
   if (allowedOrigins(env).has(origin)) headers.set("Access-Control-Allow-Origin", origin);
   return new Response(JSON.stringify({ error: "E8 storage configuration is invalid." }), { status: 503, headers });
+}
+
+function localOAuthError() {
+  return new Response("Local OAuth redirects are disabled on this deployment.", {
+    status: 403,
+    headers: {
+      "Cache-Control": "no-store",
+      "Content-Type": "text/plain; charset=utf-8",
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY"
+    }
+  });
 }
 
 async function sanitizeHubRequest(request) {
@@ -118,6 +147,7 @@ async function sanitizeHubRequest(request) {
 
 export default {
   async fetch(request, env, ctx) {
+    if (localOAuthRedirectBlocked(request, env)) return localOAuthError();
     if (isE8Request(request) && !back4AppEndpointIsSafe(env)) return configurationError(request, env);
     const safeRequest = await sanitizeHubRequest(request);
     return withAdminReplayGuard(safeRequest, env, (nextRequest) => e8Worker.fetch(nextRequest, env, ctx));
