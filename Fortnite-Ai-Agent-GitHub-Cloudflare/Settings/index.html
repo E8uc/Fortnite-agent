@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://fortnite-ai-agent-api.a39328122.workers.dev; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
+  <title>E8 Settings</title>
+  <link rel="stylesheet" href="../e8/e8.css?v=1" />
+</head>
+<body>
+  <header class="e8-topbar">
+    <a class="e8-icon-btn e8-back" href="../E8Hub/" aria-label="Back to E8Hub">‹</a>
+    <div class="e8-topbar-title">Settings</div>
+    <div></div>
+  </header>
+
+  <main class="e8-account">
+    <h1>Account</h1>
+    <section class="e8-card" aria-label="Account details">
+      <div class="e8-row"><div class="e8-key">ID</div><div id="accountId" class="e8-value">—</div><button id="copyId" class="e8-copy" type="button" disabled>Copy ID</button></div>
+      <div class="e8-row"><div class="e8-key">Plan</div><div id="plan" class="e8-value">Guest</div><div></div></div>
+      <div class="e8-row"><div class="e8-key">Status</div><div id="status" class="e8-value">Guest</div><div></div></div>
+      <div class="e8-row"><div class="e8-key">Expire</div><div id="expire" class="e8-value">—</div><div></div></div>
+      <div class="e8-row"><div class="e8-key">API</div><div id="apiState" class="e8-value">Not connected</div><div></div></div>
+    </section>
+
+    <section class="e8-card">
+      <button id="accountButton" class="e8-login" type="button">Log in</button>
+      <p class="e8-muted">Guest and legacy logged-in access stay available. Plus and Premium are extra subscription layers and are verified by the E8 API.</p>
+    </section>
+  </main>
+
+  <script src="../e8/e8-auth.js?v=1"></script>
+  <script src="../e8/e8-settings.js?v=1"></script>
+</body>
+</html>
