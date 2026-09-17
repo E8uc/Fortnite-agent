@@ -551,6 +551,15 @@
   function bindAssetResultActions(root) {
     bindCopyButtons(root);
 
+    // Search redraws reuse the same results container. Bind this delegated
+    // handler only once, otherwise one tap can open and immediately close
+    // the same preview panel.
+    if (root.dataset.assetActionsBound === "1") {
+      return;
+    }
+
+    root.dataset.assetActionsBound = "1";
+
     root.addEventListener(
       "click",
       async (event) => {
