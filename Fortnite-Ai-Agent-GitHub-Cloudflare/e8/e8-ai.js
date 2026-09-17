@@ -178,9 +178,11 @@
 
     try {
       await window.E8Auth.ready;
-      // Keep the legacy chat client identifier so Guest and existing logged-in
-      // users continue to use the exact server behavior they already had.
-      const headers = { "Content-Type": "application/json", "X-FNAA-Client": "web-v6" };
+      const headers = {
+        "Content-Type": "application/json",
+        "X-FNAA-Client": "web-v6",
+        "X-E8-Client": "hub-v1"
+      };
       const token = window.E8Auth.getSessionToken();
       if (token) headers.Authorization = `Bearer ${token}`;
 
