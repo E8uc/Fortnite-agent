@@ -1,0 +1,12 @@
+{
+  "name": "e8-cloudflare-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check e8-entry.js && node --check worker.js && wrangler deploy --dry-run --outdir .wrangler-dist",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
