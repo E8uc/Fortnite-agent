@@ -49,6 +49,7 @@ jobs:
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-settings.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-support.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-frame-guard.js
+          node --check Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-admin-guard.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-gateway.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-entry.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/worker.js
@@ -102,6 +103,7 @@ jobs:
           support = (root / "e8/e8-support.js").read_text(encoding="utf-8")
           support_html = (root / "Support/index.html").read_text(encoding="utf-8")
           frame_guard = (root / "e8/e8-frame-guard.js").read_text(encoding="utf-8")
+          admin_guard = (worker_dir / "e8-admin-guard.js").read_text(encoding="utf-8")
           gateway = (worker_dir / "e8-gateway.js").read_text(encoding="utf-8")
           worker = (worker_dir / "e8-entry.js").read_text(encoding="utf-8")
           wrangler = (worker_dir / "wrangler.toml").read_text(encoding="utf-8")
@@ -134,6 +136,8 @@ jobs:
               raise SystemExit("Support staff tokens must never be persisted in web storage")
           if "TOKEN_IDLE_MS" not in support or support.count("window.confirm") < 2:
               raise SystemExit("Support confirmation/token-idle safeguards are missing")
+          if "newOperationId" not in support or support.count("operationId: newOperationId()") < 2:
+              raise SystemExit("Support mutation operation IDs are missing")
           if 'class="e8-frame-guard"' not in support_html or "e8-frame-guard.js" not in support_html:
               raise SystemExit("Sensitive support page frame guard is missing")
           if "window.top === window.self" not in frame_guard:
@@ -145,8 +149,12 @@ jobs:
               raise SystemExit("Wrangler dependency must stay exactly pinned")
           if 'import e8Worker from "./e8-entry.js";' not in gateway:
               raise SystemExit("E8 gateway must forward into the E8 account layer")
+          if 'import { withAdminReplayGuard } from "./e8-admin-guard.js";' not in gateway:
+              raise SystemExit("E8 admin replay guard is not wired into the gateway")
           if "sanitizeClientContext" not in gateway or "cleanLabel" not in gateway:
               raise SystemExit("E8 gateway context sanitization is missing")
+          if "OPERATION_RE" not in admin_guard or "inFlight" not in admin_guard or "completed" not in admin_guard:
+              raise SystemExit("E8 admin replay guard invariants are missing")
           if 'import legacyWorker from "./worker.js";' not in worker:
               raise SystemExit("E8 Worker must preserve the legacy Worker fallback")
           if 'account.effectivePlan !== "plus" && account.effectivePlan !== "premium"' not in worker:
