@@ -16,6 +16,7 @@
 
   let toolCatalog = [];
   let selectedTools = new Set();
+  let toolsLoadVersion = 0;
 
   function formatDate(value) {
     if (!value) return "—";
@@ -34,6 +35,14 @@
 
   function updateToolCount() {
     plusToolCount.textContent = String(selectedTools.size);
+  }
+
+  function clearToolsUi() {
+    toolCatalog = [];
+    selectedTools = new Set();
+    plusToolsList.replaceChildren();
+    plusToolsStatus.textContent = "";
+    updateToolCount();
   }
 
   function renderTools() {
@@ -65,23 +74,29 @@
   }
 
   async function loadPlusTools() {
+    const loadVersion = ++toolsLoadVersion;
     const state = window.E8Auth.getState();
     const isPlus = state.connected && state.account?.effectivePlan === "plus";
     plusToolsCard.hidden = !isPlus;
+
     if (!isPlus) {
-      toolCatalog = [];
-      selectedTools = new Set();
-      plusToolsList.replaceChildren();
+      clearToolsUi();
       return;
     }
 
+    plusToolsStatus.textContent = "Loading…";
     try {
       const data = await window.E8Auth.request("/e8/tools");
+      if (loadVersion !== toolsLoadVersion) return;
+      const current = window.E8Auth.getState();
+      if (!current.connected || current.account?.effectivePlan !== "plus") return;
+
       toolCatalog = Array.isArray(data.catalog) ? data.catalog : [];
       selectedTools = new Set(Array.isArray(data.selected) ? data.selected.slice(0, 5) : []);
       renderTools();
       plusToolsStatus.textContent = toolCatalog.length ? "" : "No selectable tools are configured yet.";
     } catch (error) {
+      if (loadVersion !== toolsLoadVersion) return;
       plusToolsStatus.textContent = error?.message || "Couldn't load Plus tools.";
     }
   }
@@ -96,7 +111,7 @@
     apiState.textContent = state.connected ? "Connected" : "Not connected";
     copy.disabled = !account.id;
     accountButton.textContent = state.connected ? "Log out" : "Log in";
-    loadPlusTools();
+    void loadPlusTools();
   }
 
   copy.addEventListener("click", async () => {
@@ -106,11 +121,16 @@
       await navigator.clipboard.writeText(value);
       copy.textContent = "Copied";
       setTimeout(() => { copy.textContent = "Copy ID"; }, 1200);
-    } catch {}
+    } catch {
+      copy.textContent = "Copy failed";
+      setTimeout(() => { copy.textContent = "Copy ID"; }, 1200);
+    }
   });
 
   savePlusTools.addEventListener("click", async () => {
-    if (selectedTools.size > 5) return;
+    const state = window.E8Auth.getState();
+    if (!state.connected || state.account?.effectivePlan !== "plus" || selectedTools.size > 5) return;
+
     savePlusTools.disabled = true;
     plusToolsStatus.textContent = "Saving…";
     try {
@@ -118,7 +138,7 @@
         method: "POST",
         body: { tools: [...selectedTools] }
       });
-      selectedTools = new Set(Array.isArray(data.selected) ? data.selected : []);
+      selectedTools = new Set(Array.isArray(data.selected) ? data.selected.slice(0, 5) : []);
       renderTools();
       plusToolsStatus.textContent = "Saved.";
     } catch (error) {
