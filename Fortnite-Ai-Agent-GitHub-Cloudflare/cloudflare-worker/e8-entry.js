@@ -8,7 +8,7 @@ const E8_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456
 const SESSION_RE = /^or_sess_v1\.[A-Za-z0-9_-]{12,64}\.[A-Za-z0-9_-]{40,2200}$/;
 const AUTH_AAD = "FNAA-STATELESS-OPENROUTER-AUTH";
 const HUB_CLIENT = "hub-v1";
-const DEFAULT_ENHANCED_MODEL = "nvidia/nemotron-3-ultra-550b-a55b-20260604:free";
+const DEFAULT_ENHANCED_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
 const ABUSE_WINDOW_MS = 60_000;
 const ABUSE_MAX = 60;
 const ADMIN_ABUSE_MAX = 12;
@@ -426,10 +426,16 @@ async function activate(env, e8Id, plan, days) {
   if (normalized === "free") throw new Error("INVALID_PLAN");
   const durationDays = Number(days);
   if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 730) throw new Error("INVALID_DURATION");
-  const current = record.expiresAt ? new Date(record.expiresAt).getTime() : 0;
-  const start = Number.isFinite(current) && current > Date.now() ? current : Date.now();
+
+  const now = Date.now();
+  const currentExpiry = record.expiresAt ? new Date(record.expiresAt).getTime() : 0;
+  const hasActiveSubscription = Number.isFinite(currentExpiry) && currentExpiry > now;
+  const start = hasActiveSubscription ? currentExpiry : now;
   const expiresAt = new Date(start + durationDays * 86_400_000).toISOString();
+  const planChanged = normalizePlan(record.plan) !== normalized;
   const patch = { plan: normalized, status: "active", expiresAt };
+  if (!hasActiveSubscription || planChanged) patch.selectedTools = [];
+
   await db(env, `/classes/${encodeURIComponent(E8_CLASS)}/${encodeURIComponent(record.objectId)}`, { method: "PUT", body: patch });
   return summary({ ...record, ...patch });
 }
@@ -551,8 +557,11 @@ async function enhancedChat(request, env, session, account, body) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
-      await invalidateAccountId(env, session.uid);
-      return json(request, env, { error: "OpenRouter authorization was rejected. Log in with OpenRouter again.", code: "OPENROUTER_INVALID" }, 401);
+      const validation = await validateOpenRouterKey(session.apiKey, session.uid);
+      if (!validation.valid && validation.permanent) {
+        await invalidateAccountId(env, session.uid);
+        return json(request, env, { error: "OpenRouter authorization was rejected. Log in with OpenRouter again.", code: "OPENROUTER_INVALID" }, 401);
+      }
     }
     console.error("E8 enhanced model fallback:", response.status, data?.error?.message || data?.error || "unknown error");
     return null;
@@ -575,7 +584,10 @@ async function enhancedChat(request, env, session, account, body) {
 
 async function forwardLegacy(request, env, ctx, session = null) {
   const response = await legacyWorker.fetch(request, env, ctx);
-  if (session && (response.status === 401 || response.status === 403)) await invalidateAccountId(env, session.uid);
+  if (session && (response.status === 401 || response.status === 403)) {
+    const validation = await validateOpenRouterKey(session.apiKey, session.uid);
+    if (!validation.valid && validation.permanent) await invalidateAccountId(env, session.uid);
+  }
   return response;
 }
 
