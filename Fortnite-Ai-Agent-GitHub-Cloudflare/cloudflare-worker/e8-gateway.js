@@ -1,4 +1,5 @@
 import e8Worker from "./e8-entry.js";
+import { withAdminReplayGuard } from "./e8-admin-guard.js";
 
 const HUB_CLIENT = "hub-v1";
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
@@ -76,6 +77,6 @@ async function sanitizeHubRequest(request) {
 export default {
   async fetch(request, env, ctx) {
     const safeRequest = await sanitizeHubRequest(request);
-    return e8Worker.fetch(safeRequest, env, ctx);
+    return withAdminReplayGuard(safeRequest, env, (nextRequest) => e8Worker.fetch(nextRequest, env, ctx));
   }
 };
