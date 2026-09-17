@@ -5,23 +5,32 @@
   const MAX_HISTORY = 20;
   const MAX_MESSAGES = 12;
   const MAX_TOTAL_CHARS = 24000;
+  const SUGGESTION_LIMIT = 5;
 
-  const suggestionPool = [
-    "How To make The mesh Method",
-    "How To Get The dev inventory",
-    "How To copy the Orange and the White Copy props",
-    "What is The Mesh Method",
-    "What is the Dev inventory",
-    "What Is the Orange and White copy props",
-    "Is the paks bandable?",
-    "What is NovaSparx",
-    "Is NovaSparx for free?",
-    "Who made you",
-    "How to use Braille Tool",
-    "Why is somethings not for free",
-    "How To make my own CNC",
-    "Credits"
-  ];
+  const suggestionGroups = Object.freeze({
+    Fortnite: Object.freeze([
+      "How To make The mesh Method",
+      "How To Get The dev inventory",
+      "How To copy the Orange and the White Copy props",
+      "What is The Mesh Method",
+      "What is the Dev inventory",
+      "What Is the Orange and White copy props",
+      "Is the paks bandable?",
+      "What is NovaSparx",
+      "Is NovaSparx for free?"
+    ]),
+    More: Object.freeze([
+      "Who made you",
+      "How to use Braille Tool",
+      "Why is somethings not for free",
+      "How To make my own CNC",
+      "Credits"
+    ])
+  });
+
+  const suggestionPool = Object.entries(suggestionGroups).flatMap(([category, values]) =>
+    values.map((text) => ({ category, text }))
+  );
 
   const els = {
     welcome: document.getElementById("welcome"),
@@ -60,26 +69,51 @@
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, MAX_HISTORY))); } catch {}
   }
 
+  function randomUint32() {
+    return crypto.getRandomValues(new Uint32Array(1))[0];
+  }
+
   function randomSuggestions() {
-    const copy = [...suggestionPool];
+    const copy = suggestionPool.map((item) => ({ ...item }));
     for (let i = copy.length - 1; i > 0; i -= 1) {
-      const random = crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
-      const j = Math.floor(random * (i + 1));
+      const j = randomUint32() % (i + 1);
       [copy[i], copy[j]] = [copy[j], copy[i]];
     }
-    return copy.slice(0, 5);
+    return copy.slice(0, SUGGESTION_LIMIT);
+  }
+
+  function makeSuggestionButton(text) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "e8-suggestion";
+    button.textContent = text;
+    button.title = text;
+    button.addEventListener("click", () => startNewChat(text));
+    return button;
   }
 
   function renderSuggestions() {
     els.grid.replaceChildren();
-    for (const text of randomSuggestions()) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "e8-suggestion";
-      button.textContent = text;
-      button.title = text;
-      button.addEventListener("click", () => startNewChat(text));
-      els.grid.append(button);
+    const selected = randomSuggestions();
+
+    for (const category of Object.keys(suggestionGroups)) {
+      const items = selected.filter((item) => item.category === category);
+      if (!items.length) continue;
+
+      const group = document.createElement("section");
+      group.className = "e8-suggestion-group";
+      group.setAttribute("aria-label", `${category} suggestions`);
+
+      const label = document.createElement("div");
+      label.className = "e8-suggestion-category";
+      label.textContent = `${category} :`;
+
+      const list = document.createElement("div");
+      list.className = "e8-suggestion-items";
+      for (const item of items) list.append(makeSuggestionButton(item.text));
+
+      group.append(label, list);
+      els.grid.append(group);
     }
   }
 
