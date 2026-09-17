@@ -47,14 +47,18 @@
     if (status && status !== "success") publish({ error: status });
   }
 
-  async function request(path, options = {}) {
+  async function requestWithToken(path, options = {}, tokenOverride = "") {
     const headers = { "X-FNAA-Client": "e8-web-v1", ...(options.headers || {}) };
-    if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
+    const cleanOverride = cleanToken(tokenOverride);
+    if (cleanOverride) headers.Authorization = `Bearer ${cleanOverride}`;
     if (options.body !== undefined) headers["Content-Type"] = "application/json";
+
     const response = await fetch(`${API_ENDPOINT}${path}`, {
       method: options.method || "GET",
       mode: "cors",
       cache: "no-store",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body)
     });
@@ -68,22 +72,34 @@
     return data;
   }
 
+  function request(path, options = {}) {
+    return requestWithToken(path, options, sessionToken);
+  }
+
   async function refresh() {
-    if (!sessionToken) return publish({ mode: "guest", connected: false, user: null, account: null, error: null });
+    const tokenAtStart = sessionToken;
+    if (!tokenAtStart) return publish({ mode: "guest", connected: false, user: null, account: null, error: null });
+
     try {
-      const data = await request("/auth/session");
+      const data = await requestWithToken("/auth/session", {}, tokenAtStart);
+      if (sessionToken !== tokenAtStart) return state;
+
       let account = null;
       try {
-        account = await request("/e8/account");
+        account = await requestWithToken("/e8/account", {}, tokenAtStart);
       } catch (accountError) {
+        if (sessionToken !== tokenAtStart) return state;
         if (accountError.status === 401) {
           sessionToken = "";
           removeStorage(SESSION_KEY);
           return publish({ mode: "guest", connected: false, user: null, account: null, error: null });
         }
       }
+
+      if (sessionToken !== tokenAtStart) return state;
       return publish({ mode: "authenticated", connected: true, user: data.user || null, account, error: null });
     } catch (error) {
+      if (sessionToken !== tokenAtStart) return state;
       if (error.status === 401) {
         sessionToken = "";
         removeStorage(SESSION_KEY);
@@ -101,14 +117,15 @@
   }
 
   async function signOut() {
-    const old = sessionToken;
+    const oldToken = sessionToken;
     sessionToken = "";
     removeStorage(SESSION_KEY);
     publish({ mode: "guest", connected: false, user: null, account: null, error: null });
-    if (!old) return;
-    sessionToken = old;
-    try { await request("/auth/logout", { method: "POST", body: {} }); } catch {}
-    sessionToken = "";
+    if (!oldToken) return;
+
+    try {
+      await requestWithToken("/auth/logout", { method: "POST", body: {} }, oldToken);
+    } catch {}
   }
 
   async function boot() {
