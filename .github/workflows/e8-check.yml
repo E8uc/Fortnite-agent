@@ -33,10 +33,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "22"
 
@@ -55,7 +55,7 @@ jobs:
 
       - name: Wrangler dry-run bundle
         working-directory: Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker
-        run: npx --yes wrangler@4 deploy --dry-run --outdir /tmp/e8-worker-build
+        run: npx --yes wrangler@4.134.0 deploy --dry-run --outdir /tmp/e8-worker-build
 
       - name: Validate E8 static references and invariants
         shell: bash
@@ -105,6 +105,7 @@ jobs:
           gateway = (worker_dir / "e8-gateway.js").read_text(encoding="utf-8")
           worker = (worker_dir / "e8-entry.js").read_text(encoding="utf-8")
           wrangler = (worker_dir / "wrangler.toml").read_text(encoding="utf-8")
+          package = (worker_dir / "package.json").read_text(encoding="utf-8")
           expected = r"^E8[A-Za-z0-9]{15}uC$"
           if expected not in settings or expected not in support or expected not in worker:
               raise SystemExit("E8 ID invariant is inconsistent")
@@ -125,6 +126,8 @@ jobs:
 
           if 'id="revokeSubscription"' not in support_html:
               raise SystemExit("Support revoke control is missing")
+          if 'autocomplete="new-password"' not in support_html:
+              raise SystemExit("Support credential input must discourage password-manager autofill")
           if '"/e8/admin/subscription/revoke"' not in support or '"/e8/admin/subscription/revoke"' not in worker:
               raise SystemExit("Support revoke flow is incomplete")
           if "localStorage" in support or "sessionStorage" in support:
@@ -138,6 +141,8 @@ jobs:
 
           if 'main = "e8-gateway.js"' not in wrangler:
               raise SystemExit("Wrangler must deploy the hardened E8 gateway")
+          if '"wrangler": "4.134.0"' not in package:
+              raise SystemExit("Wrangler dependency must stay exactly pinned")
           if 'import e8Worker from "./e8-entry.js";' not in gateway:
               raise SystemExit("E8 gateway must forward into the E8 account layer")
           if "sanitizeClientContext" not in gateway or "cleanLabel" not in gateway:
@@ -148,6 +153,13 @@ jobs:
               raise SystemExit("Plus/Premium enhanced-model inheritance guard is missing")
           if 'DEFAULT_ENHANCED_MODEL' not in worker:
               raise SystemExit("Enhanced E8AI model fallback is missing")
+
+          dangerous_dom = (".innerHTML", ".outerHTML", "insertAdjacentHTML", "document.write(", "eval(", "new Function(")
+          for source in (root / "e8").glob("*.js"):
+              text = source.read_text(encoding="utf-8")
+              bad = [token for token in dangerous_dom if token in text]
+              if bad:
+                  raise SystemExit(f"Unsafe DOM/code sink in {source}: {', '.join(bad)}")
 
           required_csp = ["default-src 'self'", "script-src 'self'", "object-src 'none'", "frame-src 'none'"]
           for html in html_files:
