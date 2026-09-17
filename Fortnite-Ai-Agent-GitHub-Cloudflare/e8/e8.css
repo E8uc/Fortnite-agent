@@ -71,6 +71,7 @@ a { color: inherit; text-decoration: none; }
 .e8-search-wrap { width: min(100%, var(--max)); margin: 0 auto; }
 .e8-search-input { width: 100%; height: 48px; border: 1px solid var(--line); border-radius: 16px; padding: 0 14px; outline: none; background: #fff; }
 .e8-search-input:focus { border-color: #a8a8a8; }
+.e8-search-input:disabled { opacity: .62; cursor: not-allowed; }
 .e8-search-results { display: grid; gap: 8px; margin-top: 14px; }
 .e8-search-result { width: 100%; border: 0; background: var(--soft); border-radius: 12px; padding: 12px; text-align: left; cursor: pointer; }
 
@@ -83,7 +84,9 @@ a { color: inherit; text-decoration: none; }
 .e8-value { font-weight: 650; overflow-wrap: anywhere; }
 .e8-copy { border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 7px 10px; cursor: pointer; }
 .e8-login { width: 100%; height: 46px; border: 0; border-radius: 14px; background: #111; color: #fff; font-weight: 700; cursor: pointer; }
+.e8-login:disabled { opacity: .55; cursor: not-allowed; }
 .e8-muted { color: var(--muted); font-size: 14px; line-height: 1.5; }
+.e8-muted.error { color: #8d1515; }
 
 .e8-tool-count { font-size: 13px; font-weight: 750; }
 .e8-tool-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
