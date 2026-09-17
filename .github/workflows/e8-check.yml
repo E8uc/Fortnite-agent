@@ -99,6 +99,7 @@ jobs:
           if missing:
               raise SystemExit("Missing local references:\n" + "\n".join(missing))
 
+          auth = (root / "e8/e8-auth.js").read_text(encoding="utf-8")
           settings = (root / "e8/e8-settings.js").read_text(encoding="utf-8")
           support = (root / "e8/e8-support.js").read_text(encoding="utf-8")
           support_html = (root / "Support/index.html").read_text(encoding="utf-8")
@@ -121,6 +122,12 @@ jobs:
               raise SystemExit("E8AI asset context integration is missing")
           if '"X-E8-Client": "hub-v1"' not in ai:
               raise SystemExit("E8AI subscription routing marker is missing")
+          if "getSessionToken" in auth or "getSessionToken" in ai:
+              raise SystemExit("E8 session tokens must not be exposed to page scripts")
+          if "function fetchApi(" not in auth or 'window.E8Auth.fetchApi("/", {' not in ai:
+              raise SystemExit("E8AI must use the private authenticated transport")
+          if "function normalizePath(" not in auth:
+              raise SystemExit("E8 authenticated transport must restrict API paths")
 
           hub = (root / "E8Hub/index.html").read_text(encoding="utf-8")
           if '<div class="e8-label"><span>Soon</span></div>' not in hub:
