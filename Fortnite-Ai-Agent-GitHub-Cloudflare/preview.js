@@ -596,35 +596,72 @@
     status,
     meta
   ) {
-    if (
-      !window.NovaSparx
-        ?.resolve
-    ) {
+    if (!window.NovaSparx) {
       throw new Error(
         "NovaSparx resolver is not loaded."
       );
     }
 
-    setStatus(
-      status,
-      "NovaSparx: resolving geometry and verified materials…"
-    );
+    let manifest = null;
+    let sourceLabel =
+      "NovaSparx 1.2 • client-rendered mesh";
 
-    const manifest =
-      await window.NovaSparx
-        .resolve(
-          path,
-          {
-            preferHQ: true
-          }
+    if (
+      window.NovaSparx
+        ?.clientMesh
+    ) {
+      try {
+        setStatus(
+          status,
+          "NovaSparx: streaming compact mesh data to this device…"
         );
+
+        manifest =
+          await window.NovaSparx
+            .clientMesh(path);
+      } catch (error) {
+        console.warn(
+          "FNAA client mesh fallback:",
+          error
+        );
+      }
+    }
+
+    if (!manifest) {
+      if (
+        !window.NovaSparx
+          ?.resolve
+      ) {
+        throw new Error(
+          "NovaSparx mesh resolver is not available."
+        );
+      }
+
+      setStatus(
+        status,
+        "NovaSparx: resolving geometry and verified materials…"
+      );
+
+      manifest =
+        await window.NovaSparx
+          .resolve(
+            path,
+            {
+              preferHQ: true
+            }
+          );
+
+      sourceLabel =
+        "NovaSparx 1.1 • compatibility mesh";
+    }
 
     return renderNovaManifest(
       path,
       manifest,
       image,
       status,
-      meta
+      meta,
+      sourceLabel
     );
   }
 
@@ -1869,7 +1906,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "1.1.0",
+      version: "1.2.0",
       toggle,
       render: renderPreview,
       release
