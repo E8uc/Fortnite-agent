@@ -49,6 +49,7 @@ jobs:
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-settings.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-support.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-frame-guard.js
+          node --check Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-gateway.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-entry.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/worker.js
 
@@ -101,6 +102,7 @@ jobs:
           support = (root / "e8/e8-support.js").read_text(encoding="utf-8")
           support_html = (root / "Support/index.html").read_text(encoding="utf-8")
           frame_guard = (root / "e8/e8-frame-guard.js").read_text(encoding="utf-8")
+          gateway = (worker_dir / "e8-gateway.js").read_text(encoding="utf-8")
           worker = (worker_dir / "e8-entry.js").read_text(encoding="utf-8")
           wrangler = (worker_dir / "wrangler.toml").read_text(encoding="utf-8")
           expected = r"^E8[A-Za-z0-9]{15}uC$"
@@ -134,8 +136,12 @@ jobs:
           if "window.top === window.self" not in frame_guard:
               raise SystemExit("Frame guard implementation is incomplete")
 
-          if 'main = "e8-entry.js"' not in wrangler:
-              raise SystemExit("Wrangler must deploy the E8 wrapper entry point")
+          if 'main = "e8-gateway.js"' not in wrangler:
+              raise SystemExit("Wrangler must deploy the hardened E8 gateway")
+          if 'import e8Worker from "./e8-entry.js";' not in gateway:
+              raise SystemExit("E8 gateway must forward into the E8 account layer")
+          if "sanitizeClientContext" not in gateway or "cleanLabel" not in gateway:
+              raise SystemExit("E8 gateway context sanitization is missing")
           if 'import legacyWorker from "./worker.js";' not in worker:
               raise SystemExit("E8 Worker must preserve the legacy Worker fallback")
           if 'account.effectivePlan !== "plus" && account.effectivePlan !== "premium"' not in worker:
