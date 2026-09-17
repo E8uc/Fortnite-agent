@@ -1,0 +1,107 @@
+name: E8 platform checks
+
+on:
+  push:
+    branches:
+      - e8-platform-development
+      - main
+    paths:
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/E8Hub/**"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/E8AI/**"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/Settings/**"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/Support/**"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/e8/**"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-entry.js"
+      - "AGENTS.md"
+      - ".github/workflows/e8-check.yml"
+  pull_request:
+    paths:
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/E8Hub/**"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/E8AI/**"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/Settings/**"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/Support/**"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/e8/**"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-entry.js"
+      - "AGENTS.md"
+      - ".github/workflows/e8-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: JavaScript syntax
+        run: |
+          node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-auth.js
+          node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-shell.js
+          node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-ai.js
+          node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-settings.js
+          node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-support.js
+          node --check Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-entry.js
+
+      - name: Validate E8 static references and invariants
+        shell: python
+        run: |
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import re
+
+          root = Path("Fortnite-Ai-Agent-GitHub-Cloudflare")
+          html_files = [
+              root / "E8Hub/index.html",
+              root / "E8AI/index.html",
+              root / "Settings/index.html",
+              root / "Support/index.html",
+          ]
+
+          class RefParser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.refs = []
+              def handle_starttag(self, tag, attrs):
+                  values = dict(attrs)
+                  if tag == "script" and values.get("src"):
+                      self.refs.append(values["src"])
+                  if tag == "link" and values.get("href"):
+                      self.refs.append(values["href"])
+
+          missing = []
+          for html in html_files:
+              parser = RefParser()
+              parser.feed(html.read_text(encoding="utf-8"))
+              for ref in parser.refs:
+                  if ref.startswith(("http://", "https://", "data:", "#")):
+                      continue
+                  target = (html.parent / ref.split("?", 1)[0]).resolve()
+                  if not target.exists():
+                      missing.append(f"{html}: {ref}")
+
+          if missing:
+              raise SystemExit("Missing local references:\n" + "\n".join(missing))
+
+          settings = (root / "e8/e8-settings.js").read_text(encoding="utf-8")
+          support = (root / "e8/e8-support.js").read_text(encoding="utf-8")
+          worker = (root / "cloudflare-worker/e8-entry.js").read_text(encoding="utf-8")
+          expected = r"^E8[A-Za-z0-9]{15}uC$"
+          if expected not in settings or expected not in support or expected not in worker:
+              raise SystemExit("E8 ID invariant is inconsistent")
+
+          ai = (root / "e8/e8-ai.js").read_text(encoding="utf-8")
+          if "return copy.slice(0, 5);" not in ai:
+              raise SystemExit("E8AI must show exactly five randomized suggestions")
+
+          hub = (root / "E8Hub/index.html").read_text(encoding="utf-8")
+          if '<div class="e8-label"><span>Soon</span></div>' not in hub:
+              raise SystemExit("Soon must remain a non-clickable label")
+
+          print("E8 static checks passed")
