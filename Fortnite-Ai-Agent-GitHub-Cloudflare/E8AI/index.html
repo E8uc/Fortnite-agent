@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="referrer" content="no-referrer" />
   <meta name="theme-color" content="#ffffff" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://fortnite-ai-agent-api.a39328122.workers.dev; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://fortnite-ai-agent-api.a39328122.workers.dev; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
   <title>E8AI</title>
   <link rel="stylesheet" href="../e8/e8.css?v=1" />
 </head>
@@ -69,6 +69,7 @@
 
   <script src="../e8/e8-shell.js?v=1"></script>
   <script src="../e8/e8-auth.js?v=1"></script>
+  <script src="../e8/e8-database.js?v=1"></script>
   <script src="../e8/e8-ai.js?v=1"></script>
 </body>
 </html>
