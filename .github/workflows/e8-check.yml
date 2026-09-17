@@ -98,14 +98,23 @@ jobs:
               raise SystemExit("E8 ID invariant is inconsistent")
 
           ai = (root / "e8/e8-ai.js").read_text(encoding="utf-8")
-          if "return copy.slice(0, 5);" not in ai:
+          if "const SUGGESTION_LIMIT = 5;" not in ai or "slice(0, SUGGESTION_LIMIT)" not in ai:
               raise SystemExit("E8AI must show exactly five randomized suggestions")
+          if "Fortnite: Object.freeze([" not in ai or "More: Object.freeze([" not in ai:
+              raise SystemExit("E8AI suggestion categories are missing")
           if "buildClientContext(content)" not in ai:
               raise SystemExit("E8AI asset context integration is missing")
+          if '"X-E8-Client": "hub-v1"' not in ai:
+              raise SystemExit("E8AI subscription routing marker is missing")
 
           hub = (root / "E8Hub/index.html").read_text(encoding="utf-8")
           if '<div class="e8-label"><span>Soon</span></div>' not in hub:
               raise SystemExit("Soon must remain a non-clickable label")
+
+          for html in html_files:
+              text = html.read_text(encoding="utf-8").lower()
+              if "<script>" in text or "onclick=" in text or "onerror=" in text:
+                  raise SystemExit(f"Inline script/event handler found in {html}")
 
           print("E8 static checks passed")
           PY
