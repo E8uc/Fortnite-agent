@@ -22,13 +22,13 @@
     <h1>Subscription Panel</h1>
     <section class="e8-card">
       <label class="e8-key" for="staffToken">Staff token</label>
-      <input id="staffToken" class="e8-search-input" type="password" autocomplete="off" spellcheck="false" placeholder="Session-only staff token" />
+      <input id="staffToken" class="e8-search-input" type="password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Session-only staff token" />
       <p class="e8-muted">The token is kept only in this page's memory and is never saved to localStorage or sessionStorage.</p>
     </section>
 
     <form id="subscriptionForm" class="e8-card" autocomplete="off">
       <label class="e8-key" for="e8Id">E8 ID</label>
-      <input id="e8Id" class="e8-search-input" type="text" maxlength="19" pattern="E8[A-Za-z0-9]{15}uC" placeholder="E8...............uC" required spellcheck="false" />
+      <input id="e8Id" class="e8-search-input" type="text" maxlength="19" pattern="E8[A-Za-z0-9]{15}uC" placeholder="E8...............uC" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
 
       <label class="e8-key" for="planSelect">Plan</label>
       <select id="planSelect" class="e8-search-input" required>
