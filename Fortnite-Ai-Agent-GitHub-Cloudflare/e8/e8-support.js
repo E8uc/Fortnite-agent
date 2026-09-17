@@ -66,6 +66,12 @@
     return { staffToken, e8Id };
   }
 
+  function newOperationId() {
+    if (typeof crypto.randomUUID === "function") return `e8op_${crypto.randomUUID()}`;
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    return `e8op_${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  }
+
   async function adminRequest(path, staffToken, body) {
     const response = await fetch(`${API_ENDPOINT}${path}`, {
       method: "POST",
@@ -104,6 +110,7 @@
     setResult("Updating…");
     try {
       const data = await adminRequest("/e8/admin/subscription", credentials.staffToken, {
+        operationId: newOperationId(),
         id: credentials.e8Id,
         plan: selectedPlan,
         durationDays: days
@@ -132,6 +139,7 @@
     setResult("Revoking…");
     try {
       const data = await adminRequest("/e8/admin/subscription/revoke", credentials.staffToken, {
+        operationId: newOperationId(),
         id: credentials.e8Id
       });
       const account = data.account || {};
