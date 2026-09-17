@@ -1,5 +1,5 @@
 name = "fortnite-ai-agent-api"
-main = "e8-entry.js"
+main = "e8-gateway.js"
 compatibility_date = "2026-09-17"
 workers_dev = true
 
