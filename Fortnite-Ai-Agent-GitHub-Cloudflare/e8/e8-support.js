@@ -3,6 +3,7 @@
 
   const API_ENDPOINT = "https://fortnite-ai-agent-api.a39328122.workers.dev";
   const E8_ID_RE = /^E8[A-Za-z0-9]{15}uC$/;
+  const TOKEN_IDLE_MS = 15 * 60 * 1000;
 
   const form = document.getElementById("subscriptionForm");
   const token = document.getElementById("staffToken");
@@ -14,10 +15,31 @@
   const revokeButton = document.getElementById("revokeSubscription");
 
   let submitting = false;
+  let tokenIdleTimer = null;
 
   function setResult(message, isError = false) {
     result.textContent = message;
     result.classList.toggle("error", isError);
+  }
+
+  function clearStaffToken(message = "") {
+    token.value = "";
+    if (tokenIdleTimer) clearTimeout(tokenIdleTimer);
+    tokenIdleTimer = null;
+    if (message) setResult(message);
+  }
+
+  function armTokenIdleTimer() {
+    if (tokenIdleTimer) clearTimeout(tokenIdleTimer);
+    tokenIdleTimer = null;
+    if (token.value.length < 32) return;
+    tokenIdleTimer = setTimeout(() => {
+      if (submitting) {
+        armTokenIdleTimer();
+        return;
+      }
+      clearStaffToken("Staff token cleared after 15 minutes of inactivity.");
+    }, TOKEN_IDLE_MS);
   }
 
   function setBusy(value) {
@@ -70,22 +92,27 @@
     const credentials = readCredentials();
     if (!credentials) return;
 
+    const selectedPlan = plan.value;
     const days = Number(duration.value);
-    if (plan.value !== "plus" && plan.value !== "premium") return setResult("Invalid subscription plan.", true);
+    if (selectedPlan !== "plus" && selectedPlan !== "premium") return setResult("Invalid subscription plan.", true);
     if (!Number.isInteger(days) || days < 1 || days > 730) return setResult("Duration must be 1–730 days.", true);
+
+    const confirmed = window.confirm(`Activate / extend ${selectedPlan === "premium" ? "Premium" : "Plus"} for ${credentials.e8Id} by ${days} day${days === 1 ? "" : "s"}?`);
+    if (!confirmed) return;
 
     setBusy(true);
     setResult("Updating…");
     try {
       const data = await adminRequest("/e8/admin/subscription", credentials.staffToken, {
         id: credentials.e8Id,
-        plan: plan.value,
+        plan: selectedPlan,
         durationDays: days
       });
       const account = data.account || {};
-      setResult(`${account.plan || plan.value} active until ${account.expiresAt || "the selected expiry"}.`);
+      setResult(`${account.plan || selectedPlan} active until ${account.expiresAt || "the selected expiry"}.`);
       id.value = "";
       id.focus();
+      armTokenIdleTimer();
     } catch (error) {
       setResult(error?.message || "Couldn't update the subscription.", true);
     } finally {
@@ -111,6 +138,7 @@
       setResult(`Subscription revoked. ${credentials.e8Id} is now ${account.plan || "Free"}.`);
       id.value = "";
       id.focus();
+      armTokenIdleTimer();
     } catch (error) {
       setResult(error?.message || "Couldn't revoke the subscription.", true);
     } finally {
@@ -118,7 +146,13 @@
     }
   });
 
-  window.addEventListener("pagehide", () => {
-    token.value = "";
+  token.addEventListener("input", armTokenIdleTimer);
+  form.addEventListener("input", () => {
+    if (token.value.length >= 32) armTokenIdleTimer();
   });
+  form.addEventListener("pointerdown", () => {
+    if (token.value.length >= 32) armTokenIdleTimer();
+  }, { passive: true });
+
+  window.addEventListener("pagehide", () => clearStaffToken());
 })();
