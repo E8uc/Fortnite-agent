@@ -1,6 +1,6 @@
 # E8 Cloudflare Worker deployment
 
-The E8 API layer uses `e8-entry.js` as the Worker entry point. It imports the existing `worker.js`, so Guest and legacy logged-in behavior remain available while E8 account/subscription routes are added around it.
+The deployed E8 Worker entry point is `e8-gateway.js`. The gateway sanitizes untrusted E8 client context before passing the request to `e8-entry.js`. `e8-entry.js` then adds E8 account/subscription behavior around the existing `worker.js`, preserving Guest and legacy logged-in fallbacks.
 
 ## Required existing secret
 
@@ -53,4 +53,4 @@ Only after the development branch checks pass and the required Cloudflare secret
 npm run deploy
 ```
 
-Do not deploy `worker.js` directly for the E8 release; the configured entry point is `e8-entry.js`.
+Do not deploy `worker.js` or `e8-entry.js` directly for the E8 release. `wrangler.toml` intentionally points to `e8-gateway.js` so the full hardened chain is included.
