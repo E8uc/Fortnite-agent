@@ -11,7 +11,7 @@ on:
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/Settings/**"
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/Support/**"
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/e8/**"
-      - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-entry.js"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/**"
       - "AGENTS.md"
       - ".github/workflows/e8-check.yml"
   pull_request:
@@ -21,7 +21,7 @@ on:
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/Settings/**"
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/Support/**"
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/e8/**"
-      - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-entry.js"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/**"
       - "AGENTS.md"
       - ".github/workflows/e8-check.yml"
 
@@ -49,6 +49,11 @@ jobs:
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-settings.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/e8/e8-support.js
           node --check Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-entry.js
+          node --check Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/worker.js
+
+      - name: Wrangler dry-run bundle
+        working-directory: Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker
+        run: npx --yes wrangler@4 deploy --dry-run --outdir /tmp/e8-worker-build
 
       - name: Validate E8 static references and invariants
         shell: bash
@@ -58,6 +63,7 @@ jobs:
           from pathlib import Path
 
           root = Path("Fortnite-Ai-Agent-GitHub-Cloudflare")
+          worker_dir = root / "cloudflare-worker"
           html_files = [
               root / "E8Hub/index.html",
               root / "E8AI/index.html",
@@ -93,7 +99,8 @@ jobs:
           settings = (root / "e8/e8-settings.js").read_text(encoding="utf-8")
           support = (root / "e8/e8-support.js").read_text(encoding="utf-8")
           support_html = (root / "Support/index.html").read_text(encoding="utf-8")
-          worker = (root / "cloudflare-worker/e8-entry.js").read_text(encoding="utf-8")
+          worker = (worker_dir / "e8-entry.js").read_text(encoding="utf-8")
+          wrangler = (worker_dir / "wrangler.toml").read_text(encoding="utf-8")
           expected = r"^E8[A-Za-z0-9]{15}uC$"
           if expected not in settings or expected not in support or expected not in worker:
               raise SystemExit("E8 ID invariant is inconsistent")
@@ -119,10 +126,24 @@ jobs:
           if "localStorage" in support or "sessionStorage" in support:
               raise SystemExit("Support staff tokens must never be persisted in web storage")
 
+          if 'main = "e8-entry.js"' not in wrangler:
+              raise SystemExit("Wrangler must deploy the E8 wrapper entry point")
+          if 'import legacyWorker from "./worker.js";' not in worker:
+              raise SystemExit("E8 Worker must preserve the legacy Worker fallback")
+          if 'account.effectivePlan !== "plus" && account.effectivePlan !== "premium"' not in worker:
+              raise SystemExit("Plus/Premium enhanced-model inheritance guard is missing")
+          if 'DEFAULT_ENHANCED_MODEL' not in worker:
+              raise SystemExit("Enhanced E8AI model fallback is missing")
+
+          required_csp = ["default-src 'self'", "script-src 'self'", "object-src 'none'", "frame-src 'none'"]
           for html in html_files:
-              text = html.read_text(encoding="utf-8").lower()
-              if "<script>" in text or "onclick=" in text or "onerror=" in text:
-                  raise SystemExit(f"Inline script/event handler found in {html}")
+              text = html.read_text(encoding="utf-8")
+              lower = text.lower()
+              if "<script>" in lower or "onclick=" in lower or "onerror=" in lower or "javascript:" in lower:
+                  raise SystemExit(f"Unsafe inline executable content found in {html}")
+              for directive in required_csp:
+                  if directive not in text:
+                      raise SystemExit(f"Missing CSP directive {directive!r} in {html}")
 
           print("E8 static checks passed")
           PY
