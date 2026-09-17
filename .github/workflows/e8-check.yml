@@ -92,6 +92,7 @@ jobs:
 
           settings = (root / "e8/e8-settings.js").read_text(encoding="utf-8")
           support = (root / "e8/e8-support.js").read_text(encoding="utf-8")
+          support_html = (root / "Support/index.html").read_text(encoding="utf-8")
           worker = (root / "cloudflare-worker/e8-entry.js").read_text(encoding="utf-8")
           expected = r"^E8[A-Za-z0-9]{15}uC$"
           if expected not in settings or expected not in support or expected not in worker:
@@ -110,6 +111,13 @@ jobs:
           hub = (root / "E8Hub/index.html").read_text(encoding="utf-8")
           if '<div class="e8-label"><span>Soon</span></div>' not in hub:
               raise SystemExit("Soon must remain a non-clickable label")
+
+          if 'id="revokeSubscription"' not in support_html:
+              raise SystemExit("Support revoke control is missing")
+          if '"/e8/admin/subscription/revoke"' not in support or '"/e8/admin/subscription/revoke"' not in worker:
+              raise SystemExit("Support revoke flow is incomplete")
+          if "localStorage" in support or "sessionStorage" in support:
+              raise SystemExit("Support staff tokens must never be persisted in web storage")
 
           for html in html_files:
               text = html.read_text(encoding="utf-8").lower()
