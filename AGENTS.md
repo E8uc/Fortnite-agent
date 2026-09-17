@@ -47,9 +47,11 @@ An active Plus user may select up to five eligible tools for the duration of the
 - Staff/admin operations must be server-authorized and rate-limited. Never trust an E8 ID alone as proof of identity.
 - Do not trust client-provided plan, status, expiry, permissions, model selection, or entitlement values.
 - Use strict input validation, restrictive CORS, no-store responses for account/admin APIs, and safe DOM APIs such as `textContent` for untrusted text.
-- Preserve CSP protections. Do not introduce inline executable scripts unless there is a compelling reviewed reason.
+- Preserve CSP protections. Do not introduce inline executable scripts or CSP-blocked inline style mutations unless there is a compelling reviewed reason.
 - Do not expose OpenRouter credentials to support staff or normal admin UI.
-- Avoid storing staff tokens in localStorage/sessionStorage.
+- Avoid storing staff tokens in localStorage/sessionStorage and clear session-only staff credentials when the support page is left.
+- Prevent duplicate admin submissions from accidentally extending a subscription more than once.
+- Avoid stale async authentication/account responses restoring an old signed-in state after logout.
 - Prefer reversible migrations and separate development branches before production changes.
 
 ## UX requirements
@@ -59,6 +61,7 @@ User experience is a primary requirement. Avoid cluttering Free users' interface
 E8AI behavior:
 - Suggestions act as the first user message and immediately start a new chat.
 - Show exactly five randomly selected suggestions without duplicates.
+- Keep suggestion sources grouped as `Fortnite` and `More`; the five-item limit is total across the displayed suggestions, not five per category.
 - The back control in E8AI returns to E8Hub.
 - Search/recents are local until a reviewed server-side history design is implemented.
 
