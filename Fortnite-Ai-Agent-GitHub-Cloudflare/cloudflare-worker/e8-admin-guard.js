@@ -2,9 +2,14 @@ const ADMIN_PATHS = new Set([
   "/e8/admin/subscription",
   "/e8/admin/subscription/revoke"
 ]);
+const E8_CLASS = "E8Account";
+const E8_ID_RE = /^E8[A-Za-z0-9]{15}uC$/;
 const OPERATION_RE = /^e8op_[A-Za-z0-9_-]{20,80}$/;
 const RESULT_TTL_MS = 10 * 60 * 1000;
+const PENDING_TTL_MS = 2 * 60 * 1000;
+const LEASE_SETTLE_MS = 150;
 const MAX_RESULTS = 500;
+const MAX_HISTORY = 12;
 const ADMIN_BODY_MAX_BYTES = 16_384;
 
 const completed = new Map();
@@ -34,7 +39,7 @@ function configuredAdminTokens(env) {
     .filter((value) => value.length >= 32);
 }
 
-function jsonError(request, env, message, status) {
+function responseHeaders(request, env) {
   const origin = String(request.headers.get("Origin") || "");
   const headers = new Headers({
     "Cache-Control": "no-store",
@@ -45,7 +50,85 @@ function jsonError(request, env, message, status) {
     "Vary": "Origin"
   });
   if (allowedOrigins(env).has(origin)) headers.set("Access-Control-Allow-Origin", origin);
-  return new Response(JSON.stringify({ error: message }), { status, headers });
+  return headers;
+}
+
+function jsonResponse(request, env, body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: responseHeaders(request, env)
+  });
+}
+
+function jsonError(request, env, message, status) {
+  return jsonResponse(request, env, { error: message }, status);
+}
+
+function back4app(env) {
+  const appId = String(env.BACK4APP_APP_ID || "").trim();
+  const masterKey = String(env.BACK4APP_MASTER_KEY || "").trim();
+  const baseUrl = String(env.BACK4APP_SERVER_URL || "https://parseapi.back4app.com").trim().replace(/\/+$/, "");
+  return { appId, masterKey, baseUrl, configured: !!(appId && masterKey) };
+}
+
+async function db(env, path, init = {}) {
+  const config = back4app(env);
+  if (!config.configured) throw new Error("E8_STORAGE_UNAVAILABLE");
+  const response = await fetch(`${config.baseUrl}${path}`, {
+    method: init.method || "GET",
+    headers: {
+      "X-Parse-Application-Id": config.appId,
+      "X-Parse-Master-Key": config.masterKey,
+      "Content-Type": "application/json"
+    },
+    cache: "no-store",
+    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    signal: AbortSignal.timeout(10_000)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data?.error || `Storage request failed (${response.status}).`);
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+async function findAccount(env, e8Id) {
+  const where = encodeURIComponent(JSON.stringify({ e8Id }));
+  const data = await db(env, `/classes/${encodeURIComponent(E8_CLASS)}?where=${where}&limit=1`);
+  return Array.isArray(data.results) && data.results.length ? data.results[0] : null;
+}
+
+async function readAccount(env, objectId) {
+  return db(env, `/classes/${encodeURIComponent(E8_CLASS)}/${encodeURIComponent(objectId)}`);
+}
+
+async function updateAccount(env, objectId, body) {
+  return db(env, `/classes/${encodeURIComponent(E8_CLASS)}/${encodeURIComponent(objectId)}`, {
+    method: "PUT",
+    body
+  });
+}
+
+function normalizePlan(value) {
+  const plan = String(value || "free").trim().toLowerCase();
+  return plan === "plus" || plan === "premium" ? plan : "free";
+}
+
+function accountSummary(record) {
+  const plan = normalizePlan(record?.plan);
+  const expiresMs = record?.expiresAt ? new Date(record.expiresAt).getTime() : 0;
+  const subscribed = plan !== "free";
+  const active = subscribed && Number.isFinite(expiresMs) && expiresMs > Date.now();
+  return {
+    id: E8_ID_RE.test(String(record?.e8Id || "")) ? String(record.e8Id) : null,
+    plan: plan === "premium" ? "Premium" : plan === "plus" ? "Plus" : "Free",
+    effectivePlan: active ? plan : "free",
+    status: subscribed ? (active ? "Active" : "Expired") : "Active",
+    expiresAt: subscribed && Number.isFinite(expiresMs) && expiresMs > 0 ? new Date(expiresMs).toISOString() : null,
+    selectedTools: Array.isArray(record?.selectedTools) ? record.selectedTools.slice(0, 5) : []
+  };
 }
 
 function sweep(now = Date.now()) {
@@ -74,6 +157,15 @@ function normalizedOperationBody(path, body) {
   });
 }
 
+function durableOperationIsValid(path, body) {
+  const e8Id = String(body?.id || "").trim();
+  if (!E8_ID_RE.test(e8Id)) return false;
+  if (path === "/e8/admin/subscription/revoke") return true;
+  const plan = String(body?.plan || "").trim().toLowerCase();
+  const days = Number(body?.durationDays);
+  return (plan === "plus" || plan === "premium") && Number.isInteger(days) && days >= 1 && days <= 730;
+}
+
 async function digestBytes(value) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value || "")));
   return new Uint8Array(digest);
@@ -98,12 +190,12 @@ async function authorizedScope(request, env) {
   if (!configured.length) return null;
 
   const providedDigest = await digestBytes(provided);
-  let authorized = false;
-  for (const candidate of configured) {
-    const candidateDigest = await digestBytes(candidate);
-    if (equalDigest(providedDigest, candidateDigest)) authorized = true;
+  let scope = null;
+  for (let index = 0; index < configured.length; index += 1) {
+    const candidateDigest = await digestBytes(configured[index]);
+    if (equalDigest(providedDigest, candidateDigest) && scope === null) scope = `staff-${index}`;
   }
-  return authorized ? digestHex(providedDigest) : null;
+  return scope;
 }
 
 async function fingerprint(value) {
@@ -125,6 +217,143 @@ async function capture(response) {
     headers: [...response.headers.entries()],
     body
   };
+}
+
+function makeLeaseId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(18));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function operationHistory(record) {
+  return (Array.isArray(record?.adminOperationHistory) ? record.adminOperationHistory : [])
+    .filter((item) => item && OPERATION_RE.test(String(item.id || "")))
+    .slice(0, MAX_HISTORY);
+}
+
+function historyMatch(history, operationId) {
+  return history.find((item) => String(item.id || "") === operationId) || null;
+}
+
+function operationMatches(record, operationId, operationFingerprint, path, authScope) {
+  return String(record?.lastAdminOperationId || "") === operationId &&
+    String(record?.lastAdminOperationFingerprint || "") === operationFingerprint &&
+    String(record?.lastAdminOperationPath || "") === path &&
+    String(record?.lastAdminOperationScope || "") === authScope;
+}
+
+function recentPending(record) {
+  if (String(record?.lastAdminOperationStatus || "") !== "pending") return false;
+  const startedAt = new Date(record?.lastAdminOperationStartedAt || 0).getTime();
+  return Number.isFinite(startedAt) && Date.now() - startedAt < PENDING_TTL_MS;
+}
+
+async function beginDurableOperation(request, env, path, body, operationId, operationFingerprint, authScope) {
+  if (!durableOperationIsValid(path, body)) return { enabled: false };
+
+  let account;
+  try {
+    account = await findAccount(env, String(body.id).trim());
+  } catch (error) {
+    console.error("E8 durable operation lookup:", error);
+    return { response: jsonError(request, env, "Subscription safety check is temporarily unavailable.", 503) };
+  }
+  if (!account?.objectId) return { enabled: false };
+
+  const history = operationHistory(account);
+  const old = historyMatch(history, operationId);
+  if (old) {
+    const same = String(old.fingerprint || "") === operationFingerprint &&
+      String(old.path || "") === path &&
+      String(old.scope || "") === authScope;
+    if (!same) return { response: jsonError(request, env, "Operation ID was already used for a different request.", 409) };
+    return { response: jsonResponse(request, env, { ok: true, account: accountSummary(account), replayed: true }) };
+  }
+
+  if (recentPending(account)) {
+    if (String(account.lastAdminOperationId || "") === operationId) {
+      if (!operationMatches(account, operationId, operationFingerprint, path, authScope)) {
+        return { response: jsonError(request, env, "Operation ID is already being used for a different request.", 409) };
+      }
+      return { response: jsonError(request, env, "This subscription operation is already in progress.", 409) };
+    }
+    return { response: jsonError(request, env, "Another subscription operation is already in progress for this account.", 409) };
+  }
+
+  const leaseId = makeLeaseId();
+  const startedAt = new Date().toISOString();
+  try {
+    await updateAccount(env, account.objectId, {
+      lastAdminOperationId: operationId,
+      lastAdminOperationFingerprint: operationFingerprint,
+      lastAdminOperationPath: path,
+      lastAdminOperationScope: authScope,
+      lastAdminOperationStatus: "pending",
+      lastAdminOperationLease: leaseId,
+      lastAdminOperationStartedAt: startedAt,
+      lastAdminOperationCompletedAt: null
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, LEASE_SETTLE_MS));
+    const lease = await readAccount(env, account.objectId);
+    const ownsLease = operationMatches(lease, operationId, operationFingerprint, path, authScope) &&
+      String(lease?.lastAdminOperationStatus || "") === "pending" &&
+      String(lease?.lastAdminOperationLease || "") === leaseId;
+    if (!ownsLease) {
+      return { response: jsonError(request, env, "Subscription operation safety lease was lost. Try again.", 409) };
+    }
+  } catch (error) {
+    console.error("E8 durable operation lease:", error);
+    return { response: jsonError(request, env, "Subscription safety check is temporarily unavailable.", 503) };
+  }
+
+  return {
+    enabled: true,
+    objectId: account.objectId,
+    leaseId,
+    operationId,
+    operationFingerprint,
+    path,
+    authScope
+  };
+}
+
+async function finishDurableOperation(env, state, response) {
+  if (!state?.enabled || !state.objectId) return;
+  try {
+    const current = await readAccount(env, state.objectId);
+    const ownsLease = operationMatches(current, state.operationId, state.operationFingerprint, state.path, state.authScope) &&
+      String(current?.lastAdminOperationLease || "") === state.leaseId;
+    if (!ownsLease) return;
+
+    const completedAt = new Date().toISOString();
+    if (!response.ok) {
+      await updateAccount(env, state.objectId, {
+        lastAdminOperationStatus: "failed",
+        lastAdminOperationCompletedAt: completedAt
+      });
+      return;
+    }
+
+    const history = operationHistory(current).filter((item) => String(item.id || "") !== state.operationId);
+    history.unshift({
+      id: state.operationId,
+      fingerprint: state.operationFingerprint,
+      path: state.path,
+      scope: state.authScope,
+      completedAt
+    });
+    await updateAccount(env, state.objectId, {
+      adminOperationHistory: history.slice(0, MAX_HISTORY),
+      lastAdminOperationStatus: "completed",
+      lastAdminOperationCompletedAt: completedAt
+    });
+  } catch (error) {
+    // The mutation response must not be turned into an error after the mutation
+    // may already have succeeded. The pending marker and in-memory cache still
+    // reduce accidental retries while storage recovers.
+    console.error("E8 durable operation finalize:", error);
+  }
 }
 
 export async function withAdminReplayGuard(request, env, handler) {
@@ -180,11 +409,23 @@ export async function withAdminReplayGuard(request, env, handler) {
     return replay(record);
   }
 
+  const durable = await beginDurableOperation(
+    request,
+    env,
+    url.pathname,
+    body,
+    operationId,
+    operationFingerprint,
+    authScope
+  );
+  if (durable.response) return durable.response;
+
   const promise = (async () => {
     const response = await handler(request);
     const record = await capture(response);
     record.fingerprint = operationFingerprint;
     if (response.ok) completed.set(cacheKey, record);
+    await finishDurableOperation(env, durable, response);
     return record;
   })();
   inFlight.set(cacheKey, { fingerprint: operationFingerprint, promise });
