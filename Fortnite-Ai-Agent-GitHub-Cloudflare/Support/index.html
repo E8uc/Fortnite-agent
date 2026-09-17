@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="referrer" content="no-referrer" />
   <meta name="theme-color" content="#ffffff" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://fortnite-ai-agent-api.a39328122.workers.dev; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
   <title>E8 Support</title>
   <link rel="stylesheet" href="../e8/e8.css?v=1" />
   <link rel="stylesheet" href="../e8/e8-frame-guard.css?v=1" />
@@ -18,36 +18,137 @@
     <div></div>
   </header>
 
-  <main class="e8-account">
-    <h1>Subscription Panel</h1>
-    <section class="e8-card">
-      <label class="e8-key" for="staffToken">Staff token</label>
-      <input id="staffToken" class="e8-search-input" type="password" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Session-only staff token" />
-      <p class="e8-muted">The token is kept only in this page's memory and is never saved to localStorage or sessionStorage.</p>
+  <main class="e8-support-shell">
+    <section class="e8-support-heading" aria-labelledby="supportTitle">
+      <div>
+        <p class="e8-support-eyebrow">Admin workspace</p>
+        <h1 id="supportTitle">Support Panel</h1>
+        <p>Manage subscriptions and prepare redeem codes without touching files or code.</p>
+      </div>
+      <span class="e8-support-badge">Frontend preview</span>
     </section>
 
-    <form id="subscriptionForm" class="e8-card" autocomplete="off">
-      <label class="e8-key" for="e8Id">E8 ID</label>
-      <input id="e8Id" class="e8-search-input" type="text" maxlength="19" pattern="E8[A-Za-z0-9]{15}uC" placeholder="E8...............uC" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+    <div class="e8-support-tabs" role="tablist" aria-label="Support sections">
+      <button id="plansTab" class="e8-support-tab active" type="button" role="tab" aria-selected="true" aria-controls="plansPanel">Plans</button>
+      <button id="redeemTab" class="e8-support-tab" type="button" role="tab" aria-selected="false" aria-controls="redeemPanel">Create a Redeem Code</button>
+    </div>
 
-      <label class="e8-key" for="planSelect">Plan</label>
-      <select id="planSelect" class="e8-search-input" required>
-        <option value="plus">Plus</option>
-        <option value="premium">Premium</option>
-      </select>
-
-      <label class="e8-key" for="durationDays">Duration (days)</label>
-      <input id="durationDays" class="e8-search-input" type="number" min="1" max="730" step="1" value="30" required />
-
-      <div class="e8-support-actions">
-        <button id="activateSubscription" class="e8-login" type="submit">Activate / Extend</button>
-        <button id="revokeSubscription" class="e8-danger-button" type="button">Revoke to Free</button>
+    <section id="plansPanel" class="e8-support-panel" role="tabpanel" aria-labelledby="plansTab">
+      <div class="e8-support-panel-head">
+        <div>
+          <h2>Plans</h2>
+          <p>Choose the account, plan, and duration. The account check and activation will be connected to the backend later.</p>
+        </div>
       </div>
-      <p class="e8-muted">Revoking removes paid benefits and selected Plus tools, but keeps the user's login/account on the Free layer.</p>
-      <p id="result" class="e8-muted" role="status" aria-live="polite"></p>
-    </form>
+
+      <form id="planForm" class="e8-support-form" autocomplete="off" novalidate>
+        <label class="e8-support-field" for="planE8Id">
+          <span>E8ID</span>
+          <input id="planE8Id" class="e8-support-control" type="text" maxlength="19" placeholder="E8...............uC" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" required />
+          <small>Every signed-in E8 user has one E8ID. Guests do not.</small>
+        </label>
+
+        <label class="e8-support-field" for="planSelect">
+          <span>Plan</span>
+          <select id="planSelect" class="e8-support-control" required>
+            <option value="plus">Plus</option>
+            <option value="premium">Premium</option>
+          </select>
+        </label>
+
+        <label class="e8-support-field" for="planDuration">
+          <span>Duration</span>
+          <select id="planDuration" class="e8-support-control" required></select>
+        </label>
+
+        <label id="planCustomWrap" class="e8-support-field" for="planCustomDays" hidden>
+          <span>Custom days</span>
+          <input id="planCustomDays" class="e8-support-control" type="number" min="1" max="730" step="1" inputmode="numeric" placeholder="Enter number of days" />
+        </label>
+
+        <button class="e8-support-primary" type="submit">Continue</button>
+        <p id="planMessage" class="e8-support-message" role="status" aria-live="polite"></p>
+      </form>
+
+      <section id="planPreview" class="e8-support-preview" aria-label="Plan preview" hidden>
+        <div class="e8-support-preview-title">
+          <div>
+            <span>Review change</span>
+            <strong>Confirm before activation</strong>
+          </div>
+          <button id="closePlanPreview" class="e8-support-close" type="button" aria-label="Close preview">×</button>
+        </div>
+        <dl class="e8-support-summary">
+          <div><dt>E8ID</dt><dd id="previewE8Id">—</dd></div>
+          <div><dt>Plan</dt><dd id="previewPlan">—</dd></div>
+          <div><dt>Duration</dt><dd id="previewDuration">—</dd></div>
+          <div><dt>Action</dt><dd>Activate / extend</dd></div>
+        </dl>
+        <button id="previewConfirm" class="e8-support-primary" type="button">Confirm Activation</button>
+        <p class="e8-support-note">This button is visual only for now. It does not change any account yet.</p>
+      </section>
+    </section>
+
+    <section id="redeemPanel" class="e8-support-panel" role="tabpanel" aria-labelledby="redeemTab" hidden>
+      <div class="e8-support-panel-head">
+        <div>
+          <h2>Create a Redeem Code</h2>
+          <p>Prepare a code and its plan rules. Saving, usage tracking, and revocation will be connected later.</p>
+        </div>
+      </div>
+
+      <form id="redeemForm" class="e8-support-form" autocomplete="off" novalidate>
+        <label class="e8-support-field" for="redeemPlan">
+          <span>Plan</span>
+          <select id="redeemPlan" class="e8-support-control" required>
+            <option value="plus">Plus</option>
+            <option value="premium">Premium</option>
+          </select>
+        </label>
+
+        <label class="e8-support-field" for="redeemDuration">
+          <span>Duration</span>
+          <select id="redeemDuration" class="e8-support-control" required></select>
+        </label>
+
+        <label id="redeemCustomWrap" class="e8-support-field" for="redeemCustomDays" hidden>
+          <span>Custom days</span>
+          <input id="redeemCustomDays" class="e8-support-control" type="number" min="1" max="730" step="1" inputmode="numeric" placeholder="Enter number of days" />
+        </label>
+
+        <label class="e8-support-field" for="redeemUses">
+          <span>Uses</span>
+          <select id="redeemUses" class="e8-support-control">
+            <option value="1">1 use</option>
+            <option value="5">5 uses</option>
+            <option value="10">10 uses</option>
+            <option value="100">100 uses</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+
+        <label id="redeemCustomUsesWrap" class="e8-support-field" for="redeemCustomUses" hidden>
+          <span>Custom uses</span>
+          <input id="redeemCustomUses" class="e8-support-control" type="number" min="1" max="10000" step="1" inputmode="numeric" placeholder="Enter maximum uses" />
+        </label>
+
+        <button class="e8-support-primary" type="submit">Generate Preview</button>
+        <p id="redeemMessage" class="e8-support-message" role="status" aria-live="polite"></p>
+      </form>
+
+      <section id="redeemPreview" class="e8-redeem-preview" aria-label="Redeem code preview" hidden>
+        <span class="e8-support-eyebrow">Generated preview</span>
+        <button id="redeemCode" class="e8-redeem-code" type="button" aria-label="Copy redeem code">D52R-TWIL-R6zR</button>
+        <p id="redeemMeta" class="e8-support-note"></p>
+        <div class="e8-support-actions">
+          <button id="regenerateCode" class="e8-support-secondary" type="button">Regenerate</button>
+          <button id="createRedeem" class="e8-support-primary" type="button">Create Code</button>
+        </div>
+        <p class="e8-support-note">Create Code is visual only for now. Nothing is stored or activated yet.</p>
+      </section>
+    </section>
   </main>
 
-  <script src="../e8/e8-support.js?v=1"></script>
+  <script src="../e8/e8-support.js?v=2"></script>
 </body>
 </html>
