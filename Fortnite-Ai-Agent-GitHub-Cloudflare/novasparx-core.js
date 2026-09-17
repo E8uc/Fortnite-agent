@@ -325,6 +325,304 @@
     };
   }
 
+  function parseClientMesh(buffer, requestedPath = "") {
+    if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 16) {
+      throw new Error("NovaSparx returned an invalid mesh package.");
+    }
+
+    const bytes = new Uint8Array(buffer);
+    const magic = [0x4e, 0x53, 0x4d, 0x45, 0x53, 0x48, 0x31, 0x00];
+
+    for (let index = 0; index < magic.length; index++) {
+      if (bytes[index] !== magic[index]) {
+        throw new Error("NovaSparx mesh package has an invalid signature.");
+      }
+    }
+
+    const view = new DataView(buffer);
+    const headerLength = view.getUint32(8, true);
+    const paddedHeaderLength = view.getUint32(12, true);
+
+    if (
+      !headerLength ||
+      paddedHeaderLength < headerLength ||
+      paddedHeaderLength % 4 !== 0
+    ) {
+      throw new Error("NovaSparx mesh package has an invalid header.");
+    }
+
+    const payloadStart = 16 + paddedHeaderLength;
+
+    if (payloadStart > buffer.byteLength) {
+      throw new Error("NovaSparx mesh header exceeds the package.");
+    }
+
+    let header;
+
+    try {
+      header = JSON.parse(
+        new TextDecoder().decode(
+          new Uint8Array(
+            buffer,
+            16,
+            headerLength
+          )
+        )
+      );
+    } catch {
+      throw new Error("NovaSparx mesh header could not be decoded.");
+    }
+
+    if (
+      header?.schema !==
+      "novasparx.client-mesh.v1"
+    ) {
+      throw new Error(
+        `Unsupported NovaSparx mesh schema: ${header?.schema || "missing"}`
+      );
+    }
+
+    const payloadLength =
+      buffer.byteLength -
+      payloadStart;
+
+    const array = (
+      name,
+      Type
+    ) => {
+      const item =
+        header.arrays?.[name];
+
+      if (!item) return null;
+
+      const offset =
+        Number(item.byteOffset);
+
+      const length =
+        Number(item.byteLength);
+
+      if (
+        !Number.isInteger(offset) ||
+        !Number.isInteger(length) ||
+        offset < 0 ||
+        length < 0 ||
+        offset + length >
+          payloadLength ||
+        length %
+          Type.BYTES_PER_ELEMENT !==
+          0
+      ) {
+        throw new Error(
+          `Invalid NovaSparx mesh array: ${name}`
+        );
+      }
+
+      const absolute =
+        payloadStart + offset;
+
+      if (
+        absolute %
+          Type.BYTES_PER_ELEMENT !==
+          0
+      ) {
+        throw new Error(
+          `Invalid NovaSparx mesh alignment: ${name}`
+        );
+      }
+
+      return new Type(
+        buffer,
+        absolute,
+        length /
+          Type.BYTES_PER_ELEMENT
+      );
+    };
+
+    const positions =
+      array(
+        "positions",
+        Float32Array
+      );
+
+    const normals =
+      array(
+        "normals",
+        Float32Array
+      );
+
+    const tangents =
+      array(
+        "tangents",
+        Float32Array
+      );
+
+    const uv0 =
+      array(
+        "uv0",
+        Float32Array
+      );
+
+    const colors =
+      array(
+        "colors",
+        Float32Array
+      );
+
+    const indices =
+      array(
+        "indices",
+        Uint32Array
+      );
+
+    if (
+      !positions ||
+      !normals ||
+      !tangents ||
+      !uv0 ||
+      !indices
+    ) {
+      throw new Error(
+        "NovaSparx mesh package is missing geometry streams."
+      );
+    }
+
+    const vertexCount =
+      positions.length / 3;
+
+    if (
+      !Number.isInteger(vertexCount) ||
+      vertexCount <= 0 ||
+      vertexCount > MAX_VERTICES ||
+      indices.length < 3 ||
+      indices.length > MAX_INDICES ||
+      indices.length % 3 !== 0 ||
+      normals.length !==
+        vertexCount * 3 ||
+      tangents.length !==
+        vertexCount * 4 ||
+      uv0.length !==
+        vertexCount * 2 ||
+      (
+        colors &&
+        colors.length !==
+          vertexCount * 4
+      )
+    ) {
+      throw new Error(
+        "NovaSparx mesh package has inconsistent geometry."
+      );
+    }
+
+    const materialsRaw =
+      Array.isArray(header.materials)
+        ? header.materials
+        : [];
+
+    const materials =
+      materialsRaw
+        .slice(0, MAX_MATERIALS)
+        .map(normalizeMaterial);
+
+    if (!materials.length) {
+      materials.push(
+        normalizeMaterial({}, 0)
+      );
+    }
+
+    const sections =
+      normalizeSections(
+        header.sections,
+        indices.length
+      );
+
+    const textureReferences =
+      Array.isArray(
+        header.texturePaths
+      )
+        ? header.texturePaths.map(
+            (path) => ({
+              kind: "texture",
+              path
+            })
+          )
+        : [];
+
+    const asset =
+      header.asset &&
+      typeof header.asset ===
+        "object"
+        ? header.asset
+        : {};
+
+    return {
+      schema:
+        "novasparx.preview.v1",
+
+      path:
+        cleanPath(
+          asset.path ||
+          requestedPath
+        ),
+
+      resolvedPath:
+        String(
+          asset.resolvedPath ||
+          ""
+        ),
+
+      assetType:
+        String(
+          asset.assetType ||
+          "Unknown"
+        ),
+
+      source:
+        String(
+          asset.source ||
+          "NovaSparx"
+        ),
+
+      quality:
+        "client-binary",
+
+      geometry: {
+        positions,
+        indices,
+        normals,
+        tangents,
+        uv0,
+        colors
+      },
+
+      sections,
+      materials,
+
+      references:
+        normalizeReferences(
+          textureReferences
+        ),
+
+      metadata: {
+        vertexCount,
+        triangleCount:
+          indices.length / 3,
+        isNanite:
+          Boolean(
+            asset.isNanite
+          ),
+        lod:
+          Number(
+            asset.lod || 0
+          ),
+        materialFidelity:
+          String(
+            asset.materialFidelity ||
+            "unknown"
+          ).toLowerCase()
+      }
+    };
+  }
+
   async function requestJson(url, options = {}) {
     const response = await fetch(url, {
       cache: options.noCache ? "no-store" : "force-cache",
@@ -352,6 +650,72 @@
     }
 
     return normalizeManifest(data, path);
+  }
+
+  async function clientMesh(path, options = {}) {
+    if (!API) {
+      throw new Error(
+        "FNAA API endpoint is not configured."
+      );
+    }
+
+    const url =
+      new URL(
+        `${API}/nova/client-mesh`
+      );
+
+    url.searchParams.set(
+      "path",
+      String(path || "")
+    );
+
+    if (options.retry) {
+      url.searchParams.set(
+        "retry",
+        String(Date.now())
+      );
+    }
+
+    const response =
+      await fetch(
+        url.toString(),
+        {
+          cache: "no-store",
+          headers: {
+            Accept:
+              "application/vnd.novasparx.mesh-v1,application/octet-stream;q=0.9,application/json;q=0.5"
+          }
+        }
+      );
+
+    if (!response.ok) {
+      const data =
+        await response
+          .json()
+          .catch(() => ({}));
+
+      const error =
+        new Error(
+          data.error ||
+          `NovaSparx client mesh returned HTTP ${response.status}.`
+        );
+
+      error.code =
+        data.code ||
+        (
+          response.status === 404
+            ? "NOVA_MISSING"
+            : "NOVA_CLIENT_MESH_ERROR"
+        );
+
+      error.details = data;
+      throw error;
+    }
+
+    return parseClientMesh(
+      await response.arrayBuffer(),
+      path
+    );
   }
 
   async function inspect(path, options = {}) {
@@ -411,10 +775,12 @@
   }
 
   window.NovaSparx = Object.freeze({
-    version: "1.1.0",
+    version: "1.2.0",
     resolve,
+    clientMesh,
     inspect,
     preview,
+    parseClientMesh,
     normalizeManifest,
     cleanPath,
     objectPath,
