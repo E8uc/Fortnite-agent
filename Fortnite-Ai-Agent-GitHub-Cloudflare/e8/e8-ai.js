@@ -251,14 +251,6 @@
       await window.E8Auth.ready;
       if (generation !== conversationGeneration) return;
 
-      const headers = {
-        "Content-Type": "application/json",
-        "X-FNAA-Client": "web-v6",
-        "X-E8-Client": "hub-v1"
-      };
-      const token = window.E8Auth.getSessionToken();
-      if (token) headers.Authorization = `Bearer ${token}`;
-
       const clientContext = window.E8Database
         ? await window.E8Database.buildClientContext(content)
         : null;
@@ -267,14 +259,13 @@
       const body = { messages: messages.slice(-MAX_MESSAGES), mode: "chat" };
       if (clientContext) body.client_context = clientContext;
 
-      const response = await fetch(window.E8Auth.API_ENDPOINT, {
+      const response = await window.E8Auth.fetchApi("/", {
         method: "POST",
-        mode: "cors",
-        cache: "no-store",
-        credentials: "omit",
-        referrerPolicy: "no-referrer",
-        headers,
-        body: JSON.stringify(body),
+        headers: {
+          "X-FNAA-Client": "web-v6",
+          "X-E8-Client": "hub-v1"
+        },
+        body,
         signal: controller.signal
       });
       const data = await response.json().catch(() => ({}));
