@@ -113,10 +113,10 @@
     renderRecents();
   }
 
-  function renderRecents(filter = "") {
+  function renderRecents(filter = "", targetOverride = null) {
     const query = filter.trim().toLowerCase();
     const items = readHistory().filter((item) => !query || String(item.title || "").toLowerCase().includes(query));
-    const target = filter ? els.searchResults : els.recentList;
+    const target = targetOverride || els.recentList;
     target.replaceChildren();
     for (const item of items) {
       const button = document.createElement("button");
@@ -126,17 +126,21 @@
       button.addEventListener("click", () => loadConversation(item));
       target.append(button);
     }
-    if (!items.length && filter) {
+    if (!items.length && target === els.searchResults) {
       const empty = document.createElement("div");
       empty.className = "e8-muted";
-      empty.textContent = "No matching chats.";
+      empty.textContent = query ? "No matching chats." : "No chats yet.";
       target.append(empty);
     }
   }
 
   function loadConversation(item) {
     activeId = String(item.id || "");
-    messages = Array.isArray(item.messages) ? item.messages.filter((m) => m && ["user", "assistant"].includes(m.role) && typeof m.content === "string").slice(-MAX_MESSAGES) : [];
+    messages = Array.isArray(item.messages)
+      ? item.messages
+          .filter((message) => message && ["user", "assistant"].includes(message.role) && typeof message.content === "string")
+          .slice(-MAX_MESSAGES)
+      : [];
     els.chat.replaceChildren();
     for (const message of messages) appendMessage(message.role, message.content);
     setChatMode(true);
@@ -174,7 +178,9 @@
 
     try {
       await window.E8Auth.ready;
-      const headers = { "Content-Type": "application/json", "X-FNAA-Client": "e8-web-v1" };
+      // Keep the legacy chat client identifier so Guest and existing logged-in
+      // users continue to use the exact server behavior they already had.
+      const headers = { "Content-Type": "application/json", "X-FNAA-Client": "web-v6" };
       const token = window.E8Auth.getSessionToken();
       if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -217,7 +223,7 @@
   function openSearch() {
     els.searchPanel.hidden = false;
     els.searchInput.value = "";
-    renderRecents("");
+    renderRecents("", els.searchResults);
     requestAnimationFrame(() => els.searchInput.focus());
   }
 
@@ -230,13 +236,39 @@
     els.login.firstElementChild.textContent = state.connected ? "Log out" : "Log in";
   }
 
-  els.welcomeComposer.addEventListener("submit", (event) => { event.preventDefault(); const value = els.welcomeInput.value; els.welcomeInput.value = ""; startNewChat(value); });
-  els.chatComposer.addEventListener("submit", (event) => { event.preventDefault(); const value = els.chatInput.value; els.chatInput.value = ""; send(value); });
+  function submitOnEnter(textarea, callback) {
+    textarea.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      callback();
+    });
+  }
+
+  els.welcomeComposer.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const value = els.welcomeInput.value;
+    els.welcomeInput.value = "";
+    startNewChat(value);
+  });
+  els.chatComposer.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const value = els.chatInput.value;
+    els.chatInput.value = "";
+    send(value);
+  });
+  submitOnEnter(els.welcomeInput, () => els.welcomeComposer.requestSubmit());
+  submitOnEnter(els.chatInput, () => els.chatComposer.requestSubmit());
+
   els.newChat.addEventListener("click", resetChat);
   els.searchButton.addEventListener("click", () => els.searchPanel.hidden ? openSearch() : closeSearch());
-  els.searchInput.addEventListener("input", () => renderRecents(els.searchInput.value));
+  els.searchInput.addEventListener("input", () => renderRecents(els.searchInput.value, els.searchResults));
   document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !els.searchPanel.hidden) closeSearch(); });
-  els.login.addEventListener("click", async () => { await window.E8Auth.ready; if (window.E8Auth.getState().connected) await window.E8Auth.signOut(); else window.E8Auth.signIn(); updateLoginButton(); });
+  els.login.addEventListener("click", async () => {
+    await window.E8Auth.ready;
+    if (window.E8Auth.getState().connected) await window.E8Auth.signOut();
+    else window.E8Auth.signIn();
+    updateLoginButton();
+  });
   window.addEventListener("e8-auth-changed", updateLoginButton);
 
   renderSuggestions();
