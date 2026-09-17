@@ -8,12 +8,16 @@ on:
     paths:
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-admin-guard.js"
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-admin-guard.test.mjs"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-gateway.js"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-gateway.test.mjs"
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/package.json"
       - ".github/workflows/e8-runtime-tests.yml"
   pull_request:
     paths:
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-admin-guard.js"
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-admin-guard.test.mjs"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-gateway.js"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/e8-gateway.test.mjs"
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/package.json"
       - ".github/workflows/e8-runtime-tests.yml"
 
@@ -21,7 +25,7 @@ permissions:
   contents: read
 
 jobs:
-  admin-safety:
+  runtime-safety:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -32,6 +36,6 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Run E8 admin runtime tests
+      - name: Run E8 runtime security tests
         working-directory: Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker
-        run: node --test e8-admin-guard.test.mjs
+        run: node --test e8-admin-guard.test.mjs e8-gateway.test.mjs
