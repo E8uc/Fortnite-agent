@@ -2693,6 +2693,164 @@ async function buildAssetContext(
   };
 }
 
+async function handleNovaStatus(
+  request,
+  env
+) {
+  const config =
+    novaConfig(env);
+
+  const result = {
+    ok: true,
+    service:
+      "FNAA NovaSparx diagnostic",
+    configured:
+      novaConfigured(env),
+    autoLink: {
+      configured:
+        !!(
+          config.autoLinkUrl &&
+          config.autoLinkTokens.length
+        ),
+      connected: null
+    },
+    backend: {
+      source: "none",
+      status: null,
+      version: null,
+      providerReady: null,
+      manifestVersion: null,
+      universalPreviewPlan: null,
+      clientRendered3d: null,
+      clientMeshBinary: null,
+      error: null
+    }
+  };
+
+  if (config.autoLinkUrl) {
+    try {
+      const health =
+        await fetchWithTimeout(
+          config.autoLinkUrl +
+            "/health",
+          {
+            method: "GET",
+            headers: {
+              Accept:
+                "application/json"
+            }
+          },
+          12_000
+        );
+
+      const data =
+        await health
+          .json()
+          .catch(() => ({}));
+
+      result.autoLink.connected =
+        Boolean(
+          health.ok &&
+          data?.connected
+        );
+    } catch {
+      result.autoLink.connected =
+        false;
+    }
+  }
+
+  if (!result.configured) {
+    result.ok = false;
+    result.backend.error =
+      "NovaSparx is not configured.";
+
+    return json(
+      request,
+      env,
+      result,
+      200
+    );
+  }
+
+  try {
+    const upstream =
+      await novaFetch(
+        env,
+        "/v1/health",
+        {
+          method: "GET"
+        }
+      );
+
+    result.backend.source =
+      novaSource(
+        upstream
+      );
+
+    result.backend.status =
+      upstream.status;
+
+    const data =
+      await upstream
+        .json()
+        .catch(() => ({}));
+
+    result.backend.version =
+      data?.version ??
+      data?.Version ??
+      null;
+
+    result.backend.providerReady =
+      data?.providerReady ??
+      data?.ProviderReady ??
+      null;
+
+    result.backend.manifestVersion =
+      data?.manifestVersion ??
+      data?.ManifestVersion ??
+      null;
+
+    result.backend.universalPreviewPlan =
+      data?.universalPreviewPlan ??
+      data?.UniversalPreviewPlan ??
+      null;
+
+    result.backend.clientRendered3d =
+      data?.clientRendered3d ??
+      data?.ClientRendered3d ??
+      null;
+
+    result.backend.clientMeshBinary =
+      data?.clientMeshBinary ??
+      data?.ClientMeshBinary ??
+      null;
+
+    if (!upstream.ok) {
+      result.ok = false;
+      result.backend.error =
+        String(
+          data?.error ||
+          data?.Error ||
+          `NovaSparx health returned HTTP ${upstream.status}.`
+        ).slice(0, 300);
+    }
+  } catch (error) {
+    result.ok = false;
+    result.backend.error =
+      String(
+        error?.message ||
+        error
+      ).slice(0, 300);
+  }
+
+  return json(
+    request,
+    env,
+    result,
+    200
+  );
+}
+
 async function handleNovaProxy(
   request,
   env,
@@ -5560,6 +5718,18 @@ export default {
         env,
         url,
         true
+      );
+    }
+
+    if (
+      request.method ===
+        "GET" &&
+      url.pathname ===
+        "/nova/status"
+    ) {
+      return handleNovaStatus(
+        request,
+        env
       );
     }
 
