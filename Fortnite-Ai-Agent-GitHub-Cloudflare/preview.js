@@ -1661,12 +1661,43 @@
       null;
 
     try {
-      const pathFamily =
+      let pathFamily =
         window.NovaSparxAssociations
           ?.family?.(
             clean
           ) ||
         "other";
+
+      // Ambiguous names are classified from bounded export JSON before any
+      // visual route is allowed. A name similarity alone never changes family.
+      if (
+        pathFamily ===
+          "other" &&
+        window.NovaSparxAssociations
+          ?.classify
+      ) {
+        try {
+          const classification =
+            await window.NovaSparxAssociations
+              .classify(
+                clean,
+                {
+                  signal
+                }
+              );
+
+          pathFamily =
+            classification?.family ||
+            pathFamily;
+        } catch (error) {
+          if (
+            error?.name ===
+            "AbortError"
+          ) {
+            throw error;
+          }
+        }
+      }
 
       // 1) Th3Dry/FNAA's known catalogue images are the quickest and most
       // deterministic layer for islands and Creative devices.
@@ -1685,6 +1716,13 @@
       // 2) Dilly-backed direct resolver: cosmetic icons, UI and referenced
       // textures. Keep this as a direct <img> URL for iPhone Safari stability.
       if (
+        ![
+          "mesh",
+          "blueprint",
+          "texture"
+        ].includes(
+          pathFamily
+        ) &&
         window.NovaSparxAssociations
           ?.allowDirectImage?.(
             clean
@@ -1703,6 +1741,12 @@
       // 3) The NovaSparx server can decode the asset itself when it is a real
       // UTexture and no public still image exists.
       if (
+        ![
+          "mesh",
+          "blueprint"
+        ].includes(
+          pathFamily
+        ) &&
         window.NovaSparxAssociations
           ?.allowTextureDecode?.(
             clean
@@ -1739,7 +1783,17 @@
             clean,
             info
           ) ||
-        pathFamily;
+        "other";
+
+      if (
+        resolvedFamily ===
+          "other" &&
+        pathFamily !==
+          "other"
+      ) {
+        resolvedFamily =
+          pathFamily;
+      }
 
       if (
         resolvedFamily ===
