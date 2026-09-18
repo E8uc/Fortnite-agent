@@ -5,7 +5,39 @@ const BACKEND_TAG = "nova-backend";
 
 const MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
 const MAX_CONTROL_BYTES = 256 * 1024;
-const REQUEST_TIMEOUT_MS = 190_000;
+
+function requestTimeoutMs(path) {
+  if (
+    path === "/v1/warmup" ||
+    path === "/v1/refresh"
+  ) {
+    return 140_000;
+  }
+
+  if (path === "/v1/client-mesh") {
+    return 35_000;
+  }
+
+  if (path === "/v1/resolve") {
+    return 30_000;
+  }
+
+  if (
+    path === "/v1/preview" ||
+    path === "/v1/texture"
+  ) {
+    return 24_000;
+  }
+
+  if (
+    path === "/v1/inspect" ||
+    path === "/v1/references"
+  ) {
+    return 20_000;
+  }
+
+  return 15_000;
+}
 
 function json(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
@@ -379,7 +411,7 @@ export class NovaLinkDurableObject extends DurableObject {
         id,
         new Error("NovaSparx AutoLink request timed out.")
       );
-    }, REQUEST_TIMEOUT_MS);
+    }, requestTimeoutMs(url.pathname));
 
     this.pending.set(id, pending);
 
