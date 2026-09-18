@@ -691,6 +691,12 @@
         }
       );
 
+    window.NovaSparxBrowserGuard
+      ?.assertResponseBudget?.(
+        response,
+        "mesh"
+      );
+
     if (!response.ok) {
       const data =
         await response
@@ -736,7 +742,24 @@
       );
     }
 
-    return response.arrayBuffer();
+    const buffer =
+      await response.arrayBuffer();
+
+    if (
+      buffer.byteLength >
+      (
+        window.NovaSparxBrowserGuard
+          ?.status?.()
+          ?.packageLimitBytes ||
+        64 * 1024 * 1024
+      )
+    ) {
+      throw new Error(
+        "NovaSparx mesh exceeded the browser safety budget after download."
+      );
+    }
+
+    return buffer;
   }
 
   async function clientMesh(path, options = {}) {
@@ -806,7 +829,7 @@
   }
 
   window.NovaSparx = Object.freeze({
-    version: "1.3.0",
+    version: "1.3.1",
     resolve,
     clientMesh,
     clientMeshBuffer,
