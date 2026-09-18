@@ -165,6 +165,12 @@ export class NovaLinkDurableObject extends DurableObject {
     // response at a time over the reverse socket, so this identifies which
     // pending request owns incoming binary frames.
     this.activeResponseId = null;
+
+    this.backendVersion = null;
+    this.connectedAt = null;
+    this.lastDisconnectedAt = null;
+    this.lastCloseCode = null;
+    this.lastCloseReason = null;
   }
 
   async fetch(request) {
@@ -178,7 +184,12 @@ export class NovaLinkDurableObject extends DurableObject {
         service: "NovaSparx AutoLink",
         connected: !!socket,
         protocol: "novasparx.autolink.v1",
-        pendingRequests: this.pending.size
+        pendingRequests: this.pending.size,
+        backendVersion: this.backendVersion,
+        connectedAt: this.connectedAt,
+        lastDisconnectedAt: this.lastDisconnectedAt,
+        lastCloseCode: this.lastCloseCode,
+        lastCloseReason: this.lastCloseReason
       });
     }
 
@@ -202,6 +213,17 @@ export class NovaLinkDurableObject extends DurableObject {
           426
         );
       }
+
+      this.backendVersion =
+        String(
+          request.headers.get("x-novasparx-version") || ""
+        ).trim() || null;
+
+      this.connectedAt =
+        new Date().toISOString();
+
+      this.lastCloseCode = null;
+      this.lastCloseReason = null;
 
       // One backend connection is enough for this deployment. Replacing an
       // old socket is safer than keeping two parsers racing to answer the same
@@ -623,6 +645,11 @@ export class NovaLinkDurableObject extends DurableObject {
 
   async webSocketClose(ws, code, reason, wasClean) {
     this.activeResponseId = null;
+    this.lastDisconnectedAt =
+      new Date().toISOString();
+    this.lastCloseCode = code;
+    this.lastCloseReason =
+      reason || "closed";
 
     this.failAllPending(
       new Error(
@@ -633,13 +660,18 @@ export class NovaLinkDurableObject extends DurableObject {
 
   async webSocketError(ws, error) {
     this.activeResponseId = null;
+    this.lastDisconnectedAt =
+      new Date().toISOString();
+    this.lastCloseCode = null;
+    this.lastCloseReason =
+      String(
+        error?.message ||
+        "NovaSparx backend WebSocket error."
+      );
 
     this.failAllPending(
       new Error(
-        String(
-          error?.message ||
-          "NovaSparx backend WebSocket error."
-        )
+        this.lastCloseReason
       )
     );
   }
