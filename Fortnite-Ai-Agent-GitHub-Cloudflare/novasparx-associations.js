@@ -1190,6 +1190,8 @@
     const needsJson =
       !data &&
       (
+        options.verifyKnown ===
+          true ||
         inspectedKind ===
           "other" ||
         inspectedKind ===
@@ -2376,7 +2378,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.6.0",
+        "1.6.1",
       family,
       classify,
       capabilityProfile,
