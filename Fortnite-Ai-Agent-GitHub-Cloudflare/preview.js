@@ -1196,14 +1196,41 @@
         "canvas"
       );
 
-    canvas.width = 1024;
-    canvas.height = 1024;
+    const guardStatus =
+      window.NovaSparxBrowserGuard
+        ?.status?.() || {};
+
+    const canvasSize =
+      guardStatus.isIOS
+        ? 640
+        : guardStatus.isMobile
+          ? 768
+          : 1024;
+
+    canvas.width =
+      canvasSize;
+
+    canvas.height =
+      canvasSize;
 
     const context =
       canvas.getContext(
         "2d",
         { alpha: false }
       );
+
+    if (
+      context &&
+      canvasSize !== 1024
+    ) {
+      const scale =
+        canvasSize / 1024;
+
+      context.scale(
+        scale,
+        scale
+      );
+    }
 
     const name =
       assetName(path);
