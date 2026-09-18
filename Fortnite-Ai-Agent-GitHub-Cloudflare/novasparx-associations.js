@@ -672,6 +672,82 @@
     return found;
   }
 
+  function blueprintPreviewImages(
+    data
+  ) {
+    const scored =
+      collectReferences(
+        data
+      )
+        .map(
+          (item) => {
+            const key =
+              String(
+                item.key || ""
+              );
+
+            const name =
+              leaf(
+                item.path
+              );
+
+            let score = 0;
+
+            if (
+              /(?:LargeIcon|SmallIcon|Icon|PreviewImage|PreviewTexture|Thumbnail|DisplayImage|GalleryArt|PrefabIcon|Portrait|KeyArt|FeaturedImage|Brush)/i
+                .test(key)
+            ) {
+              score += 300;
+            }
+
+            if (
+              /(?:icon|thumbnail|preview|display|gallery|prefab|portrait|keyart)/i
+                .test(name)
+            ) {
+              score += 220;
+            }
+
+            if (
+              /^(?:T_|Tex_|Texture_)/i
+                .test(name)
+            ) {
+              score += 40;
+            }
+
+            if (
+              /(?:normal|rough|roughness|spec|specular|metal|metallic|orm|mra|mask|opacity|ao|basecolor|albedo|diffuse|emissive|noise|detail|gradient|lut|lightmap)/i
+                .test(name)
+            ) {
+              score -= 500;
+            }
+
+            return {
+              path:
+                item.path,
+              score
+            };
+          }
+        )
+        .filter(
+          (item) =>
+            item.score > 0
+        )
+        .sort(
+          (a, b) =>
+            b.score -
+            a.score
+        );
+
+    return [
+      ...new Set(
+        scored.map(
+          (item) =>
+            item.path
+        )
+      )
+    ].slice(0, 6);
+  }
+
   function meshReferences(
     data
   ) {
@@ -1208,6 +1284,11 @@
               );
 
             if (exact) {
+              const previewImages =
+                blueprintPreviewImages(
+                  data
+                );
+
               return {
                 state:
                   "ready",
@@ -1217,6 +1298,9 @@
                   clean(candidate),
                 visualPath:
                   target,
+                previewImagePath:
+                  previewImages[0] ||
+                  "",
                 relation:
                   "asset-registry+json-referencer",
                 evidence:
@@ -1309,6 +1393,11 @@
           data
         );
 
+      const previewImages =
+        blueprintPreviewImages(
+          data
+        );
+
       return {
         state:
           "ready",
@@ -1326,6 +1415,9 @@
           ) ||
           meshes[0] ||
           target,
+        previewImagePath:
+          previewImages[0] ||
+          "",
         relation:
           "verified-blueprint-referencer",
         evidence:
@@ -1358,7 +1450,15 @@
         data
       );
 
-    if (!meshes.length) {
+    const previewImages =
+      blueprintPreviewImages(
+        data
+      );
+
+    if (
+      !meshes.length &&
+      !previewImages.length
+    ) {
       return null;
     }
 
@@ -1370,11 +1470,19 @@
       blueprintPath:
         clean(blueprintPath),
       visualPath:
-        meshes[0],
+        meshes[0] ||
+        "",
+      previewImagePath:
+        previewImages[0] ||
+        "",
       relation:
-        "verified-blueprint-mesh",
+        meshes.length
+          ? "verified-blueprint-mesh"
+          : "verified-blueprint-visual",
       evidence:
-        "Blueprint export JSON contains a verified mesh reference."
+        meshes.length
+          ? "Blueprint export JSON contains a verified mesh reference."
+          : "Blueprint export JSON contains a verified preview/icon texture reference."
     };
   }
 
@@ -1462,7 +1570,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.2.0",
+        "1.3.0",
       family,
       classify,
       allowDirectImage,
