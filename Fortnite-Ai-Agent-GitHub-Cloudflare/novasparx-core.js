@@ -626,6 +626,9 @@
   async function requestJson(url, options = {}) {
     const response = await fetch(url, {
       cache: options.noCache ? "no-store" : "force-cache",
+      signal:
+        options.signal ||
+        undefined,
       headers: { Accept: "application/json" }
     });
 
