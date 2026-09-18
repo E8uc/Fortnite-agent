@@ -587,7 +587,11 @@
               await window
                 .NovaSparxAssociations
                 ?.classify?.(
-                  path
+                  path,
+                  {
+                    verifyKnown:
+                      true
+                  }
                 );
 
             return (
@@ -878,9 +882,21 @@
           .assetClassifying =
           "1";
 
-        classifyAsset(
+        const assetPath =
           card.dataset.assetPath ||
-          ""
+          "";
+
+        // Paint an immediate local answer so the card never waits on a
+        // metadata request. The verified result can correct it afterwards.
+        applyAssetClassification(
+          card,
+          fallbackAssetClassification(
+            assetPath
+          )
+        );
+
+        classifyAsset(
+          assetPath
         )
           .then(
             (classification) => {
