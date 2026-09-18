@@ -430,7 +430,7 @@
     return texture;
   }
 
-  async function loadTexture(gl, url, fallbackTexture) {
+  async function loadTexture(gl, url, fallbackTexture, options = {}) {
     if (!url) return { texture: fallbackTexture, loaded: false };
 
     try {
@@ -454,12 +454,21 @@
         bitmap
       );
 
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_MIN_FILTER,
+        options.mipmaps === false
+          ? gl.LINEAR
+          : gl.LINEAR_MIPMAP_LINEAR
+      );
+
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
 
-      gl.generateMipmap(gl.TEXTURE_2D);
+      if (options.mipmaps !== false) {
+        gl.generateMipmap(gl.TEXTURE_2D);
+      }
       bitmap.close?.();
 
       return { texture, loaded: true };
@@ -487,6 +496,20 @@
   async function render(manifest, options = {}) {
     if (!manifest?.geometry) throw new Error("NovaSparx manifest has no geometry.");
 
+    const guard =
+      window.NovaSparxBrowserGuard;
+
+    guard
+      ?.assertManifestBudget?.(
+        manifest
+      );
+
+    const policy =
+      guard
+        ?.renderPolicy?.(
+          manifest
+        ) || {};
+
     const geometry = manifest.geometry;
 
     const positions = asTyped(geometry.positions, Float32Array);
@@ -510,15 +533,40 @@
       ? asTyped(geometry.tangents, Float32Array)
       : null;
 
-    const requestedSize = Number(options.size) || (
-      vertexCount < 100000 ? 1024 :
-      vertexCount < 280000 ? 896 :
-      768
-    );
+    const requestedSize =
+      Number(options.size) ||
+      Number(policy.size) ||
+      (
+        vertexCount < 100000 ? 1024 :
+        vertexCount < 280000 ? 896 :
+        768
+      );
 
-    const size = Math.max(512, Math.min(1024, requestedSize));
-    const supersample = vertexCount < 240000 ? 2 : 1;
-    const renderSize = Math.min(2048, size * supersample);
+    const size =
+      Math.max(
+        384,
+        Math.min(
+          policy.size || 1024,
+          requestedSize
+        )
+      );
+
+    const supersample =
+      policy.supersample === false
+        ? 1
+        : (
+            vertexCount < 240000
+              ? 2
+              : 1
+          );
+
+    const renderSize =
+      Math.min(
+        policy.supersample === false
+          ? size
+          : 2048,
+        size * supersample
+      );
 
     const canvas = document.createElement("canvas");
     canvas.width = renderSize;
@@ -531,7 +579,9 @@
         depth: true,
         premultipliedAlpha: false,
         preserveDrawingBuffer: true,
-        powerPreference: "high-performance"
+        powerPreference:
+          policy.powerPreference ||
+          "high-performance"
       }) ||
       canvas.getContext("webgl", {
         alpha: true,
@@ -593,19 +643,73 @@
     const flatNormal = createSolidTexture(gl, [128, 128, 255, 255]);
     const black = createSolidTexture(gl, [0, 0, 0, 255]);
 
-    const materials = manifest.materials?.length
-      ? manifest.materials
-      : [{}];
+    const materials =
+      (
+        manifest.materials?.length
+          ? manifest.materials
+          : [{}]
+      ).slice(
+        0,
+        Number(policy.maxMaterials) ||
+        24
+      );
 
     const loadedMaterials = [];
 
+    const textureModes =
+      new Set(
+        policy.textureModes ||
+        [
+          "base",
+          "normal",
+          "emissive",
+          "opacity",
+          "packed"
+        ]
+      );
+
+    let remainingTextureLoads =
+      Number(policy.maxTextureLoads) ||
+      40;
+
+    const guardedTexture = async (
+      mode,
+      url,
+      fallbackTexture
+    ) => {
+      if (
+        !url ||
+        !textureModes.has(mode) ||
+        remainingTextureLoads <= 0
+      ) {
+        return {
+          texture:
+            fallbackTexture,
+          loaded:
+            false
+        };
+      }
+
+      remainingTextureLoads--;
+
+      return loadTexture(
+        gl,
+        url,
+        fallbackTexture,
+        {
+          mipmaps:
+            policy.mipmaps !== false
+        }
+      );
+    };
+
     for (const material of materials) {
       const maps = await Promise.all([
-        loadTexture(gl, material.baseColorTexture, white),
-        loadTexture(gl, material.normalTexture, flatNormal),
-        loadTexture(gl, material.emissiveTexture, black),
-        loadTexture(gl, material.opacityTexture, white),
-        loadTexture(gl, material.packedTexture, white)
+        guardedTexture("base", material.baseColorTexture, white),
+        guardedTexture("normal", material.normalTexture, flatNormal),
+        guardedTexture("emissive", material.emissiveTexture, black),
+        guardedTexture("opacity", material.opacityTexture, white),
+        guardedTexture("packed", material.packedTexture, white)
       ]);
 
       loadedMaterials.push({ material, maps });
@@ -802,6 +906,22 @@
 
     gl.deleteProgram(program);
 
+    try {
+      gl.getExtension(
+        "WEBGL_lose_context"
+      )?.loseContext();
+    } catch {}
+
+    // Release large framebuffer allocations immediately instead of waiting for
+    // mobile Safari's GC heuristics.
+    canvas.width = 1;
+    canvas.height = 1;
+
+    if (outputCanvas !== canvas) {
+      outputCanvas.width = 1;
+      outputCanvas.height = 1;
+    }
+
     return {
       blob,
       width: size,
@@ -817,7 +937,7 @@
   }
 
   window.NovaSparxRenderer = Object.freeze({
-    version: "1.0.0",
+    version: "1.1.0",
     render
   });
 })();
