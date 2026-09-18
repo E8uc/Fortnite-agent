@@ -179,14 +179,31 @@ export class NovaLinkDurableObject extends DurableObject {
     if (url.pathname === "/__status") {
       const socket = this.getBackendSocket();
 
+      let attachment = null;
+
+      if (socket) {
+        try {
+          attachment =
+            socket.deserializeAttachment();
+        } catch {
+          attachment = null;
+        }
+      }
+
       return json({
         ok: true,
         service: "NovaSparx AutoLink",
         connected: !!socket,
         protocol: "novasparx.autolink.v1",
         pendingRequests: this.pending.size,
-        backendVersion: this.backendVersion,
-        connectedAt: this.connectedAt,
+        backendVersion:
+          attachment?.backendVersion ||
+          this.backendVersion ||
+          null,
+        connectedAt:
+          attachment?.connectedAt ||
+          this.connectedAt ||
+          null,
         lastDisconnectedAt: this.lastDisconnectedAt,
         lastCloseCode: this.lastCloseCode,
         lastCloseReason: this.lastCloseReason
@@ -248,6 +265,18 @@ export class NovaLinkDurableObject extends DurableObject {
       const server = pair[1];
 
       this.ctx.acceptWebSocket(server, [BACKEND_TAG]);
+
+      try {
+        server.serializeAttachment({
+          backendVersion:
+            this.backendVersion,
+          connectedAt:
+            this.connectedAt
+        });
+      } catch {
+        // Connection metadata is diagnostic-only. The socket still works
+        // even if attachment persistence is unavailable.
+      }
 
       server.send(
         JSON.stringify({
