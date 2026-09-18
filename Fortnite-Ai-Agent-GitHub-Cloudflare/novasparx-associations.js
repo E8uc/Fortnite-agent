@@ -14,6 +14,70 @@
   const referenceShardCache = new Map();
   const REFERENCE_SHARD_CACHE_LIMIT = 6;
 
+  function deadlineSignal(
+    parentSignal,
+    timeoutMs
+  ) {
+    const controller =
+      new AbortController();
+
+    let timedOut = false;
+
+    const relayAbort = () => {
+      try {
+        controller.abort(
+          parentSignal?.reason ||
+          "parent-abort"
+        );
+      } catch {}
+    };
+
+    if (parentSignal?.aborted) {
+      relayAbort();
+    } else {
+      parentSignal?.addEventListener?.(
+        "abort",
+        relayAbort,
+        { once: true }
+      );
+    }
+
+    const timer =
+      setTimeout(
+        () => {
+          timedOut = true;
+
+          try {
+            controller.abort(
+              "novasparx-deadline"
+            );
+          } catch {}
+        },
+        timeoutMs
+      );
+
+    return {
+      signal:
+        controller.signal,
+
+      timedOut:
+        () =>
+          timedOut,
+
+      cleanup() {
+        clearTimeout(
+          timer
+        );
+
+        parentSignal
+          ?.removeEventListener?.(
+            "abort",
+            relayAbort
+          );
+      }
+    };
+  }
+
   function clean(path) {
     return (
       window.NovaSparx
@@ -355,6 +419,14 @@
         "false"
       );
 
+      const deadline =
+        deadlineSignal(
+          signal,
+          guard.isMobile
+            ? 3_500
+            : 5_000
+        );
+
       try {
         const response =
           await fetch(
@@ -364,8 +436,7 @@
               cache:
                 "force-cache",
               signal:
-                signal ||
-                undefined,
+                deadline.signal,
               headers: {
                 Accept:
                   "application/json,text/plain;q=0.8"
@@ -387,11 +458,14 @@
         );
       } catch (error) {
         if (
-          error?.name ===
-          "AbortError"
+          signal?.aborted
         ) {
           throw error;
         }
+
+        // A slow JSON candidate is not allowed to hold the whole preview open.
+      } finally {
+        deadline.cleanup();
       }
     }
 
@@ -1215,11 +1289,9 @@
         ?.status?.() || {};
 
     const maxCandidates =
-      guard.isIOS
-        ? 3
-        : guard.isMobile
-          ? 4
-          : 7;
+      guard.isMobile
+        ? 2
+        : 4;
 
     // AssetRegistry referencers are the strongest zero-runtime-RAM layer:
     // GitHub Actions builds them offline, then the browser fetches one tiny
@@ -1356,76 +1428,97 @@
         maxCandidates
       );
 
-    for (const candidate of candidates) {
-      const data =
-        await fetchExportJson(
-          candidate,
-          options.signal
-        );
+    const checks =
+      await Promise.all(
+        candidates.map(
+          async (candidate) => {
+            try {
+              const data =
+                await fetchExportJson(
+                  candidate,
+                  options.signal
+                );
 
-      if (
-        !data ||
-        !blueprintEvidence(data)
-      ) {
-        continue;
-      }
+              if (
+                !data ||
+                !blueprintEvidence(data)
+              ) {
+                return null;
+              }
 
-      const refs =
-        collectReferences(
-          data
-        );
+              const refs =
+                collectReferences(
+                  data
+                );
 
-      const exact =
-        refs.some(
-          (item) =>
-            samePath(
-              item.path,
-              target
-            )
-        );
+              const exact =
+                refs.some(
+                  (item) =>
+                    samePath(
+                      item.path,
+                      target
+                    )
+                );
 
-      if (!exact) {
-        continue;
-      }
+              if (!exact) {
+                return null;
+              }
 
-      const meshes =
-        meshReferences(
-          data
-        );
+              const meshes =
+                meshReferences(
+                  data
+                );
 
-      const previewImages =
-        blueprintPreviewImages(
-          data
-        );
+              const previewImages =
+                blueprintPreviewImages(
+                  data
+                );
 
-      return {
-        state:
-          "ready",
-        sourceFamily:
-          "mesh",
-        blueprintPath:
-          clean(candidate),
-        visualPath:
-          meshes.find(
-            (path) =>
-              samePath(
-                path,
-                target
-              )
-          ) ||
-          meshes[0] ||
-          target,
-        previewImagePath:
-          previewImages[0] ||
-          "",
-        relation:
-          "verified-blueprint-referencer",
-        evidence:
-          "Blueprint export JSON contains an exact reference to the requested mesh."
-      };
-    }
+              return {
+                state:
+                  "ready",
+                sourceFamily:
+                  "mesh",
+                blueprintPath:
+                  clean(candidate),
+                visualPath:
+                  meshes.find(
+                    (path) =>
+                      samePath(
+                        path,
+                        target
+                      )
+                  ) ||
+                  meshes[0] ||
+                  target,
+                previewImagePath:
+                  previewImages[0] ||
+                  "",
+                relation:
+                  "verified-blueprint-referencer",
+                evidence:
+                  "Blueprint export JSON contains an exact reference to the requested mesh."
+              };
+            } catch (error) {
+              if (
+                options.signal
+                  ?.aborted
+              ) {
+                throw error;
+              }
 
-    return null;
+              return null;
+            }
+          }
+        )
+      );
+
+    return (
+      checks.find(
+        Boolean
+      ) ||
+      null
+    );
   }
 
   async function visualFromBlueprint(
@@ -1570,7 +1663,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.3.0",
+        "1.4.0",
       family,
       classify,
       allowDirectImage,
