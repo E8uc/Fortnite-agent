@@ -880,7 +880,9 @@
 
     if (
       manifest?.schema !==
-        "novasparx.asset-references.v1"
+        "novasparx.asset-references.v1" ||
+      manifest?.available ===
+        false
     ) {
       return [];
     }
