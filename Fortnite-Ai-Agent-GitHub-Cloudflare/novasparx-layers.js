@@ -172,13 +172,27 @@
       globalThis.NovaSparxLocalParser;
 
     if (
-      candidate &&
-      typeof candidate.resolveMesh === "function"
+      !candidate ||
+      typeof candidate.resolveMesh !== "function"
     ) {
-      return candidate;
+      return null;
     }
 
-    return null;
+    if (
+      typeof candidate.status === "function"
+    ) {
+      try {
+        const state = candidate.status();
+
+        if (state?.registered === false) {
+          return null;
+        }
+      } catch {
+        return null;
+      }
+    }
+
+    return candidate;
   }
 
   async function fromLocalParser(path, options) {
