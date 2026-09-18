@@ -649,50 +649,690 @@
     return best;
   }
 
+  function normalizedTypeValue(
+    value
+  ) {
+    return String(
+      value || ""
+    )
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, "");
+  }
+
+  function inspectionType(
+    inspection
+  ) {
+    if (
+      !inspection ||
+      typeof inspection !==
+        "object"
+    ) {
+      return "";
+    }
+
+    for (
+      const key of [
+        "assetType",
+        "AssetType",
+        "type",
+        "Type",
+        "objectType",
+        "ObjectType",
+        "className",
+        "ClassName",
+        "exportType",
+        "ExportType",
+        "assetClass",
+        "AssetClass"
+      ]
+    ) {
+      const value =
+        inspection[key];
+
+      if (
+        typeof value ===
+          "string" &&
+        value.trim()
+      ) {
+        return value.trim();
+      }
+    }
+
+    return "";
+  }
+
+  function jsonTypeEvidence(
+    data
+  ) {
+    const candidates = [];
+    let visited = 0;
+
+    const add = (
+      value,
+      key,
+      score
+    ) => {
+      if (
+        typeof value !==
+          "string" ||
+        !value.trim()
+      ) {
+        return;
+      }
+
+      candidates.push({
+        value:
+          value.trim(),
+        key:
+          String(key || ""),
+        score:
+          Number(score) || 0
+      });
+    };
+
+    const walk = (
+      value,
+      depth = 0
+    ) => {
+      if (
+        value == null ||
+        depth > 6 ||
+        visited++ > 1200
+      ) {
+        return;
+      }
+
+      if (Array.isArray(value)) {
+        for (
+          const item of
+          value.slice(0, 90)
+        ) {
+          walk(
+            item,
+            depth + 1
+          );
+        }
+
+        return;
+      }
+
+      if (
+        typeof value !==
+          "object"
+      ) {
+        return;
+      }
+
+      for (
+        const [
+          key,
+          child
+        ] of
+        Object.entries(value)
+          .slice(0, 140)
+      ) {
+        if (
+          /^(?:ClassName|AssetClass|ExportType)$/i
+            .test(key)
+        ) {
+          add(
+            child,
+            key,
+            100
+          );
+        } else if (
+          /^(?:Type|Class|ObjectType)$/i
+            .test(key)
+        ) {
+          add(
+            child,
+            key,
+            90
+          );
+        } else if (
+          /^ObjectName$/i
+            .test(key)
+        ) {
+          add(
+            child,
+            key,
+            55
+          );
+        }
+
+        walk(
+          child,
+          depth + 1
+        );
+      }
+    };
+
+    walk(data);
+
+    candidates.sort(
+      (a, b) =>
+        b.score - a.score
+    );
+
+    return (
+      candidates[0] ||
+      null
+    );
+  }
+
+  function pathKind(
+    path
+  ) {
+    const name =
+      leaf(path)
+        .toLowerCase();
+
+    if (/^sk_/.test(name)) {
+      return "skeletalmesh";
+    }
+
+    if (/^sm_/.test(name)) {
+      return "staticmesh";
+    }
+
+    if (
+      /^(?:t_|tex_|texture_|icon_|ui_)/
+        .test(name)
+    ) {
+      return "texture";
+    }
+
+    if (
+      /^(?:mi_|m_)/
+        .test(name)
+    ) {
+      return "material";
+    }
+
+    if (
+      /^(?:bp_|bpc_)/
+        .test(name)
+    ) {
+      return "blueprint";
+    }
+
+    if (
+      /^(?:ns_|ps_|vfx_|fx_)/
+        .test(name)
+    ) {
+      return "vfx";
+    }
+
+    return "other";
+  }
+
+  function kindFromType(
+    rawType
+  ) {
+    const type =
+      normalizedTypeValue(
+        rawType
+      );
+
+    if (!type) {
+      return "other";
+    }
+
+    if (
+      type.includes(
+        "skeletalmesh"
+      )
+    ) {
+      return "skeletalmesh";
+    }
+
+    if (
+      type.includes(
+        "staticmesh"
+      )
+    ) {
+      return "staticmesh";
+    }
+
+    if (
+      type.includes(
+        "texture"
+      ) ||
+      type.includes(
+        "slatebrush"
+      )
+    ) {
+      return "texture";
+    }
+
+    if (
+      type.includes(
+        "material"
+      )
+    ) {
+      return "material";
+    }
+
+    if (
+      type.includes(
+        "blueprint"
+      ) ||
+      type.includes(
+        "generatedclass"
+      )
+    ) {
+      return "blueprint";
+    }
+
+    if (
+      type.includes(
+        "soundwave"
+      ) ||
+      type.includes(
+        "soundcue"
+      ) ||
+      type.includes(
+        "metasound"
+      ) ||
+      type.includes(
+        "audio"
+      )
+    ) {
+      return "audio";
+    }
+
+    if (
+      type.includes(
+        "animsequence"
+      ) ||
+      type.includes(
+        "animmontage"
+      ) ||
+      type.includes(
+        "animation"
+      )
+    ) {
+      return "animation";
+    }
+
+    if (
+      type.includes(
+        "niagara"
+      ) ||
+      type.includes(
+        "particlesystem"
+      )
+    ) {
+      return "vfx";
+    }
+
+    if (
+      type.includes(
+        "cosmetic"
+      ) ||
+      type.includes(
+        "athenacharacteritemdefinition"
+      ) ||
+      type.includes(
+        "athenabackpackitemdefinition"
+      ) ||
+      type.includes(
+        "athenapickaxeitemdefinition"
+      ) ||
+      type.includes(
+        "athenadanceitemdefinition"
+      ) ||
+      type.includes(
+        "athenaitemdefinition"
+      )
+    ) {
+      return "cosmetic";
+    }
+
+    if (
+      type.includes(
+        "dataasset"
+      ) ||
+      type.includes(
+        "datatable"
+      )
+    ) {
+      return "data";
+    }
+
+    return "other";
+  }
+
+  function capabilityProfile(
+    kind,
+    data = null
+  ) {
+    let resolvedKind =
+      kind || "other";
+
+    if (
+      resolvedKind ===
+        "blueprint" &&
+      data
+    ) {
+      const meshes =
+        meshReferences(data);
+
+      const images =
+        blueprintPreviewImages(
+          data
+        );
+
+      if (meshes.length) {
+        resolvedKind =
+          "blueprint-visual";
+      } else if (
+        images.length
+      ) {
+        resolvedKind =
+          "blueprint-image";
+      } else {
+        resolvedKind =
+          "blueprint-logic";
+      }
+    }
+
+    const view3dKinds =
+      new Set([
+        "staticmesh",
+        "skeletalmesh",
+        "blueprint-visual"
+      ]);
+
+    const imageKinds =
+      new Set([
+        "texture",
+        "cosmetic",
+        "blueprint-image",
+        "material"
+      ]);
+
+    const uefnKinds =
+      new Set([
+        "staticmesh",
+        "skeletalmesh",
+        "blueprint-visual",
+        "texture",
+        "material",
+        "audio",
+        "animation"
+      ]);
+
+    const formatMap = {
+      texture:
+        ["png", "json"],
+      cosmetic:
+        ["png", "json"],
+      material:
+        ["json"],
+      staticmesh:
+        ["nsmesh", "json"],
+      skeletalmesh:
+        ["nsmesh", "json"],
+      "blueprint-visual":
+        ["nsmesh", "json"],
+      "blueprint-image":
+        ["png", "json"],
+      "blueprint-logic":
+        ["json"],
+      audio:
+        ["json"],
+      animation:
+        ["json"],
+      vfx:
+        ["json"],
+      data:
+        ["json"],
+      other:
+        ["json"]
+    };
+
+    const tagMap = {
+      texture:
+        ["TEXTURE", "IMAGE"],
+      cosmetic:
+        ["COSMETIC", "IMAGE"],
+      material:
+        ["MATERIAL"],
+      staticmesh:
+        ["STATIC MESH", "3D"],
+      skeletalmesh:
+        ["SKELETAL MESH", "3D"],
+      "blueprint-visual":
+        ["BLUEPRINT", "3D"],
+      "blueprint-image":
+        ["BLUEPRINT", "IMAGE"],
+      "blueprint-logic":
+        ["BLUEPRINT", "LOGIC"],
+      audio:
+        ["AUDIO"],
+      animation:
+        ["ANIMATION"],
+      vfx:
+        ["VFX"],
+      data:
+        ["DATA"],
+      other:
+        ["ASSET"]
+    };
+
+    return {
+      kind:
+        resolvedKind,
+      canViewImage:
+        imageKinds.has(
+          resolvedKind
+        ),
+      canView3D:
+        view3dKinds.has(
+          resolvedKind
+        ),
+      canDownload:
+        true,
+      canExportUEFN:
+        uefnKinds.has(
+          resolvedKind
+        ),
+      downloadFormats:
+        (
+          formatMap[
+            resolvedKind
+          ] ||
+          formatMap.other
+        ).slice(),
+      tags:
+        (
+          tagMap[
+            resolvedKind
+          ] ||
+          tagMap.other
+        ).slice()
+    };
+  }
+
   async function classify(
     path,
     options = {}
   ) {
-    const pathFamily =
-      family(path);
+    const inspection =
+      options.inspection ||
+      null;
 
-    // Strong Unreal naming prefixes are already deterministic enough to avoid
-    // a JSON request. Ambiguous paths fall through to bounded export JSON.
-    if (
-      pathFamily !==
-      "other"
-    ) {
-      return {
-        family:
-          pathFamily,
-        source:
-          "path-type"
-      };
-    }
+    let data =
+      options.data ||
+      null;
 
-    const data =
-      await fetchExportJson(
-        path,
-        options.signal
+    const inspectedType =
+      inspectionType(
+        inspection
       );
 
-    if (!data) {
-      return {
-        family:
-          "other",
-        source:
-          "unknown"
-      };
+    const inspectedKind =
+      kindFromType(
+        inspectedType
+      );
+
+    const fallbackKind =
+      pathKind(path);
+
+    const pathFamily =
+      family(
+        path,
+        inspection
+      );
+
+    const needsJson =
+      !data &&
+      (
+        inspectedKind ===
+          "other" ||
+        inspectedKind ===
+          "blueprint" ||
+        (
+          !inspectedType &&
+          (
+            fallbackKind ===
+              "other" ||
+            fallbackKind ===
+              "blueprint"
+          )
+        )
+      );
+
+    if (needsJson) {
+      data =
+        await fetchExportJson(
+          path,
+          options.signal
+        );
     }
+
+    const jsonEvidence =
+      data
+        ? jsonTypeEvidence(
+            data
+          )
+        : null;
+
+    const jsonKind =
+      kindFromType(
+        jsonEvidence?.value ||
+        ""
+      );
+
+    let kind =
+      inspectedKind !==
+        "other"
+        ? inspectedKind
+        : jsonKind !==
+            "other"
+          ? jsonKind
+          : fallbackKind;
+
+    if (
+      kind === "other"
+    ) {
+      const detectedFamily =
+        data
+          ? detectFamilyFromJson(
+              data,
+              path
+            )
+          : pathFamily;
+
+      if (
+        detectedFamily ===
+          "mesh"
+      ) {
+        kind =
+          /^sk_/i.test(
+            leaf(path)
+          )
+            ? "skeletalmesh"
+            : "staticmesh";
+      } else if (
+        detectedFamily !==
+          "other"
+      ) {
+        kind =
+          detectedFamily;
+      }
+    }
+
+    const capabilities =
+      capabilityProfile(
+        kind,
+        data
+      );
+
+    const source =
+      inspectedKind !==
+        "other"
+        ? "inspection"
+        : jsonKind !==
+            "other"
+          ? "export-json"
+          : fallbackKind !==
+              "other"
+            ? "path-fallback"
+            : "unknown";
+
+    const confidence =
+      source ===
+        "inspection"
+        ? 100
+        : source ===
+            "export-json"
+          ? Math.max(
+              80,
+              Math.min(
+                95,
+                Number(
+                  jsonEvidence
+                    ?.score ||
+                  90
+                )
+              )
+            )
+          : source ===
+              "path-fallback"
+            ? 40
+            : 0;
+
+    const resultFamily =
+      capabilities.kind
+        .startsWith(
+          "blueprint"
+        )
+        ? "blueprint"
+        : [
+            "staticmesh",
+            "skeletalmesh"
+          ].includes(
+            capabilities.kind
+          )
+          ? "mesh"
+          : capabilities.kind ===
+              "cosmetic"
+            ? "other"
+            : capabilities.kind;
 
     return {
       family:
-        detectFamilyFromJson(
-          data,
-          path
-        ),
-      source:
-        "export-json",
+        resultFamily,
+      kind:
+        capabilities.kind,
+      source,
+      confidence,
+      capabilities,
+      tags:
+        capabilities.tags,
       data
     };
   }
@@ -1736,9 +2376,10 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.5.0",
+        "1.6.0",
       family,
       classify,
+      capabilityProfile,
       allowDirectImage,
       allowTextureDecode,
       resolveVisual,
