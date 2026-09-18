@@ -713,6 +713,79 @@
     );
   }
 
+  function fastImageTimeout(
+    desktopMs = 10_000,
+    mobileMs = 6_000
+  ) {
+    return window
+      .NovaSparxBrowserGuard
+      ?.status?.()
+      ?.isMobile
+        ? mobileMs
+        : desktopMs;
+  }
+
+  async function tryExactTypedImage(
+    path,
+    ui,
+    label
+  ) {
+    const base =
+      endpoint(
+        "/image",
+        path
+      );
+
+    if (!base) {
+      return false;
+    }
+
+    const url =
+      new URL(
+        base
+      );
+
+    url.searchParams.set(
+      "direct",
+      "1"
+    );
+
+    setStatus(
+      ui.status,
+      "Checking exact typed preview…"
+    );
+
+    const ok =
+      await loadImage(
+        ui.image,
+        url.toString(),
+        fastImageTimeout(
+          9_000,
+          5_000
+        )
+      );
+
+    if (!ok) {
+      ui.image.removeAttribute(
+        "src"
+      );
+
+      return false;
+    }
+
+    ui.image.hidden = false;
+    ui.status.hidden = true;
+
+    setMeta(
+      ui.meta,
+      label ||
+        "Exact typed asset preview • no cross-type guessing",
+      "high"
+    );
+
+    return true;
+  }
+
   async function tryDirectAssetImage(
     path,
     ui
@@ -729,7 +802,10 @@
           "/image",
           path
         ),
-        24_000
+        fastImageTimeout(
+          12_000,
+          7_000
+        )
       );
 
     if (!ok) {
@@ -793,7 +869,10 @@
         await loadImage(
           ui.image,
           directUrl.toString(),
-          18_000
+          fastImageTimeout(
+            9_000,
+            5_000
+          )
         );
 
       if (directOk) {
@@ -840,7 +919,10 @@
           "/image",
           previewImagePath
         ),
-        18_000
+        fastImageTimeout(
+          9_000,
+          5_000
+        )
       );
 
     if (!textureOk) {
@@ -881,7 +963,10 @@
           "/nova/texture",
           path
         ),
-        26_000
+        fastImageTimeout(
+          12_000,
+          7_000
+        )
       );
 
     if (!ok) {
@@ -1853,6 +1938,149 @@
         };
       }
 
+      let fastAssociation = null;
+
+      // Mesh/Blueprint fast path: resolve the relationship before touching the
+      // hosted CUE4Parse backend. On phones this is the primary path, not a
+      // fallback, so a dead/restarting backend can never hold the UI for minutes.
+      if (
+        pathFamily === "mesh" ||
+        pathFamily === "blueprint"
+      ) {
+        const browserState =
+          guard?.status?.() ||
+          {};
+
+        if (
+          pathFamily ===
+            "blueprint" &&
+          await tryExactTypedImage(
+            clean,
+            ui,
+            "Verified Blueprint direct preview • exact asset"
+          )
+        ) {
+          return {
+            state: "ready",
+            kind:
+              "blueprint-direct-image"
+          };
+        }
+
+        try {
+          fastAssociation =
+            await window
+              .NovaSparxAssociations
+              ?.resolveVisual?.(
+                clean,
+                null,
+                {
+                  signal
+                }
+              ) ||
+            null;
+        } catch (error) {
+          if (
+            signal?.aborted
+          ) {
+            throw error;
+          }
+        }
+
+        if (
+          fastAssociation
+            ?.blueprintPath &&
+          await tryVerifiedBlueprintImage(
+            fastAssociation,
+            ui
+          )
+        ) {
+          return {
+            state: "ready",
+            kind:
+              pathFamily === "mesh"
+                ? "mesh-blueprint-image"
+                : "blueprint-image",
+            association:
+              fastAssociation
+          };
+        }
+
+        if (
+          browserState.isMobile ||
+          browserState.recoveryMode
+        ) {
+          // Device cache / local WASM are cheap. Hosted mesh extraction is
+          // deliberately disabled here because mobile users asked for fast,
+          // crash-resistant previews.
+          try {
+            const localPath =
+              fastAssociation
+                ?.visualPath ||
+              (
+                pathFamily ===
+                  "mesh"
+                  ? clean
+                  : ""
+              );
+
+            if (localPath) {
+              await renderNovaMesh(
+                localPath,
+                ui.image,
+                ui.status,
+                ui.meta,
+                {
+                  signal,
+                  backend: false,
+                  sourceLabel:
+                    fastAssociation
+                      ?.blueprintPath
+                      ? "NovaSparx • Blueprint-verified local mesh"
+                      : ""
+                }
+              );
+
+              return {
+                state: "ready",
+                kind:
+                  "device-local-mesh",
+                association:
+                  fastAssociation
+              };
+            }
+          } catch {}
+
+          return renderEvidenceImage(
+            clean,
+            null,
+            ui,
+            {
+              source:
+                "fast-mobile-fallback",
+              blueprintPath:
+                fastAssociation
+                  ?.blueprintPath ||
+                "",
+              attemptedReferences:
+                fastAssociation
+                  ?.blueprintPath
+                  ? [
+                      fastAssociation
+                        .blueprintPath
+                    ]
+                  : [],
+              evidence:
+                fastAssociation
+                  ?.evidence ||
+                "No lightweight verified preview completed inside the mobile time budget.",
+              error:
+                "Fast preview stopped before hosted mesh extraction to avoid long waits and browser instability."
+            }
+          );
+        }
+      }
+
       // 2) Dilly-backed direct resolver: cosmetic icons, UI and referenced
       // textures. Keep this as a direct <img> URL for iPhone Safari stability.
       if (
@@ -1875,6 +2103,24 @@
         return {
           state: "ready",
           kind: "image"
+        };
+      }
+
+      // Exact raw Texture preview is safe because direct=1 never follows JSON
+      // into another asset family.
+      if (
+        pathFamily ===
+          "texture" &&
+        await tryExactTypedImage(
+          clean,
+          ui,
+          "Exact Texture preview • no Mesh/Blueprint promotion"
+        )
+      ) {
+        return {
+          state: "ready",
+          kind:
+            "texture-direct-image"
         };
       }
 
@@ -2077,6 +2323,7 @@
       ) {
         try {
           const association =
+            fastAssociation ||
             await window.NovaSparxAssociations
               ?.resolveVisual?.(
                 clean,
@@ -2218,10 +2465,12 @@
         )
       ) {
         try {
-          let association = null;
+          let association =
+            fastAssociation;
 
           try {
             association =
+              association ||
               await window.NovaSparxAssociations
                 ?.resolveVisual?.(
                   clean,
@@ -2494,7 +2743,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "1.5.0",
+      version: "1.6.0",
       toggle,
       render: renderPreview,
       release
