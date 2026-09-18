@@ -806,6 +806,35 @@
       }
     }
 
+    const exportButton =
+      card.querySelector(
+        '[data-asset-action="uefn"]'
+      );
+
+    if (exportButton) {
+      const supported =
+        Boolean(
+          window.NovaSparxExporter
+            ?.supports?.(
+              classification
+            )
+        );
+
+      exportButton.disabled =
+        !supported;
+
+      if (supported) {
+        exportButton.removeAttribute(
+          "title"
+        );
+      } else {
+        exportButton.title =
+          kind === "skeletalmesh"
+            ? "Skeletal UEFN export is waiting for bones and skin weights."
+            : "UEFN-ready export is not available for this asset type yet.";
+      }
+    }
+
     const downloadButton =
       card.querySelector(
         '[data-asset-action="download"]'
@@ -1037,6 +1066,34 @@
     format,
     classification
   ) {
+    if (format === "glb") {
+      const result =
+        await window
+          .NovaSparxExporter
+          ?.exportGlb?.(
+            path,
+            {
+              classification
+            }
+          );
+
+      if (
+        !result?.blob ||
+        !result?.filename
+      ) {
+        throw new Error(
+          "GLB export is unavailable for this asset."
+        );
+      }
+
+      saveBlob(
+        result.blob,
+        result.filename
+      );
+
+      return;
+    }
+
     if (format === "json") {
       const payload =
         await exportJson(path);
@@ -1239,6 +1296,13 @@
           <button
             class="json-view-button"
             type="button"
+            data-asset-action="uefn"
+            disabled
+          >${escapeHtml(t("exportUEFN", "Export to UEFN"))}</button>
+
+          <button
+            class="json-view-button"
+            type="button"
             data-asset-action="json"
           >${escapeHtml(t("viewJson", "View JSON"))}</button>
 
@@ -1323,7 +1387,8 @@
         const usesGuestSlowmode =
           action === "preview" ||
           action === "references" ||
-          action === "download";
+          action === "download" ||
+          action === "uefn";
 
         const remaining =
           usesGuestSlowmode
@@ -1351,6 +1416,15 @@
 
         if (action === "preview") {
           await previewPath(
+            card,
+            path,
+            panelRequest.id
+          );
+          return;
+        }
+
+        if (action === "uefn") {
+          await showUefnExport(
             card,
             path,
             panelRequest.id
@@ -1392,6 +1466,11 @@
       preview: [
         t("viewImage", "View Image"),
         t("hideImage", "Hide Image")
+      ],
+
+      uefn: [
+        t("exportUEFN", "Export to UEFN"),
+        t("hideUEFNExport", "Hide UEFN Export")
       ],
 
       json: [
@@ -1792,6 +1871,150 @@
     }
   }
 
+  async function showUefnExport(
+    card,
+    path,
+    requestId
+  ) {
+    const panel =
+      card.querySelector(
+        "[data-asset-panel]"
+      );
+
+    panel.hidden = false;
+
+    panel.innerHTML =
+      '<div class="tool-empty">Preparing UEFN-ready export...</div>';
+
+    try {
+      const classification =
+        await classifyAsset(path);
+
+      if (
+        !panelRequestIsCurrent(
+          card,
+          "uefn",
+          requestId
+        )
+      ) {
+        return;
+      }
+
+      const exporter =
+        window.NovaSparxExporter;
+
+      if (
+        !exporter?.supports?.(
+          classification
+        )
+      ) {
+        throw new Error(
+          classification?.kind ===
+            "skeletalmesh"
+            ? "Skeletal UEFN export is not enabled until bones and skin weights are preserved."
+            : "UEFN-ready export is not available for this asset type yet."
+        );
+      }
+
+      panel.innerHTML =
+        '<div class="tool-empty">Building UEFN-ready file on this device...</div>';
+
+      const result =
+        await exporter.exportUEFN(
+          path,
+          classification
+        );
+
+      if (
+        !panelRequestIsCurrent(
+          card,
+          "uefn",
+          requestId
+        )
+      ) {
+        return;
+      }
+
+      if (
+        !result?.blob ||
+        !result?.filename
+      ) {
+        throw new Error(
+          "NovaSparx exporter returned an invalid file."
+        );
+      }
+
+      saveBlob(
+        result.blob,
+        result.filename
+      );
+
+      const warnings =
+        Array.isArray(
+          result.warnings
+        )
+          ? result.warnings
+              .filter(Boolean)
+              .slice(0, 3)
+          : [];
+
+      panel.innerHTML = `
+        <div class="json-panel asset-download-panel">
+          <div class="json-panel-head">
+            <span>UEFN READY</span>
+            <span class="tool-note">
+              ${escapeHtml(result.filename)}
+            </span>
+          </div>
+
+          <div class="tool-note">
+            ${warnings.length
+              ? escapeHtml(warnings.join(" "))
+              : "File prepared successfully for UEFN import."}
+          </div>
+
+          <div class="asset-download-options">
+            <button
+              class="json-view-button"
+              type="button"
+              data-save-uefn
+            >Save Again</button>
+          </div>
+        </div>`;
+
+      panel
+        .querySelector(
+          "[data-save-uefn]"
+        )
+        ?.addEventListener(
+          "click",
+          () =>
+            saveBlob(
+              result.blob,
+              result.filename
+            )
+        );
+    } catch (error) {
+      if (
+        !panelRequestIsCurrent(
+          card,
+          "uefn",
+          requestId
+        )
+      ) {
+        return;
+      }
+
+      panel.innerHTML = `
+        <div class="tool-empty">
+          ${escapeHtml(
+            error?.message ||
+            "UEFN export failed."
+          )}
+        </div>`;
+    }
+  }
+
   async function showDownload(
     card,
     path,
@@ -1841,11 +2064,40 @@
             ].includes(format)
         );
 
-      if (!allowed.length) {
-        allowed.push("json");
+      if (
+        window.NovaSparxExporter
+          ?.supports?.(
+            classification
+          ) &&
+        [
+          "staticmesh",
+          "blueprint-visual"
+        ].includes(
+          String(
+            classification?.kind ||
+            ""
+          )
+        )
+      ) {
+        allowed.unshift(
+          "glb"
+        );
+      }
+
+      const uniqueAllowed =
+        [
+          ...new Set(
+            allowed
+          )
+        ];
+
+      if (!uniqueAllowed.length) {
+        uniqueAllowed.push("json");
       }
 
       const labels = {
+        glb:
+          "GLB",
         json:
           "JSON",
         png:
@@ -1864,7 +2116,7 @@
           </div>
 
           <div class="asset-download-options">
-            ${allowed
+            ${uniqueAllowed
               .map(
                 (format) => `
                   <button
