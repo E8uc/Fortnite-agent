@@ -640,6 +640,317 @@
     }
   }
 
+  function parseTotalLength(
+    contentRange
+  ) {
+    const match =
+      String(
+        contentRange || ""
+      ).match(
+        /^bytes\s+\d+-\d+\/(\d+)$/i
+      );
+
+    if (!match) {
+      return 0;
+    }
+
+    const total =
+      Number(
+        match[1]
+      );
+
+    return (
+      Number.isSafeInteger(
+        total
+      ) &&
+      total > 0
+        ? total
+        : 0
+    );
+  }
+
+  function defaultFileLimit() {
+    const guard =
+      globalThis
+        .NovaSparxBrowserGuard
+        ?.status?.() ||
+      {};
+
+    if (guard.isIOS) {
+      return (
+        12 * 1024 * 1024
+      );
+    }
+
+    if (guard.isMobile) {
+      return (
+        20 * 1024 * 1024
+      );
+    }
+
+    return (
+      64 * 1024 * 1024
+    );
+  }
+
+  async function fetchFile(
+    url,
+    options = {}
+  ) {
+    const maxBytes =
+      Math.max(
+        1,
+        Number(
+          options.maxBytes ||
+          defaultFileLimit()
+        ) || 0
+      );
+
+    const chunkBytes =
+      Math.min(
+        MAX_RANGE_BYTES,
+        Math.max(
+          64 * 1024,
+          Number(
+            options.chunkBytes ||
+            1024 * 1024
+          ) || 0
+        )
+      );
+
+    const first =
+      await fetchRange(
+        url,
+        0,
+        0,
+        options
+      );
+
+    const total =
+      parseTotalLength(
+        first.contentRange
+      );
+
+    if (!total) {
+      throw new Error(
+        "NovaSparx source did not expose a bounded total size."
+      );
+    }
+
+    if (
+      total >
+      maxBytes
+    ) {
+      throw new Error(
+        "NovaSparx file exceeds this device's safe fetch budget."
+      );
+    }
+
+    const output =
+      new Uint8Array(
+        total
+      );
+
+    output.set(
+      new Uint8Array(
+        first.buffer
+      ),
+      0
+    );
+
+    let offset =
+      first.buffer
+        .byteLength;
+
+    options.onProgress?.({
+      loaded:
+        offset,
+      total
+    });
+
+    while (
+      offset <
+      total
+    ) {
+      if (
+        options.signal
+          ?.aborted
+      ) {
+        const error =
+          new Error(
+            "NovaSparx file fetch was cancelled."
+          );
+
+        error.name =
+          "AbortError";
+
+        throw error;
+      }
+
+      const end =
+        Math.min(
+          total - 1,
+          offset +
+          chunkBytes -
+          1
+        );
+
+      const part =
+        await fetchRange(
+          url,
+          offset,
+          end,
+          options
+        );
+
+      const bytes =
+        new Uint8Array(
+          part.buffer
+        );
+
+      const expected =
+        end -
+        offset +
+        1;
+
+      if (
+        bytes.byteLength !==
+        expected
+      ) {
+        throw new Error(
+          "NovaSparx source returned an incomplete byte range."
+        );
+      }
+
+      output.set(
+        bytes,
+        offset
+      );
+
+      offset +=
+        bytes.byteLength;
+
+      options.onProgress?.({
+        loaded:
+          offset,
+        total
+      });
+    }
+
+    return {
+      buffer:
+        output.buffer,
+      byteLength:
+        total,
+      source:
+        first.source,
+      etag:
+        first.etag,
+      lastModified:
+        first.lastModified
+    };
+  }
+
+  async function manifestSources(
+    options = {}
+  ) {
+    const data =
+      await bootstrap(
+        options
+      );
+
+    const output = [];
+    const seen =
+      new Set();
+
+    const add =
+      (raw) => {
+        let url;
+
+        try {
+          url =
+            new URL(
+              String(raw || "")
+            )
+              .toString();
+        } catch {
+          return;
+        }
+
+        if (
+          !/^https:/i.test(url) ||
+          seen.has(url)
+        ) {
+          return;
+        }
+
+        seen.add(url);
+        output.push(url);
+      };
+
+    for (
+      const candidate of
+      (
+        Array.isArray(
+          data?.manifest
+            ?.candidates
+        )
+          ? data.manifest
+              .candidates
+          : []
+      )
+    ) {
+      add(
+        candidate?.url
+      );
+    }
+
+    const detailsBase =
+      String(
+        data?.manifest
+          ?.detailsBase ||
+        ""
+      )
+        .trim()
+        .replace(
+          /\/+$/,
+          ""
+        );
+
+    if (detailsBase) {
+      for (
+        const id of
+        (
+          Array.isArray(
+            data?.manifest
+              ?.ids
+          )
+            ? data.manifest
+                .ids
+            : []
+        )
+      ) {
+        const clean =
+          String(id || "")
+            .trim();
+
+        if (!clean) {
+          continue;
+        }
+
+        add(
+          detailsBase +
+          "/" +
+          encodeURIComponent(
+            clean
+          )
+        );
+      }
+    }
+
+    return output;
+  }
+
   function clearBootstrapCache() {
     bootstrapCache =
       null;
@@ -651,7 +962,7 @@
   function status() {
     return {
       version:
-        "2.0.0",
+        "2.1.0",
       apiConfigured:
         Boolean(
           apiBase()
@@ -672,10 +983,12 @@
   globalThis.NovaSparxBrowserTransport =
     Object.freeze({
       version:
-        "2.0.0",
+        "2.1.0",
       maxRangeBytes:
         MAX_RANGE_BYTES,
       fetchRange,
+      fetchFile,
+      manifestSources,
       bootstrap,
       probe,
       status,
