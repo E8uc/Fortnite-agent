@@ -349,10 +349,15 @@ export class NovaLinkDurableObject extends DurableObject {
 
     let resolveHeader;
     let rejectHeader;
+    let resolveDone;
 
     const headerPromise = new Promise((resolve, reject) => {
       resolveHeader = resolve;
       rejectHeader = reject;
+    });
+
+    const donePromise = new Promise((resolve) => {
+      resolveDone = resolve;
     });
 
     const pending = {
@@ -360,6 +365,7 @@ export class NovaLinkDurableObject extends DurableObject {
       writer,
       resolveHeader,
       rejectHeader,
+      resolveDone,
       headerResolved: false,
       expectedLength: null,
       expectedChunks: null,
@@ -376,6 +382,12 @@ export class NovaLinkDurableObject extends DurableObject {
     }, REQUEST_TIMEOUT_MS);
 
     this.pending.set(id, pending);
+
+    // Keep this Durable Object event alive until the complete response body
+    // arrives. Without this, the WebSocket can survive hibernation while the
+    // in-memory pending stream state is discarded between the response header
+    // and the following binary frame.
+    this.ctx.waitUntil(donePromise);
 
     try {
       socket.send(
@@ -669,6 +681,8 @@ export class NovaLinkDurableObject extends DurableObject {
       await pending.writer.close();
     } catch {
       // Consumer disconnected after receiving enough data.
+    } finally {
+      pending.resolveDone?.();
     }
   }
 
@@ -724,6 +738,8 @@ export class NovaLinkDurableObject extends DurableObject {
       pending.writer.abort(error);
     } catch {
       // Stream already closed or canceled.
+    } finally {
+      pending.resolveDone?.();
     }
 
     if (this.activeResponseId === id) {
