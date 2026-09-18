@@ -106,11 +106,17 @@
     );
   }
 
-  async function inspect(path) {
+  async function inspect(
+    path,
+    options = {}
+  ) {
     try {
       return (
         await window.NovaSparx
-          ?.inspect?.(path)
+          ?.inspect?.(
+            path,
+            options
+          )
       ) || null;
     } catch {
       return null;
@@ -594,7 +600,8 @@
     path,
     image,
     status,
-    meta
+    meta,
+    options = {}
   ) {
     if (!window.NovaSparx) {
       throw new Error(
@@ -616,7 +623,10 @@
           .resolveMesh(
             path,
             {
-              preferHQ: true
+              preferHQ: true,
+              signal:
+                options.signal ||
+                null
             }
           );
 
@@ -626,7 +636,8 @@
         image,
         status,
         meta,
-        result.sourceLabel ||
+        options.sourceLabel ||
+          result.sourceLabel ||
           "NovaSparx • layered mesh"
       );
     }
@@ -677,11 +688,15 @@
           .resolve(
             path,
             {
-              preferHQ: true
+              preferHQ: true,
+              signal:
+                options.signal ||
+                null
             }
           );
 
       sourceLabel =
+        options.sourceLabel ||
         "NovaSparx • compatibility mesh";
     }
 
@@ -779,7 +794,8 @@
 
   async function tryUniversalPreview(
     path,
-    ui
+    ui,
+    options = {}
   ) {
     if (
       !window.NovaSparx
@@ -799,7 +815,10 @@
     try {
       const plan =
         await window.NovaSparx
-          .preview(path);
+          .preview(
+            path,
+            options
+          );
 
       if (
         plan?.kind ===
@@ -1629,7 +1648,26 @@
         );
     }
 
+    const guard =
+      window.NovaSparxBrowserGuard;
+
+    const operation =
+      guard?.beginOperation?.(
+        `preview:${clean}`
+      ) || null;
+
+    const signal =
+      operation?.signal ||
+      null;
+
     try {
+      const pathFamily =
+        window.NovaSparxAssociations
+          ?.family?.(
+            clean
+          ) ||
+        "other";
+
       // 1) Th3Dry/FNAA's known catalogue images are the quickest and most
       // deterministic layer for islands and Creative devices.
       if (
@@ -1647,6 +1685,10 @@
       // 2) Dilly-backed direct resolver: cosmetic icons, UI and referenced
       // textures. Keep this as a direct <img> URL for iPhone Safari stability.
       if (
+        window.NovaSparxAssociations
+          ?.allowDirectImage?.(
+            clean
+          ) !== false &&
         await tryDirectAssetImage(
           clean,
           ui
@@ -1661,6 +1703,10 @@
       // 3) The NovaSparx server can decode the asset itself when it is a real
       // UTexture and no public still image exists.
       if (
+        window.NovaSparxAssociations
+          ?.allowTextureDecode?.(
+            clean
+          ) !== false &&
         await tryTextureDecode(
           clean,
           ui
@@ -1674,13 +1720,75 @@
 
       // 4) Inspect before deciding what preview is technically honest.
       const info =
-        await inspect(clean);
+        await inspect(
+          clean,
+          {
+            signal
+          }
+        );
 
       const type =
         assetType(
           info,
           clean
         );
+
+      let resolvedFamily =
+        window.NovaSparxAssociations
+          ?.family?.(
+            clean,
+            info
+          ) ||
+        pathFamily;
+
+      if (
+        resolvedFamily ===
+          "other" &&
+        window.NovaSparxAssociations
+          ?.classify
+      ) {
+        try {
+          const classification =
+            await window.NovaSparxAssociations
+              .classify(
+                clean,
+                {
+                  signal
+                }
+              );
+
+          resolvedFamily =
+            classification?.family ||
+            resolvedFamily;
+        } catch (error) {
+          if (
+            error?.name ===
+            "AbortError"
+          ) {
+            throw error;
+          }
+        }
+      }
+
+      // A texture is terminal for visual routing. If its direct/decoded image
+      // failed above, do not follow a similarly-named Mesh or Blueprint.
+      if (
+        resolvedFamily ===
+        "texture"
+      ) {
+        return renderEvidenceImage(
+          clean,
+          info,
+          ui,
+          {
+            source:
+              "typed-texture-fallback",
+            attemptedReferences: [],
+            evidence:
+              "Texture type verified; cross-type mesh/Blueprint promotion is disabled."
+          }
+        );
+      }
 
       if (
         type.includes(
@@ -1704,7 +1812,10 @@
         const universal =
           await tryUniversalPreview(
             clean,
-            ui
+            ui,
+            {
+              signal
+            }
           );
 
         if (universal.rendered) {
@@ -1737,7 +1848,10 @@
         const universal =
           await tryUniversalPreview(
             clean,
-            ui
+            ui,
+            {
+              signal
+            }
           );
 
         if (universal.rendered) {
@@ -1764,6 +1878,93 @@
       }
 
       if (
+        resolvedFamily ===
+        "blueprint"
+      ) {
+        try {
+          const association =
+            await window.NovaSparxAssociations
+              ?.resolveVisual?.(
+                clean,
+                info,
+                {
+                  signal
+                }
+              );
+
+          if (
+            association?.visualPath
+          ) {
+            await renderNovaMesh(
+              association.visualPath,
+              ui.image,
+              ui.status,
+              ui.meta,
+              {
+                signal,
+                sourceLabel:
+                  "NovaSparx • Blueprint-verified mesh"
+              }
+            );
+
+            return {
+              state: "ready",
+              kind:
+                "blueprint-mesh",
+              inspection:
+                info,
+              association
+            };
+          }
+        } catch (error) {
+          if (
+            error?.name ===
+            "AbortError"
+          ) {
+            throw error;
+          }
+
+          console.warn(
+            "FNAA Blueprint association:",
+            error
+          );
+        }
+
+        const universal =
+          await tryUniversalPreview(
+            clean,
+            ui,
+            {
+              signal
+            }
+          );
+
+        if (universal.rendered) {
+          return {
+            state: "ready",
+            kind:
+              universal.plan?.kind ||
+              "blueprint-reference",
+            inspection:
+              universal.plan
+                ?.inspection ||
+              info
+          };
+        }
+
+        return renderEvidenceImage(
+          clean,
+          universal.plan
+            ?.inspection ||
+            info,
+          ui,
+          universal.plan
+        );
+      }
+
+      if (
+        resolvedFamily ===
+          "mesh" ||
         /(staticmesh|skeletalmesh|mesh)/i
           .test(type) ||
         /^s[mk]_?/i.test(
@@ -1774,17 +1975,56 @@
         )
       ) {
         try {
+          let association = null;
+
+          try {
+            association =
+              await window.NovaSparxAssociations
+                ?.resolveVisual?.(
+                  clean,
+                  info,
+                  {
+                    signal
+                  }
+                ) ||
+              null;
+          } catch (error) {
+            if (
+              error?.name ===
+              "AbortError"
+            ) {
+              throw error;
+            }
+          }
+
+          const visualPath =
+            association?.visualPath ||
+            clean;
+
           await renderNovaMesh(
-            clean,
+            visualPath,
             ui.image,
             ui.status,
-            ui.meta
+            ui.meta,
+            {
+              signal,
+              sourceLabel:
+                association
+                  ?.blueprintPath
+                  ? "NovaSparx • Blueprint-verified mesh"
+                  : ""
+            }
           );
 
           return {
             state: "ready",
-            kind: "mesh",
-            inspection: info
+            kind:
+              association
+                ?.blueprintPath
+                ? "mesh-blueprint-verified"
+                : "mesh",
+            inspection: info,
+            association
           };
         } catch (meshError) {
           const universal =
@@ -1830,7 +2070,10 @@
       const universal =
         await tryUniversalPreview(
           clean,
-          ui
+          ui,
+          {
+            signal
+          }
         );
 
       if (universal.rendered) {
@@ -1846,27 +2089,8 @@
         };
       }
 
-      // 6) Compatibility with an older NovaSparx deployment that can resolve
-      // the requested mesh but does not expose /v1/preview yet.
-      if (
-        !universal.plan ||
-        universal.error
-      ) {
-        try {
-          await renderNovaMesh(
-            clean,
-            ui.image,
-            ui.status,
-            ui.meta
-          );
-
-          return {
-            state: "ready",
-            kind: "mesh",
-            inspection: info
-          };
-        } catch {}
-      }
+      // 6) Unknown/non-mesh asset types are never promoted to mesh merely
+      // because a similarly named path exists. Type evidence wins over names.
 
       // 7) Every remaining asset receives a deterministic PNG evidence card.
       // It is explicitly labelled and never pretends to be the Fortnite art.
@@ -1898,6 +2122,10 @@
         }
       );
     } finally {
+      guard?.endOperation?.(
+        operation
+      );
+
       if (button) {
         button.disabled = false;
 
@@ -1944,7 +2172,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "1.3.0",
+      version: "1.4.0",
       toggle,
       render: renderPreview,
       release
