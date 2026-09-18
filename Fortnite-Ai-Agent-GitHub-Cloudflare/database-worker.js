@@ -3,15 +3,26 @@ let manifestCache = null;
 const textCache = new Map();
 const resultCache = new Map();
 
-const RESULT_CACHE_LIMIT = 24;
-const TEXT_CACHE_LIMIT = 12;
-const DEFAULT_LIMIT = 80;
-const MAX_RESULT_SET = 1200;
+const IS_MOBILE_WORKER =
+  /iPhone|iPad|iPod|Android|Mobile/i.test(
+    self.navigator?.userAgent || ""
+  );
 
-// Never inflate a giant "all assets" index inside a phone Web Worker.
-// The current all.txt.gz is ~14 MB compressed / ~1.78M lines and can expand
-// into a very large JS string + array, which can get the worker killed on iOS.
-const MAX_SAFE_FULL_GZIP_BYTES = 2 * 1024 * 1024;
+const RESULT_CACHE_LIMIT =
+  IS_MOBILE_WORKER ? 10 : 24;
+
+const TEXT_CACHE_LIMIT =
+  IS_MOBILE_WORKER ? 4 : 12;
+
+const DEFAULT_LIMIT = 80;
+const MAX_RESULT_SET =
+  IS_MOBILE_WORKER ? 600 : 1200;
+
+// Never inflate a giant full index inside a phone Web Worker. On mobile,
+// compressed size is only a proxy, so keep a deliberately small ceiling;
+// large scopes stay shard-only instead of risking a WebKit tab kill.
+const MAX_SAFE_FULL_GZIP_BYTES =
+  (IS_MOBILE_WORKER ? 512 * 1024 : 2 * 1024 * 1024);
 
 // For multi-token searches, probe a few filename shards instead of falling
 // straight back to the full database.
