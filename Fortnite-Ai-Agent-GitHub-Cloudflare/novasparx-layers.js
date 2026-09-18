@@ -6,6 +6,9 @@
   const IS_MOBILE =
     /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || "");
   const MAX_DEVICE_BYTES =
+    globalThis.NovaSparxBrowserGuard
+      ?.status?.()
+      ?.packageLimitBytes ||
     (IS_MOBILE ? 12 : 24) * 1024 * 1024;
   const MAX_DEVICE_ENTRIES =
     IS_MOBILE ? 3 : 8;
@@ -112,6 +115,11 @@
 
       const manifest = core.parseClientMesh(buffer, path);
 
+      globalThis.NovaSparxBrowserGuard
+        ?.assertManifestBudget?.(
+          manifest
+        );
+
       return {
         manifest,
         layer: "device-cache",
@@ -146,6 +154,13 @@
 
     const cache = await openDeviceCache();
     if (!cache) return;
+
+    if (
+      !await globalThis.NovaSparxBrowserGuard
+        ?.canPersist?.(buffer.byteLength)
+    ) {
+      return;
+    }
 
     try {
       await cache.put(
@@ -216,6 +231,11 @@
       manifest = core.normalizeManifest(result, path);
     }
 
+    globalThis.NovaSparxBrowserGuard
+      ?.assertManifestBudget?.(
+        manifest
+      );
+
     return {
       manifest,
       layer: "browser-wasm",
@@ -229,6 +249,11 @@
 
     const buffer = await core.clientMeshBuffer(path, options);
     const manifest = core.parseClientMesh(buffer, path);
+
+    globalThis.NovaSparxBrowserGuard
+      ?.assertManifestBudget?.(
+        manifest
+      );
 
     // Store a local copy only after the package passed all validation.
     await writeDeviceCache(path, buffer);
@@ -245,6 +270,11 @@
     if (!core?.resolve) return null;
 
     const manifest = await core.resolve(path, options);
+
+    globalThis.NovaSparxBrowserGuard
+      ?.assertManifestBudget?.(
+        manifest
+      );
 
     return {
       manifest,
@@ -358,8 +388,12 @@
     throw error;
   }
 
-  async function clearDeviceCache() {
+  function releaseMemory() {
     memory.clear();
+  }
+
+  async function clearDeviceCache() {
+    releaseMemory();
 
     if ("caches" in globalThis) {
       try {
@@ -370,7 +404,7 @@
 
   function capabilities() {
     return {
-      version: "2.0.0",
+      version: "2.0.1",
       layers: [
         {
           id: "device-memory",
@@ -412,6 +446,7 @@
     resolveMesh,
     capabilities,
     clearDeviceCache,
+    releaseMemory,
     lastTrace: () => lastTrace.map((item) => ({ ...item }))
   });
 })();
