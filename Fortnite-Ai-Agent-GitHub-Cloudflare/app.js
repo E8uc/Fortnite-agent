@@ -239,6 +239,27 @@
     }
   );
 
+  window.addEventListener(
+    "pagehide",
+    () => {
+      for (
+        const pending of
+        dbPending.values()
+      ) {
+        pending.reject(
+          new Error(
+            "Database search stopped because the page was hidden."
+          )
+        );
+      }
+
+      dbPending.clear();
+
+      dbWorker?.terminate();
+      dbWorker = null;
+    }
+  );
+
   // ---------------------------------------------------------------------------
   // Boot / routing
   // ---------------------------------------------------------------------------
@@ -2586,7 +2607,7 @@
 
   dbWorker =
     new Worker(
-      "/Fortnite-agent/database-worker.js?v=3"
+      "/Fortnite-agent/database-worker.js?v=4"
     );
     dbWorker.addEventListener(
       "message",
