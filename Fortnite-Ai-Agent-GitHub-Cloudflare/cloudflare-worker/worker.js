@@ -2232,6 +2232,25 @@ async function fetchNovaUpstream(
       JSON.stringify(body);
   }
 
+  const timeoutMs =
+    route === "/v1/warmup" ||
+    route === "/v1/refresh"
+      ? 130_000
+      : route === "/v1/client-mesh"
+        ? 30_000
+        : route === "/v1/resolve"
+          ? 25_000
+          : route === "/v1/preview"
+            ? 18_000
+            : route === "/v1/texture"
+              ? 20_000
+              : (
+                  route === "/v1/inspect" ||
+                  route === "/v1/references"
+                )
+                ? 15_000
+                : 10_000;
+
   const response =
     await fetchWithTimeout(
       url.toString(),
@@ -2240,15 +2259,7 @@ async function fetchNovaUpstream(
         headers,
         body: payload
       },
-      route === "/v1/texture"
-        ? 65_000
-        : (
-            route === "/v1/resolve" ||
-            route === "/v1/preview" ||
-            route === "/v1/client-mesh"
-          )
-          ? 125_000
-          : 45_000
+      timeoutMs
     );
 
   response.__fnaaNovaSource =
@@ -2318,7 +2329,7 @@ async function fetchNovaAutoLinkWithReconnectRetry(
 
   for (
     let attempt = 0;
-    attempt < 3;
+    attempt < 2;
     attempt++
   ) {
     response =
@@ -2331,7 +2342,7 @@ async function fetchNovaAutoLinkWithReconnectRetry(
 
     if (
       response.status !== 503 ||
-      attempt === 2
+      attempt === 1
     ) {
       return response;
     }
@@ -2345,9 +2356,7 @@ async function fetchNovaAutoLinkWithReconnectRetry(
       (resolve) =>
         setTimeout(
           resolve,
-          attempt === 0
-            ? 1500
-            : 3500
+          750
         )
     );
   }
