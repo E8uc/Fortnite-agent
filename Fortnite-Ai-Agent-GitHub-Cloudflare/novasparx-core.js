@@ -652,7 +652,7 @@
     return normalizeManifest(data, path);
   }
 
-  async function clientMesh(path, options = {}) {
+  async function clientMeshBuffer(path, options = {}) {
     if (!API) {
       throw new Error(
         "FNAA API endpoint is not configured."
@@ -681,6 +681,9 @@
         url.toString(),
         {
           cache: "no-store",
+          signal:
+            options.signal ||
+            undefined,
           headers: {
             Accept:
               "application/vnd.novasparx.mesh-v1,application/octet-stream;q=0.9,application/json;q=0.5"
@@ -712,8 +715,36 @@
       throw error;
     }
 
+    const contentLength =
+      Number(
+        response.headers.get(
+          "content-length"
+        ) || 0
+      );
+
+    if (
+      Number.isFinite(contentLength) &&
+      contentLength >
+        64 * 1024 * 1024
+    ) {
+      try {
+        await response.body?.cancel();
+      } catch {}
+
+      throw new Error(
+        "NovaSparx client mesh exceeded the browser safety limit."
+      );
+    }
+
+    return response.arrayBuffer();
+  }
+
+  async function clientMesh(path, options = {}) {
     return parseClientMesh(
-      await response.arrayBuffer(),
+      await clientMeshBuffer(
+        path,
+        options
+      ),
       path
     );
   }
@@ -775,9 +806,10 @@
   }
 
   window.NovaSparx = Object.freeze({
-    version: "1.2.0",
+    version: "1.3.0",
     resolve,
     clientMesh,
+    clientMeshBuffer,
     inspect,
     preview,
     parseClientMesh,
