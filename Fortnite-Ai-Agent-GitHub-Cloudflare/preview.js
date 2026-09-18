@@ -764,37 +764,83 @@
       return false;
     }
 
-    const base =
-      endpoint(
-        "/image",
-        blueprintPath
-      );
-
-    if (!base) {
-      return false;
-    }
-
     setStatus(
       ui.status,
       "NovaSparx: checking the verified Blueprint preview…"
     );
 
-    const url =
-      new URL(base);
+    const directBase =
+      endpoint(
+        "/image",
+        blueprintPath
+      );
 
-    url.searchParams.set(
-      "direct",
-      "1"
+    if (directBase) {
+      const directUrl =
+        new URL(
+          directBase
+        );
+
+      directUrl.searchParams.set(
+        "direct",
+        "1"
+      );
+
+      const directOk =
+        await loadImage(
+          ui.image,
+          directUrl.toString(),
+          18_000
+        );
+
+      if (directOk) {
+        ui.image.hidden = false;
+        ui.status.hidden = true;
+
+        setMeta(
+          ui.meta,
+          "Verified Blueprint preview • exact Blueprint → Mesh relationship",
+          "high"
+        );
+
+        return true;
+      }
+
+      ui.image.removeAttribute(
+        "src"
+      );
+    }
+
+    const previewImagePath =
+      String(
+        association
+          ?.previewImagePath ||
+        ""
+      ).trim();
+
+    if (!previewImagePath) {
+      return false;
+    }
+
+    // This path came from a verified Blueprint JSON property such as Icon,
+    // PreviewImage or Thumbnail. /image will resolve this exact texture only;
+    // raw textures are never promoted into Mesh/Blueprint lookalikes.
+    setStatus(
+      ui.status,
+      "NovaSparx: loading a Blueprint-verified preview texture…"
     );
 
-    const ok =
+    const textureOk =
       await loadImage(
         ui.image,
-        url.toString(),
+        endpoint(
+          "/image",
+          previewImagePath
+        ),
         18_000
       );
 
-    if (!ok) {
+    if (!textureOk) {
       ui.image.removeAttribute(
         "src"
       );
@@ -807,7 +853,7 @@
 
     setMeta(
       ui.meta,
-      "Verified Blueprint preview • exact Blueprint → Mesh relationship",
+      "Blueprint JSON verified visual • exact reference • no cross-type guessing",
       "high"
     );
 
@@ -2057,6 +2103,38 @@
           if (
             association?.visualPath
           ) {
+            const browserState =
+              guard?.status?.() ||
+              {};
+
+            if (
+              browserState.isMobile ||
+              browserState.recoveryMode
+            ) {
+              return renderEvidenceImage(
+                clean,
+                info,
+                ui,
+                {
+                  source:
+                    "blueprint-safe-fallback",
+                  blueprintPath:
+                    association.blueprintPath ||
+                    clean,
+                  attemptedReferences:
+                    [
+                      association.blueprintPath ||
+                      clean
+                    ],
+                  evidence:
+                    association.evidence ||
+                    "Blueprint relationship verified.",
+                  error:
+                    "Blueprint verified, but no lightweight preview image was available. Hosted mesh rendering was skipped on this device to protect stability."
+                }
+              );
+            }
+
             await renderNovaMesh(
               association.visualPath,
               ui.image,
@@ -2179,6 +2257,39 @@
           const visualPath =
             association?.visualPath ||
             clean;
+
+          const browserState =
+            guard?.status?.() ||
+            {};
+
+          if (
+            association?.blueprintPath &&
+            (
+              browserState.isMobile ||
+              browserState.recoveryMode
+            )
+          ) {
+            return renderEvidenceImage(
+              clean,
+              info,
+              ui,
+              {
+                source:
+                  "blueprint-safe-fallback",
+                blueprintPath:
+                  association.blueprintPath,
+                attemptedReferences:
+                  [
+                    association.blueprintPath
+                  ],
+                evidence:
+                  association.evidence ||
+                  "A Blueprint relationship was verified.",
+                error:
+                  "Verified Blueprint found, but no lightweight Blueprint image was available. Hosted mesh rendering was skipped on this device to protect browser/server stability."
+              }
+            );
+          }
 
           await renderNovaMesh(
             visualPath,
