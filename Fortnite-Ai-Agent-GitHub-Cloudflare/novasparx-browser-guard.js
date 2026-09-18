@@ -12,35 +12,148 @@
   const hardwareConcurrency =
     Number(navigator.hardwareConcurrency || 0);
 
+  const ACTIVE_PREVIEW_KEY =
+    "novasparx:active-preview-v1";
+
+  const SAFE_MODE_KEY =
+    "novasparx:safe-mode-until-v1";
+
+  function storageGet(key) {
+    try {
+      return globalThis.localStorage
+        ?.getItem?.(key) || "";
+    } catch {
+      return "";
+    }
+  }
+
+  function storageSet(key, value) {
+    try {
+      globalThis.localStorage
+        ?.setItem?.(
+          key,
+          String(value)
+        );
+    } catch {}
+  }
+
+  function storageRemove(key) {
+    try {
+      globalThis.localStorage
+        ?.removeItem?.(key);
+    } catch {}
+  }
+
+  const bootTime =
+    Date.now();
+
+  const previousActiveAt =
+    Number(
+      storageGet(
+        ACTIVE_PREVIEW_KEY
+      ) || 0
+    );
+
+  let safeModeUntil =
+    Number(
+      storageGet(
+        SAFE_MODE_KEY
+      ) || 0
+    );
+
+  // If the previous page vanished while a preview was active and no normal
+  // pagehide/endOperation cleanup ran, assume a tab/process interruption.
+  // Safari does not expose a direct "the tab crashed" event, so this persistent
+  // sentinel is intentionally heuristic and only tightens limits temporarily.
+  if (
+    previousActiveAt > 0 &&
+    bootTime - previousActiveAt <
+      15 * 60 * 1000
+  ) {
+    safeModeUntil =
+      Math.max(
+        safeModeUntil,
+        bootTime +
+          30 * 60 * 1000
+      );
+
+    storageSet(
+      SAFE_MODE_KEY,
+      safeModeUntil
+    );
+  } else if (
+    previousActiveAt > 0
+  ) {
+    storageRemove(
+      ACTIVE_PREVIEW_KEY
+    );
+  }
+
+  const recoveryMode =
+    safeModeUntil >
+    bootTime;
+
   // Safari/WebKit does not expose a reliable per-tab RAM budget. These limits
   // are deliberately conservative and are used before large allocations.
   const packageLimitBytes =
-    isIOS
-      ? 8 * 1024 * 1024
-      : isMobile
-        ? 12 * 1024 * 1024
-        : 32 * 1024 * 1024;
+    recoveryMode
+      ? (
+          isIOS
+            ? 4 * 1024 * 1024
+            : isMobile
+              ? 8 * 1024 * 1024
+              : 16 * 1024 * 1024
+        )
+      : isIOS
+        ? 8 * 1024 * 1024
+        : isMobile
+          ? 12 * 1024 * 1024
+          : 32 * 1024 * 1024;
 
   const geometryBudgetBytes =
-    isIOS
-      ? 30 * 1024 * 1024
-      : isMobile
-        ? 48 * 1024 * 1024
-        : 160 * 1024 * 1024;
+    recoveryMode
+      ? (
+          isIOS
+            ? 16 * 1024 * 1024
+            : isMobile
+              ? 28 * 1024 * 1024
+              : 96 * 1024 * 1024
+        )
+      : isIOS
+        ? 30 * 1024 * 1024
+        : isMobile
+          ? 48 * 1024 * 1024
+          : 160 * 1024 * 1024;
 
   const maxVertices =
-    isIOS
-      ? 100_000
-      : isMobile
-        ? 160_000
-        : 400_000;
+    recoveryMode
+      ? (
+          isIOS
+            ? 60_000
+            : isMobile
+              ? 100_000
+              : 260_000
+        )
+      : isIOS
+        ? 100_000
+        : isMobile
+          ? 160_000
+          : 400_000;
 
   const maxIndices =
-    isIOS
-      ? 300_000
-      : isMobile
-        ? 480_000
-        : 1_200_000;
+    recoveryMode
+      ? (
+          isIOS
+            ? 180_000
+            : isMobile
+              ? 300_000
+              : 780_000
+        )
+      : isIOS
+        ? 300_000
+        : isMobile
+          ? 480_000
+          : 1_200_000;
 
   let activeController = null;
   let pressureState = "normal";
@@ -324,11 +437,19 @@
 
     return {
       size:
-        isIOS
-          ? (veryHeavy ? 512 : 640)
-          : isMobile
-            ? (veryHeavy ? 640 : 768)
-            : (veryHeavy ? 768 : 1024),
+        recoveryMode
+          ? (
+              isIOS
+                ? 512
+                : isMobile
+                  ? 576
+                  : 768
+            )
+          : isIOS
+            ? (veryHeavy ? 512 : 640)
+            : isMobile
+              ? (veryHeavy ? 640 : 768)
+              : (veryHeavy ? 768 : 1024),
 
       supersample:
         !isMobile &&
@@ -342,11 +463,19 @@
             : 24,
 
       maxTextureLoads:
-        isIOS
-          ? 4
-          : isMobile
-            ? 10
-            : 40,
+        recoveryMode
+          ? (
+              isIOS
+                ? 2
+                : isMobile
+                  ? 5
+                  : 20
+            )
+          : isIOS
+            ? 4
+            : isMobile
+              ? 10
+              : 40,
 
       textureModes:
         isIOS
@@ -376,6 +505,11 @@
     activeController.label =
       String(label || "preview");
 
+    storageSet(
+      ACTIVE_PREVIEW_KEY,
+      Date.now()
+    );
+
     return activeController;
   }
 
@@ -385,6 +519,9 @@
       activeController === controller
     ) {
       activeController = null;
+      storageRemove(
+        ACTIVE_PREVIEW_KEY
+      );
     }
   }
 
@@ -396,6 +533,10 @@
     } catch {}
 
     activeController = null;
+
+    storageRemove(
+      ACTIVE_PREVIEW_KEY
+    );
   }
 
   function status() {
@@ -407,6 +548,11 @@
         deviceMemory || null,
       hardwareConcurrency:
         hardwareConcurrency || null,
+      recoveryMode,
+      safeModeUntil:
+        recoveryMode
+          ? safeModeUntil
+          : null,
       packageLimitBytes,
       geometryBudgetBytes,
       maxVertices,
@@ -442,7 +588,7 @@
 
   globalThis.NovaSparxBrowserGuard =
     Object.freeze({
-      version: "1.0.0",
+      version: "1.1.0",
       status,
       measureMemory,
       assertResponseBudget,
