@@ -76,11 +76,14 @@
   function allowDirectImage(path) {
     const kind = family(path);
 
-    // Mesh/Blueprint imagery should be relationship-aware instead of asking a
-    // generic ForceImage endpoint to guess a visually related asset.
+    // Mesh/Blueprint imagery must be relationship-aware. Raw Texture assets
+    // also avoid the generic ForceImage route so a JSON image candidate cannot
+    // silently promote them to another asset family; textures use the typed
+    // NovaSparx texture decoder instead.
     return ![
       "mesh",
-      "blueprint"
+      "blueprint",
+      "texture"
     ].includes(kind);
   }
 
