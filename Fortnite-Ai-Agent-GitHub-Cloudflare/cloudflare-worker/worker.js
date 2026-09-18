@@ -2712,7 +2712,11 @@ async function handleNovaStatus(
           config.autoLinkUrl &&
           config.autoLinkTokens.length
         ),
-      connected: null
+      url:
+        config.autoLinkUrl || null,
+      connected: null,
+      healthStatus: null,
+      healthBody: null
     },
     backend: {
       source: "none",
@@ -2743,10 +2747,28 @@ async function handleNovaStatus(
           12_000
         );
 
-      const data =
+      result.autoLink.healthStatus =
+        health.status;
+
+      const rawHealth =
         await health
-          .json()
-          .catch(() => ({}));
+          .text()
+          .catch(() => "");
+
+      result.autoLink.healthBody =
+        rawHealth
+          .slice(0, 400);
+
+      let data = {};
+
+      try {
+        data =
+          rawHealth
+            ? JSON.parse(
+                rawHealth
+              )
+            : {};
+      } catch {}
 
       result.autoLink.connected =
         Boolean(
