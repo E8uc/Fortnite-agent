@@ -750,6 +750,70 @@
     return true;
   }
 
+  async function tryVerifiedBlueprintImage(
+    association,
+    ui
+  ) {
+    const blueprintPath =
+      String(
+        association?.blueprintPath ||
+        ""
+      ).trim();
+
+    if (!blueprintPath) {
+      return false;
+    }
+
+    const base =
+      endpoint(
+        "/image",
+        blueprintPath
+      );
+
+    if (!base) {
+      return false;
+    }
+
+    setStatus(
+      ui.status,
+      "NovaSparx: checking the verified Blueprint preview…"
+    );
+
+    const url =
+      new URL(base);
+
+    url.searchParams.set(
+      "direct",
+      "1"
+    );
+
+    const ok =
+      await loadImage(
+        ui.image,
+        url.toString(),
+        18_000
+      );
+
+    if (!ok) {
+      ui.image.removeAttribute(
+        "src"
+      );
+
+      return false;
+    }
+
+    ui.image.hidden = false;
+    ui.status.hidden = true;
+
+    setMeta(
+      ui.meta,
+      "Verified Blueprint preview • exact Blueprint → Mesh relationship",
+      "high"
+    );
+
+    return true;
+  }
+
   async function tryTextureDecode(
     path,
     ui,
@@ -1974,6 +2038,23 @@
               );
 
           if (
+            association?.blueprintPath &&
+            await tryVerifiedBlueprintImage(
+              association,
+              ui
+            )
+          ) {
+            return {
+              state: "ready",
+              kind:
+                "blueprint-image",
+              inspection:
+                info,
+              association
+            };
+          }
+
+          if (
             association?.visualPath
           ) {
             await renderNovaMesh(
@@ -2076,6 +2157,23 @@
             ) {
               throw error;
             }
+          }
+
+          if (
+            association?.blueprintPath &&
+            await tryVerifiedBlueprintImage(
+              association,
+              ui
+            )
+          ) {
+            return {
+              state: "ready",
+              kind:
+                "mesh-blueprint-image",
+              inspection:
+                info,
+              association
+            };
           }
 
           const visualPath =
@@ -2253,7 +2351,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "1.4.0",
+      version: "1.5.0",
       toggle,
       render: renderPreview,
       release
