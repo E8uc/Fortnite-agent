@@ -2308,6 +2308,53 @@ async function fetchNovaWithTokenFallback(
   return response;
 }
 
+async function fetchNovaAutoLinkWithReconnectRetry(
+  base,
+  tokens,
+  route,
+  options
+) {
+  let response = null;
+
+  for (
+    let attempt = 0;
+    attempt < 3;
+    attempt++
+  ) {
+    response =
+      await fetchNovaWithTokenFallback(
+        base,
+        tokens,
+        route,
+        options
+      );
+
+    if (
+      response.status !== 503 ||
+      attempt === 2
+    ) {
+      return response;
+    }
+
+    try {
+      await response.body
+        ?.cancel();
+    } catch {}
+
+    await new Promise(
+      (resolve) =>
+        setTimeout(
+          resolve,
+          attempt === 0
+            ? 1500
+            : 3500
+        )
+    );
+  }
+
+  return response;
+}
+
 function shouldFallbackNova(
   response
 ) {
@@ -2338,7 +2385,7 @@ async function novaFetch(
   ) {
     try {
       const response =
-        await fetchNovaWithTokenFallback(
+        await fetchNovaAutoLinkWithReconnectRetry(
           config.autoLinkUrl,
           config.autoLinkTokens,
           route,
