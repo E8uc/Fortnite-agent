@@ -58,6 +58,15 @@
 
   const exportJsonCache = new Map();
 
+  const assetClassificationCache =
+    new Map();
+
+  const assetClassificationRequests =
+    new Map();
+
+  const ASSET_CLASSIFICATION_CACHE_LIMIT =
+    96;
+
   back.addEventListener("click", close);
 
   guestLoginBtn?.addEventListener(
@@ -382,6 +391,7 @@
             .join("");
 
         bindAssetResultActions(results);
+        hydrateAssetCards(results);
 
         const meta =
           document.createElement("div");
@@ -456,6 +466,705 @@
     // search explicitly with Search or Enter.
   }
 
+  function fallbackAssetClassification(
+    path
+  ) {
+    const associations =
+      window.NovaSparxAssociations;
+
+    const family =
+      associations?.family?.(
+        path
+      ) ||
+      "other";
+
+    const name =
+      assetTitle(path)
+        .toLowerCase();
+
+    let kind =
+      family;
+
+    if (
+      family === "mesh"
+    ) {
+      kind =
+        /^sk_/i.test(name)
+          ? "skeletalmesh"
+          : "staticmesh";
+    } else if (
+      family === "blueprint"
+    ) {
+      kind =
+        "blueprint";
+    }
+
+    const capabilities =
+      associations
+        ?.capabilityProfile?.(
+          kind
+        ) ||
+      {
+        kind,
+        canViewImage:
+          family === "texture",
+        canView3D:
+          family === "mesh",
+        canDownload:
+          true,
+        canExportUEFN:
+          false,
+        downloadFormats:
+          family === "mesh"
+            ? ["nsmesh", "json"]
+            : family === "texture"
+              ? ["png", "json"]
+              : ["json"],
+        tags:
+          [
+            family === "other"
+              ? "ASSET"
+              : family.toUpperCase()
+          ]
+      };
+
+    return {
+      family,
+      kind:
+        capabilities.kind ||
+        kind,
+      source:
+        "local-fallback",
+      confidence:
+        family === "other"
+          ? 0
+          : 35,
+      capabilities,
+      tags:
+        Array.isArray(
+          capabilities.tags
+        )
+          ? capabilities.tags
+          : ["ASSET"]
+    };
+  }
+
+  async function classifyAsset(
+    path
+  ) {
+    const key =
+      String(path || "")
+        .trim()
+        .toLowerCase();
+
+    if (!key) {
+      return fallbackAssetClassification(
+        path
+      );
+    }
+
+    if (
+      assetClassificationCache
+        .has(key)
+    ) {
+      return assetClassificationCache
+        .get(key);
+    }
+
+    if (
+      assetClassificationRequests
+        .has(key)
+    ) {
+      return assetClassificationRequests
+        .get(key);
+    }
+
+    const request =
+      Promise.resolve()
+        .then(
+          async () => {
+            const result =
+              await window
+                .NovaSparxAssociations
+                ?.classify?.(
+                  path
+                );
+
+            return (
+              result ||
+              fallbackAssetClassification(
+                path
+              )
+            );
+          }
+        )
+        .catch(
+          () =>
+            fallbackAssetClassification(
+              path
+            )
+        )
+        .then(
+          (result) => {
+            assetClassificationCache.set(
+              key,
+              result
+            );
+
+            while (
+              assetClassificationCache
+                .size >
+              ASSET_CLASSIFICATION_CACHE_LIMIT
+            ) {
+              const oldest =
+                assetClassificationCache
+                  .keys()
+                  .next()
+                  .value;
+
+              assetClassificationCache
+                .delete(oldest);
+            }
+
+            return result;
+          }
+        )
+        .finally(
+          () => {
+            assetClassificationRequests
+              .delete(key);
+          }
+        );
+
+    assetClassificationRequests.set(
+      key,
+      request
+    );
+
+    return request;
+  }
+
+  function setAssetTags(
+    card,
+    classification
+  ) {
+    const root =
+      card.querySelector(
+        "[data-asset-tags]"
+      );
+
+    if (!root) return;
+
+    const tags =
+      Array.isArray(
+        classification?.tags
+      )
+        ? classification.tags
+        : [];
+
+    const unique =
+      [
+        ...new Set(
+          tags
+            .map(
+              (value) =>
+                String(
+                  value || ""
+                ).trim()
+            )
+            .filter(Boolean)
+        )
+      ].slice(0, 3);
+
+    if (!unique.length) {
+      return;
+    }
+
+    root.replaceChildren(
+      ...unique.map(
+        (value) => {
+          const span =
+            document.createElement(
+              "span"
+            );
+
+          span.textContent =
+            value;
+
+          return span;
+        }
+      )
+    );
+  }
+
+  function applyAssetClassification(
+    card,
+    classification
+  ) {
+    if (
+      !card ||
+      !classification
+    ) {
+      return;
+    }
+
+    const capabilities =
+      classification.capabilities ||
+      {};
+
+    const kind =
+      String(
+        classification.kind ||
+        capabilities.kind ||
+        "other"
+      );
+
+    card.dataset.assetKind =
+      kind;
+
+    card.dataset.assetConfidence =
+      String(
+        Number(
+          classification.confidence ||
+          0
+        )
+      );
+
+    setAssetTags(
+      card,
+      classification
+    );
+
+    const previewButton =
+      card.querySelector(
+        '[data-asset-action="preview"]'
+      );
+
+    if (previewButton) {
+      if (
+        capabilities.canView3D
+      ) {
+        previewButton.disabled =
+          false;
+
+        previewButton.dataset
+          .closedLabel =
+          t(
+            "view3dModel",
+            "View 3D Model"
+          );
+
+        previewButton.dataset
+          .openLabel =
+          t(
+            "hide3dModel",
+            "Hide 3D Model"
+          );
+      } else if (
+        capabilities.canViewImage
+      ) {
+        previewButton.disabled =
+          false;
+
+        previewButton.dataset
+          .closedLabel =
+          t(
+            "viewImage",
+            "View Image"
+          );
+
+        previewButton.dataset
+          .openLabel =
+          t(
+            "hideImage",
+            "Hide Image"
+          );
+      } else {
+        previewButton.disabled =
+          true;
+
+        previewButton.dataset
+          .closedLabel =
+          t(
+            "noVisualPreview",
+            "No Visual Preview"
+          );
+
+        previewButton.dataset
+          .openLabel =
+          previewButton.dataset
+            .closedLabel;
+      }
+
+      if (
+        previewButton.dataset
+          .fnaaOpen !== "1"
+      ) {
+        previewButton.textContent =
+          previewButton.dataset
+            .closedLabel;
+      }
+    }
+
+    const downloadButton =
+      card.querySelector(
+        '[data-asset-action="download"]'
+      );
+
+    if (downloadButton) {
+      downloadButton.disabled =
+        capabilities.canDownload ===
+        false;
+    }
+  }
+
+  function hydrateAssetCards(
+    root
+  ) {
+    const cards =
+      [
+        ...root.querySelectorAll(
+          ".asset-result-card"
+        )
+      ];
+
+    if (!cards.length) {
+      return;
+    }
+
+    const hydrate =
+      (card) => {
+        if (
+          card.dataset
+            .assetClassifying ===
+            "1" ||
+          card.dataset
+            .assetClassified ===
+            "1"
+        ) {
+          return;
+        }
+
+        card.dataset
+          .assetClassifying =
+          "1";
+
+        classifyAsset(
+          card.dataset.assetPath ||
+          ""
+        )
+          .then(
+            (classification) => {
+              applyAssetClassification(
+                card,
+                classification
+              );
+
+              card.dataset
+                .assetClassified =
+                "1";
+            }
+          )
+          .finally(
+            () => {
+              delete card.dataset
+                .assetClassifying;
+            }
+          );
+      };
+
+    if (
+      typeof IntersectionObserver !==
+        "function"
+    ) {
+      cards
+        .slice(0, 16)
+        .forEach(hydrate);
+
+      return;
+    }
+
+    const observer =
+      new IntersectionObserver(
+        (entries) => {
+          for (
+            const entry of entries
+          ) {
+            if (
+              !entry.isIntersecting
+            ) {
+              continue;
+            }
+
+            observer.unobserve(
+              entry.target
+            );
+
+            hydrate(
+              entry.target
+            );
+          }
+        },
+        {
+          rootMargin:
+            "320px 0px"
+        }
+      );
+
+    for (
+      const card of cards
+    ) {
+      observer.observe(card);
+    }
+  }
+
+  function safeAssetFilename(
+    path,
+    extension
+  ) {
+    const base =
+      assetTitle(path)
+        .replace(
+          /[^A-Za-z0-9._-]+/g,
+          "_"
+        )
+        .replace(
+          /^_+|_+$/g,
+          ""
+        ) ||
+      "NovaSparx_Asset";
+
+    return (
+      base +
+      "." +
+      String(extension || "bin")
+        .replace(
+          /^[.]+/,
+          ""
+        )
+    );
+  }
+
+  function saveBlob(
+    blob,
+    filename
+  ) {
+    const url =
+      URL.createObjectURL(
+        blob
+      );
+
+    const link =
+      document.createElement(
+        "a"
+      );
+
+    link.href = url;
+    link.download =
+      filename;
+
+    document.body.appendChild(
+      link
+    );
+
+    link.click();
+    link.remove();
+
+    setTimeout(
+      () =>
+        URL.revokeObjectURL(
+          url
+        ),
+      1_500
+    );
+  }
+
+  async function downloadableMeshPath(
+    path,
+    classification
+  ) {
+    if (
+      classification?.kind !==
+        "blueprint-visual"
+    ) {
+      return path;
+    }
+
+    const visual =
+      await window
+        .NovaSparxAssociations
+        ?.resolveVisual?.(
+          path
+        );
+
+    return (
+      visual?.visualPath ||
+      path
+    );
+  }
+
+  async function downloadableTexturePath(
+    path,
+    classification
+  ) {
+    if (
+      classification?.kind ===
+        "texture"
+    ) {
+      return path;
+    }
+
+    const visual =
+      await window
+        .NovaSparxAssociations
+        ?.resolveVisual?.(
+          path
+        );
+
+    return (
+      visual?.previewImagePath ||
+      (
+        visual?.sourceFamily ===
+          "texture"
+          ? visual.visualPath
+          : ""
+      )
+    );
+  }
+
+  async function downloadAssetFormat(
+    path,
+    format,
+    classification
+  ) {
+    if (format === "json") {
+      const payload =
+        await exportJson(path);
+
+      const text =
+        JSON.stringify(
+          payload,
+          null,
+          2
+        );
+
+      saveBlob(
+        new Blob(
+          [text],
+          {
+            type:
+              "application/json;charset=utf-8"
+          }
+        ),
+        safeAssetFilename(
+          path,
+          "json"
+        )
+      );
+
+      return;
+    }
+
+    if (format === "png") {
+      const texturePath =
+        await downloadableTexturePath(
+          path,
+          classification
+        );
+
+      if (!texturePath) {
+        throw new Error(
+          "No verified texture is available for this asset."
+        );
+      }
+
+      const url =
+        window.NovaSparx
+          ?.textureUrl?.(
+            texturePath
+          );
+
+      if (!url) {
+        throw new Error(
+          "NovaSparx texture download is unavailable."
+        );
+      }
+
+      const response =
+        await fetchWithTimeout(
+          url,
+          {
+            cache:
+              "force-cache",
+            headers: {
+              Accept:
+                "image/png,image/*;q=0.8"
+            }
+          },
+          24_000
+        );
+
+      if (!response.ok) {
+        throw new Error(
+          `Texture download returned ${response.status}`
+        );
+      }
+
+      saveBlob(
+        await response.blob(),
+        safeAssetFilename(
+          texturePath,
+          "png"
+        )
+      );
+
+      return;
+    }
+
+    if (format === "nsmesh") {
+      const meshPath =
+        await downloadableMeshPath(
+          path,
+          classification
+        );
+
+      const buffer =
+        await window.NovaSparx
+          ?.clientMeshBuffer?.(
+            meshPath
+          );
+
+      if (
+        !(buffer instanceof
+          ArrayBuffer)
+      ) {
+        throw new Error(
+          "NovaSparx mesh package is unavailable."
+        );
+      }
+
+      saveBlob(
+        new Blob(
+          [buffer],
+          {
+            type:
+              "application/vnd.novasparx.mesh-v1"
+          }
+        ),
+        safeAssetFilename(
+          meshPath,
+          "nsmesh"
+        )
+      );
+
+      return;
+    }
+
+    throw new Error(
+      "That download format is not supported yet."
+    );
+  }
+
   function pathCard(
     item,
     formatted,
@@ -504,7 +1213,7 @@
               ${escapeHtml(assetTitle(rawPath))}
             </div>
 
-            <div class="asset-result-tags">
+            <div class="asset-result-tags" data-asset-tags>
               <span>${escapeHtml(match)}</span>
               <span>${escapeHtml(source)}</span>
             </div>
@@ -538,6 +1247,12 @@
             type="button"
             data-asset-action="references"
           >${escapeHtml(t("viewReferences", "View References"))}</button>
+
+          <button
+            class="json-view-button"
+            type="button"
+            data-asset-action="download"
+          >${escapeHtml(t("download", "Download"))}</button>
         </div>
 
         <div
@@ -607,7 +1322,8 @@
 
         const usesGuestSlowmode =
           action === "preview" ||
-          action === "references";
+          action === "references" ||
+          action === "download";
 
         const remaining =
           usesGuestSlowmode
@@ -657,6 +1373,15 @@
             path,
             panelRequest.id
           );
+          return;
+        }
+
+        if (action === "download") {
+          await showDownload(
+            card,
+            path,
+            panelRequest.id
+          );
         }
       }
     );
@@ -677,6 +1402,11 @@
       references: [
         t("viewReferences", "View References"),
         t("hideReferences", "Hide References")
+      ],
+
+      download: [
+        t("download", "Download"),
+        t("hideDownloads", "Hide Downloads")
       ]
     };
 
@@ -707,6 +1437,7 @@
       }
 
       item.textContent =
+        item.dataset.closedLabel ||
         panelLabels(action)[0];
 
       delete item.dataset.fnaaOpen;
@@ -771,6 +1502,7 @@
     );
 
     button.textContent =
+      button.dataset.openLabel ||
       panelLabels(action)[1];
 
     button.dataset.fnaaOpen =
@@ -805,6 +1537,7 @@
 
     if (button) {
       button.textContent =
+        button.dataset.closedLabel ||
         panelLabels(
           button.dataset.assetAction
         )[0];
@@ -1054,6 +1787,171 @@
           ${escapeHtml(
             error?.message ||
             "Preview failed."
+          )}
+        </div>`;
+    }
+  }
+
+  async function showDownload(
+    card,
+    path,
+    requestId
+  ) {
+    const panel =
+      card.querySelector(
+        "[data-asset-panel]"
+      );
+
+    panel.hidden = false;
+    panel.innerHTML =
+      '<div class="tool-empty">Preparing downloads...</div>';
+
+    try {
+      const classification =
+        await classifyAsset(path);
+
+      if (
+        !panelRequestIsCurrent(
+          card,
+          "download",
+          requestId
+        )
+      ) {
+        return;
+      }
+
+      const formats =
+        Array.isArray(
+          classification
+            ?.capabilities
+            ?.downloadFormats
+        )
+          ? classification
+              .capabilities
+              .downloadFormats
+          : ["json"];
+
+      const allowed =
+        formats.filter(
+          (format) =>
+            [
+              "json",
+              "png",
+              "nsmesh"
+            ].includes(format)
+        );
+
+      if (!allowed.length) {
+        allowed.push("json");
+      }
+
+      const labels = {
+        json:
+          "JSON",
+        png:
+          "PNG",
+        nsmesh:
+          "NovaSparx Mesh"
+      };
+
+      panel.innerHTML = `
+        <div class="json-panel asset-download-panel">
+          <div class="json-panel-head">
+            <span>DOWNLOAD</span>
+            <span class="tool-note">
+              Choose a format
+            </span>
+          </div>
+
+          <div class="asset-download-options">
+            ${allowed
+              .map(
+                (format) => `
+                  <button
+                    class="json-view-button"
+                    type="button"
+                    data-download-format="${escapeAttr(format)}"
+                  >${escapeHtml(labels[format] || format.toUpperCase())}</button>`
+              )
+              .join("")}
+          </div>
+
+          <div
+            class="tool-note"
+            data-download-status
+          ></div>
+        </div>`;
+
+      const status =
+        panel.querySelector(
+          "[data-download-status]"
+        );
+
+      for (
+        const button of
+        panel.querySelectorAll(
+          "[data-download-format]"
+        )
+      ) {
+        button.addEventListener(
+          "click",
+          async () => {
+            if (button.disabled) {
+              return;
+            }
+
+            const format =
+              button.dataset
+                .downloadFormat ||
+              "";
+
+            button.disabled = true;
+
+            if (status) {
+              status.textContent =
+                `Preparing ${format.toUpperCase()}…`;
+            }
+
+            try {
+              await downloadAssetFormat(
+                path,
+                format,
+                classification
+              );
+
+              if (status) {
+                status.textContent =
+                  "Download ready.";
+              }
+            } catch (error) {
+              if (status) {
+                status.textContent =
+                  error?.message ||
+                  "Download failed.";
+              }
+            } finally {
+              button.disabled =
+                false;
+            }
+          }
+        );
+      }
+    } catch (error) {
+      if (
+        !panelRequestIsCurrent(
+          card,
+          "download",
+          requestId
+        )
+      ) {
+        return;
+      }
+
+      panel.innerHTML = `
+        <div class="tool-empty">
+          ${escapeHtml(
+            error?.message ||
+            "Downloads are unavailable."
           )}
         </div>`;
     }
