@@ -27,6 +27,10 @@ jobs:
             node --check "$file"
           done < <(find Fortnite-Ai-Agent-GitHub-Cloudflare -type f -name '*.js' -print0)
 
+      - name: Run NovaSparx browser memory self-test
+        shell: bash
+        run: node Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-browser-guard.selftest.mjs
+
       - name: Verify required site files
         shell: bash
         run: |
