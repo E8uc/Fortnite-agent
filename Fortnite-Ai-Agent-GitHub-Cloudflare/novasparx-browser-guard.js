@@ -155,6 +155,13 @@
           ? 480_000
           : 1_200_000;
 
+  const previewTimeoutMs =
+    isIOS
+      ? 16_000
+      : isMobile
+        ? 20_000
+        : 35_000;
+
   let activeController = null;
   let pressureState = "normal";
   let lastReason = "";
@@ -495,15 +502,37 @@
   }
 
   function beginOperation(label = "preview") {
-    activeController?.abort(
-      "replaced-by-new-preview"
-    );
+    if (activeController) {
+      try {
+        clearTimeout(
+          activeController
+            .__novaTimeout
+        );
+      } catch {}
+
+      activeController.abort(
+        "replaced-by-new-preview"
+      );
+    }
 
     activeController =
       new AbortController();
 
     activeController.label =
       String(label || "preview");
+
+    activeController.__novaTimeout =
+      setTimeout(
+        () => {
+          try {
+            activeController
+              ?.abort(
+                "preview-time-budget"
+              );
+          } catch {}
+        },
+        previewTimeoutMs
+      );
 
     storageSet(
       ACTIVE_PREVIEW_KEY,
@@ -518,6 +547,13 @@
       controller &&
       activeController === controller
     ) {
+      try {
+        clearTimeout(
+          controller
+            .__novaTimeout
+        );
+      } catch {}
+
       activeController = null;
       storageRemove(
         ACTIVE_PREVIEW_KEY
@@ -527,6 +563,13 @@
 
   function abortActive(reason = "browser-lifecycle") {
     if (!activeController) return;
+
+    try {
+      clearTimeout(
+        activeController
+          .__novaTimeout
+      );
+    } catch {}
 
     try {
       activeController.abort(reason);
@@ -548,6 +591,7 @@
         deviceMemory || null,
       hardwareConcurrency:
         hardwareConcurrency || null,
+      previewTimeoutMs,
       recoveryMode,
       safeModeUntil:
         recoveryMode
@@ -588,7 +632,7 @@
 
   globalThis.NovaSparxBrowserGuard =
     Object.freeze({
-      version: "1.1.0",
+      version: "1.2.0",
       status,
       measureMemory,
       assertResponseBudget,
