@@ -7,6 +7,13 @@
   const cache = new Map();
   const CACHE_LIMIT = 18;
 
+  const REFERENCE_INDEX_BASE =
+    "https://raw.githubusercontent.com/E8uc/NovaSparx/main/web/reference-index";
+
+  let referenceManifestPromise = null;
+  const referenceShardCache = new Map();
+  const REFERENCE_SHARD_CACHE_LIMIT = 6;
+
   function clean(path) {
     return (
       window.NovaSparx
@@ -714,6 +721,249 @@
       .toLowerCase();
   }
 
+  function referenceShard(
+    path
+  ) {
+    let hash =
+      2166136261;
+
+    for (
+      const byte of
+      new TextEncoder().encode(
+        clean(path)
+          .toLowerCase()
+      )
+    ) {
+      hash ^= byte;
+      hash =
+        Math.imul(
+          hash,
+          16777619
+        );
+    }
+
+    return (
+      hash >>> 0
+    )
+      .toString(16)
+      .slice(-2)
+      .padStart(2, "0");
+  }
+
+  async function referenceManifest(
+    signal
+  ) {
+    if (
+      !referenceManifestPromise
+    ) {
+      referenceManifestPromise =
+        fetch(
+          `${REFERENCE_INDEX_BASE}/manifest.json`,
+          {
+            cache:
+              "force-cache",
+            signal:
+              signal ||
+              undefined
+          }
+        )
+          .then(
+            async (response) => {
+              if (!response.ok) {
+                throw new Error(
+                  `NovaSparx reference manifest returned HTTP ${response.status}.`
+                );
+              }
+
+              return response.json();
+            }
+          )
+          .catch(
+            () => null
+          );
+    }
+
+    return referenceManifestPromise;
+  }
+
+  async function decodeReferenceShard(
+    response
+  ) {
+    const length =
+      Number(
+        response.headers.get(
+          "content-length"
+        ) || 0
+      );
+
+    const guard =
+      window.NovaSparxBrowserGuard
+        ?.status?.() || {};
+
+    const maxBytes =
+      guard.isMobile
+        ? 768 * 1024
+        : 2 * 1024 * 1024;
+
+    if (
+      length > 0 &&
+      length > maxBytes
+    ) {
+      try {
+        await response.body?.cancel();
+      } catch {}
+
+      throw new Error(
+        "NovaSparx reference shard exceeded the browser safety budget."
+      );
+    }
+
+    const bytes =
+      new Uint8Array(
+        await response.arrayBuffer()
+      );
+
+    if (
+      bytes.byteLength >
+      maxBytes
+    ) {
+      throw new Error(
+        "NovaSparx reference shard exceeded the browser safety budget."
+      );
+    }
+
+    const isGzip =
+      bytes.length >= 2 &&
+      bytes[0] === 0x1f &&
+      bytes[1] === 0x8b;
+
+    if (isGzip) {
+      if (
+        typeof DecompressionStream !==
+        "function"
+      ) {
+        throw new Error(
+          "This browser cannot decode the NovaSparx reference shard."
+        );
+      }
+
+      const stream =
+        new Blob(
+          [bytes]
+        )
+          .stream()
+          .pipeThrough(
+            new DecompressionStream(
+              "gzip"
+            )
+          );
+
+      return new Response(
+        stream
+      ).json();
+    }
+
+    return JSON.parse(
+      new TextDecoder()
+        .decode(bytes)
+    );
+  }
+
+  async function staticBlueprintCandidates(
+    meshPath,
+    options = {}
+  ) {
+    const manifest =
+      await referenceManifest(
+        options.signal
+      );
+
+    if (
+      manifest?.schema !==
+        "novasparx.asset-references.v1"
+    ) {
+      return [];
+    }
+
+    const shard =
+      referenceShard(
+        meshPath
+      );
+
+    let payload =
+      referenceShardCache.get(
+        shard
+      );
+
+    if (!payload) {
+      const response =
+        await fetch(
+          `${REFERENCE_INDEX_BASE}/mesh/${shard}.json.gz`,
+          {
+            cache:
+              "force-cache",
+            signal:
+              options.signal ||
+              undefined
+          }
+        );
+
+      if (!response.ok) {
+        return [];
+      }
+
+      payload =
+        await decodeReferenceShard(
+          response
+        );
+
+      referenceShardCache.set(
+        shard,
+        payload
+      );
+
+      while (
+        referenceShardCache.size >
+        REFERENCE_SHARD_CACHE_LIMIT
+      ) {
+        const oldest =
+          referenceShardCache
+            .keys()
+            .next()
+            .value;
+
+        referenceShardCache.delete(
+          oldest
+        );
+      }
+    }
+
+    const items =
+      payload?.items &&
+      typeof payload.items ===
+        "object"
+        ? payload.items
+        : {};
+
+    const key =
+      clean(meshPath)
+        .toLowerCase();
+
+    const values =
+      Array.isArray(
+        items[key]
+      )
+        ? items[key]
+        : [];
+
+    return values
+      .map(
+        (value) =>
+          clean(value)
+      )
+      .filter(Boolean);
+  }
+
   function candidateScore(
     target,
     candidate
@@ -893,6 +1143,123 @@
           ? 4
           : 7;
 
+    // AssetRegistry referencers are the strongest zero-runtime-RAM layer:
+    // GitHub Actions builds them offline, then the browser fetches one tiny
+    // shard. JSON verification is attempted for the leading candidate when
+    // available, but the registry edge itself is already exact on-disk evidence.
+    try {
+      const indexed =
+        (
+          await staticBlueprintCandidates(
+            target,
+            options
+          )
+        )
+          .sort(
+            (a, b) =>
+              candidateScore(
+                target,
+                b
+              ) -
+              candidateScore(
+                target,
+                a
+              )
+          )
+          .slice(
+            0,
+            maxCandidates
+          );
+
+      for (
+        const candidate of
+        indexed.slice(
+          0,
+          guard.isMobile
+            ? 1
+            : 2
+        )
+      ) {
+        try {
+          const data =
+            await fetchExportJson(
+              candidate,
+              options.signal
+            );
+
+          if (
+            data &&
+            blueprintEvidence(data)
+          ) {
+            const refs =
+              collectReferences(
+                data
+              );
+
+            const exact =
+              refs.some(
+                (item) =>
+                  samePath(
+                    item.path,
+                    target
+                  )
+              );
+
+            if (exact) {
+              return {
+                state:
+                  "ready",
+                sourceFamily:
+                  "mesh",
+                blueprintPath:
+                  clean(candidate),
+                visualPath:
+                  target,
+                relation:
+                  "asset-registry+json-referencer",
+                evidence:
+                  "AssetRegistry and Blueprint export JSON both verify the Blueprint -> mesh relationship."
+              };
+            }
+          }
+        } catch (error) {
+          if (
+            error?.name ===
+            "AbortError"
+          ) {
+            throw error;
+          }
+        }
+      }
+
+      if (indexed.length) {
+        return {
+          state:
+            "ready",
+          sourceFamily:
+            "mesh",
+          blueprintPath:
+            clean(indexed[0]),
+          visualPath:
+            target,
+          relation:
+            "asset-registry-referencer",
+          evidence:
+            "Fortnite AssetRegistry reports this Blueprint package as an on-disk referencer of the requested mesh."
+        };
+      }
+    } catch (error) {
+      if (
+        error?.name ===
+        "AbortError"
+      ) {
+        throw error;
+      }
+    }
+
+    // Runtime fallback: shortlist likely Blueprint packages from FNAA's sharded
+    // path database, then accept one only when its export JSON contains an
+    // exact reference to the requested mesh.
     const candidates =
       (
         await blueprintCandidates(
@@ -1093,7 +1460,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.1.0",
+        "1.2.0",
       family,
       classify,
       allowDirectImage,
