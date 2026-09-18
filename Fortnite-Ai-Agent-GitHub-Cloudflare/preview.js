@@ -602,9 +602,39 @@
       );
     }
 
+    if (
+      window.NovaSparxLayers
+        ?.resolveMesh
+    ) {
+      setStatus(
+        status,
+        "NovaSparx: trying device cache, browser parser, then streamed fallbacks…"
+      );
+
+      const result =
+        await window.NovaSparxLayers
+          .resolveMesh(
+            path,
+            {
+              preferHQ: true
+            }
+          );
+
+      return renderNovaManifest(
+        path,
+        result.manifest,
+        image,
+        status,
+        meta,
+        result.sourceLabel ||
+          "NovaSparx • layered mesh"
+      );
+    }
+
+    // Compatibility path for older cached FNAA pages.
     let manifest = null;
     let sourceLabel =
-      "NovaSparx 1.2 • client-rendered mesh";
+      "NovaSparx • client-rendered mesh";
 
     if (
       window.NovaSparx
@@ -639,7 +669,7 @@
 
       setStatus(
         status,
-        "NovaSparx: resolving geometry and verified materials…"
+        "NovaSparx: resolving compatibility geometry…"
       );
 
       manifest =
@@ -652,7 +682,7 @@
           );
 
       sourceLabel =
-        "NovaSparx 1.1 • compatibility mesh";
+        "NovaSparx • compatibility mesh";
     }
 
     return renderNovaManifest(
@@ -1756,7 +1786,7 @@
             kind: "mesh",
             inspection: info
           };
-        } catch {
+        } catch (meshError) {
           const universal =
             await tryUniversalPreview(
               clean,
@@ -1776,13 +1806,21 @@
             };
           }
 
+          const fallbackPlan = {
+            ...(universal.plan || {}),
+            error:
+              universal.plan?.error ||
+              meshError?.message ||
+              String(meshError)
+          };
+
           return renderEvidenceImage(
             clean,
-            universal.plan
+            fallbackPlan
               ?.inspection ||
               info,
             ui,
-            universal.plan
+            fallbackPlan
           );
         }
       }
@@ -1906,7 +1944,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "1.2.0",
+      version: "1.3.0",
       toggle,
       render: renderPreview,
       release
