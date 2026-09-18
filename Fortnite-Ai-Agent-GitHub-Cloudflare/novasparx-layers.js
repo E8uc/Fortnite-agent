@@ -181,32 +181,44 @@
   }
 
   function localParser() {
-    const candidate =
-      globalThis.NovaSparxWasm ||
-      globalThis.NovaSparxLocalParser;
+    const adapter =
+      globalThis
+        .NovaSparxLocalParser;
 
     if (
-      !candidate ||
-      typeof candidate.resolveMesh !== "function"
-    ) {
-      return null;
-    }
-
-    if (
-      typeof candidate.status === "function"
+      adapter &&
+      typeof adapter.resolveMesh ===
+        "function"
     ) {
       try {
-        const state = candidate.status();
+        const state =
+          typeof adapter.status ===
+            "function"
+            ? adapter.status()
+            : null;
 
-        if (state?.registered === false) {
-          return null;
+        if (
+          state?.registered !==
+            false
+        ) {
+          return adapter;
         }
-      } catch {
-        return null;
-      }
+      } catch {}
     }
 
-    return candidate;
+    const wasm =
+      globalThis
+        .NovaSparxWasm;
+
+    if (
+      wasm &&
+      typeof wasm.resolveMesh ===
+        "function"
+    ) {
+      return wasm;
+    }
+
+    return null;
   }
 
   async function fromLocalParser(path, options) {
@@ -404,7 +416,7 @@
 
   function capabilities() {
     return {
-      version: "2.0.1",
+      version: "2.1.0",
       layers: [
         {
           id: "device-memory",
@@ -415,6 +427,21 @@
           id: "device-cache",
           available: "caches" in globalThis,
           purpose: "Reuse validated mesh packages from this device."
+        },
+        {
+          id: "edge-metadata-range",
+          available:
+            Boolean(
+              globalThis
+                .NovaSparxBrowserTransport
+                ?.fetchRange
+            ) &&
+            Boolean(
+              globalThis
+                .NovaSparxBrowserTransport
+                ?.bootstrap
+            ),
+          purpose: "Provide cached AES/manifest metadata and bounded byte ranges to the device parser."
         },
         {
           id: "browser-wasm",
@@ -436,13 +463,23 @@
         webAssembly: typeof WebAssembly === "object",
         webWorker: typeof Worker === "function",
         transferableArrayBuffer: typeof ArrayBuffer === "function",
-        cacheStorage: "caches" in globalThis
+        cacheStorage: "caches" in globalThis,
+        edgeTransport:
+          typeof globalThis
+            .NovaSparxBrowserTransport
+            ?.fetchRange ===
+          "function",
+        edgeBootstrap:
+          typeof globalThis
+            .NovaSparxBrowserTransport
+            ?.bootstrap ===
+          "function"
       }
     };
   }
 
   globalThis.NovaSparxLayers = Object.freeze({
-    version: "2.0.0",
+    version: "2.1.0",
     resolveMesh,
     capabilities,
     clearDeviceCache,
