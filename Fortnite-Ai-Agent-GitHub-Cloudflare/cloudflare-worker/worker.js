@@ -3510,6 +3510,44 @@ function normalizeRefString(
   );
 }
 
+function visualAssetFamily(
+  path
+) {
+  const name =
+    assetName(path)
+      .toLowerCase();
+
+  if (
+    /^(?:t_|tex_|texture_)/i
+      .test(name)
+  ) {
+    return "texture";
+  }
+
+  if (
+    /^(?:sm_|sk_)/i
+      .test(name)
+  ) {
+    return "mesh";
+  }
+
+  if (
+    /^(?:bp_|bpc_)/i
+      .test(name)
+  ) {
+    return "blueprint";
+  }
+
+  if (
+    /^(?:mi_|m_)/i
+      .test(name)
+  ) {
+    return "material";
+  }
+
+  return "other";
+}
+
 function likelySurfaceTexture(
   path
 ) {
@@ -3968,6 +4006,26 @@ async function tryDillyImageCandidates(
 async function resolveDillyImage(
   rawPath
 ) {
+  const family =
+    visualAssetFamily(
+      rawPath
+    );
+
+  // A generic image resolver must never silently turn a mesh/Blueprint into
+  // some other referenced visual. Those families are handled by NovaSparx's
+  // verified association graph instead.
+  if (
+    family === "mesh" ||
+    family === "blueprint"
+  ) {
+    return {
+      state: "missing",
+      attempts: [],
+      source:
+        "type-safe-deferred"
+    };
+  }
+
   const direct =
     await tryDillyImageCandidates(
       [rawPath]
@@ -3981,6 +4039,18 @@ async function resolveDillyImage(
       ...direct,
       source:
         "direct-forceimage"
+    };
+  }
+
+  // A raw texture may only resolve as itself. Do not inspect arbitrary JSON
+  // references and accidentally promote it to a mesh, Blueprint, or material.
+  if (family === "texture") {
+    return {
+      state: "missing",
+      attempts:
+        direct.attempts || [],
+      source:
+        "typed-texture-missing"
     };
   }
 
