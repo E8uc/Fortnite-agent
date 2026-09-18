@@ -4004,7 +4004,8 @@ async function tryDillyImageCandidates(
 }
 
 async function resolveDillyImage(
-  rawPath
+  rawPath,
+  directOnly = false
 ) {
   const family =
     visualAssetFamily(
@@ -4015,8 +4016,11 @@ async function resolveDillyImage(
   // some other referenced visual. Those families are handled by NovaSparx's
   // verified association graph instead.
   if (
-    family === "mesh" ||
-    family === "blueprint"
+    !directOnly &&
+    (
+      family === "mesh" ||
+      family === "blueprint"
+    )
   ) {
     return {
       state: "missing",
@@ -4039,6 +4043,19 @@ async function resolveDillyImage(
       ...direct,
       source:
         "direct-forceimage"
+    };
+  }
+
+  // Direct-only mode is used only after the caller has already verified the
+  // exact target (for example an associated Blueprint). Never follow JSON from
+  // that request into a different asset family.
+  if (directOnly) {
+    return {
+      state: "missing",
+      attempts:
+        direct.attempts || [],
+      source:
+        "direct-forceimage-missing"
     };
   }
 
@@ -4223,7 +4240,10 @@ async function handleImageRequest(
   try {
     const result =
       await resolveDillyImage(
-        rawPath
+        rawPath,
+        url.searchParams.get(
+          "direct"
+        ) === "1"
       );
 
     if (statusOnly) {
