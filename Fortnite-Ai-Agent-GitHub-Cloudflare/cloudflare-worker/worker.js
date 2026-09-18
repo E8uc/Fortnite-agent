@@ -9,6 +9,23 @@ const CURRENT_YEAR = 2026;
 const DILLY_EXPORT_BASE =
   "https://export-service-new.dillyapis.com/v1/export";
 
+const NOVASPARX_EDGE_AES_URL =
+  "https://export-service-new.dillyapis.com/v1/aes";
+
+const NOVASPARX_EDGE_MANIFESTS_URL =
+  "https://export-service-new.dillyapis.com/v1/manifests";
+
+const NOVASPARX_EDGE_MAX_RANGE_BYTES =
+  4 * 1024 * 1024;
+
+const NOVASPARX_EDGE_MAX_METADATA_BYTES =
+  2 * 1024 * 1024;
+
+const NOVASPARX_EDGE_ALLOWED_RANGE_HOSTS = [
+  "egdownload.fastly-edge.com",
+  "download.epicgames.com"
+];
+
 const SITE_URL =
   "https://e8uc.github.io/Fortnite-agent/";
 
@@ -315,6 +332,1031 @@ async function fetchWithTimeout(
   } finally {
     clearTimeout(timer);
   }
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* NovaSparx edge -> device transport                                         */
+/* -------------------------------------------------------------------------- */
+
+function novaEdgeAllowedHosts(
+  env
+) {
+  const hosts =
+    new Set(
+      NOVASPARX_EDGE_ALLOWED_RANGE_HOSTS
+    );
+
+  const extra =
+    String(
+      env.NOVASPARX_RANGE_HOSTS ||
+      ""
+    )
+      .split(",")
+      .map(
+        (value) =>
+          value
+            .trim()
+            .toLowerCase()
+      )
+      .filter(Boolean);
+
+  for (const raw of extra) {
+    let host =
+      raw;
+
+    try {
+      if (
+        /^https?:\/\//i.test(
+          raw
+        )
+      ) {
+        host =
+          new URL(raw)
+            .hostname
+            .toLowerCase();
+      }
+    } catch {
+      continue;
+    }
+
+    host =
+      host
+        .replace(/^\.+/, "")
+        .replace(/\.+$/, "");
+
+    if (
+      /^[a-z0-9.-]{3,253}$/i
+        .test(host)
+    ) {
+      hosts.add(host);
+    }
+  }
+
+  return [
+    ...hosts
+  ];
+}
+
+function novaEdgeHostAllowed(
+  hostname,
+  env
+) {
+  const target =
+    String(hostname || "")
+      .toLowerCase()
+      .replace(/\.+$/, "");
+
+  return novaEdgeAllowedHosts(
+    env
+  ).some(
+    (allowed) =>
+      target === allowed ||
+      target.endsWith(
+        "." + allowed
+      )
+  );
+}
+
+function cleanNovaEdgeUrl(
+  value,
+  env
+) {
+  let url;
+
+  try {
+    url =
+      new URL(
+        String(value || "")
+      );
+  } catch {
+    return null;
+  }
+
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    (
+      url.port &&
+      url.port !== "443"
+    ) ||
+    !novaEdgeHostAllowed(
+      url.hostname,
+      env
+    )
+  ) {
+    return null;
+  }
+
+  url.hash = "";
+
+  return url;
+}
+
+function validateNovaEdgeRange(
+  start,
+  end
+) {
+  const first =
+    Number(start);
+
+  const last =
+    Number(end);
+
+  if (
+    !Number.isSafeInteger(first) ||
+    !Number.isSafeInteger(last) ||
+    first < 0 ||
+    last < first ||
+    last - first + 1 >
+      NOVASPARX_EDGE_MAX_RANGE_BYTES
+  ) {
+    return null;
+  }
+
+  return {
+    start:
+      first,
+    end:
+      last,
+    length:
+      last - first + 1
+  };
+}
+
+async function fetchNovaEdgeJson(
+  url
+) {
+  const response =
+    await fetchWithTimeout(
+      url,
+      {
+        method:
+          "GET",
+
+        headers: {
+          Accept:
+            "application/json"
+        },
+
+        cf: {
+          cacheEverything:
+            true,
+          cacheTtl:
+            300
+        }
+      },
+      10_000
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      "metadata source returned HTTP " +
+      response.status
+    );
+  }
+
+  const declared =
+    Number(
+      response.headers.get(
+        "content-length"
+      ) || 0
+    );
+
+  if (
+    declared >
+    NOVASPARX_EDGE_MAX_METADATA_BYTES
+  ) {
+    try {
+      await response.body?.cancel();
+    } catch {}
+
+    throw new Error(
+      "metadata source exceeded the NovaSparx edge limit"
+    );
+  }
+
+  const bytes =
+    new Uint8Array(
+      await response.arrayBuffer()
+    );
+
+  if (
+    bytes.byteLength >
+    NOVASPARX_EDGE_MAX_METADATA_BYTES
+  ) {
+    throw new Error(
+      "metadata source exceeded the NovaSparx edge limit"
+    );
+  }
+
+  return JSON.parse(
+    new TextDecoder()
+      .decode(bytes)
+  );
+}
+
+function compactManifestMetadata(
+  value
+) {
+  const candidates = [];
+  const versions = [];
+  const seenUrls =
+    new Set();
+
+  let visited = 0;
+
+  const addVersion =
+    (raw) => {
+      const clean =
+        String(raw || "")
+          .trim()
+          .slice(0, 160);
+
+      if (
+        clean &&
+        !versions.includes(clean)
+      ) {
+        versions.push(clean);
+      }
+    };
+
+  const addUrl =
+    (
+      raw,
+      key = "",
+      context = ""
+    ) => {
+      let url;
+
+      try {
+        url =
+          new URL(
+            String(raw || "")
+          );
+      } catch {
+        return;
+      }
+
+      if (
+        url.protocol !== "https:"
+      ) {
+        return;
+      }
+
+      const lower =
+        url.toString()
+          .toLowerCase();
+
+      const keyText =
+        String(key || "")
+          .toLowerCase();
+
+      if (
+        !lower.includes(
+          ".manifest"
+        ) &&
+        !keyText.includes(
+          "manifest"
+        ) &&
+        !keyText.includes(
+          "download"
+        )
+      ) {
+        return;
+      }
+
+      const normalized =
+        url.toString();
+
+      if (
+        seenUrls.has(
+          normalized
+        )
+      ) {
+        return;
+      }
+
+      seenUrls.add(
+        normalized
+      );
+
+      const text =
+        (
+          String(context || "") +
+          " " +
+          keyText +
+          " " +
+          lower
+        )
+          .toLowerCase();
+
+      let score = 0;
+
+      if (
+        lower.includes(
+          ".manifest"
+        )
+      ) {
+        score += 80;
+      }
+
+      if (
+        text.includes(
+          "windows"
+        )
+      ) {
+        score += 40;
+      }
+
+      if (
+        text.includes(
+          "fortnite"
+        )
+      ) {
+        score += 25;
+      }
+
+      if (
+        text.includes(
+          "live"
+        ) ||
+        text.includes(
+          "latest"
+        )
+      ) {
+        score += 10;
+      }
+
+      if (
+        text.includes(
+          "android"
+        ) ||
+        text.includes(
+          "ios"
+        ) ||
+        text.includes(
+          "mac"
+        )
+      ) {
+        score -= 40;
+      }
+
+      if (
+        text.includes(
+          "studio"
+        ) ||
+        text.includes(
+          "uefn"
+        )
+      ) {
+        score -= 15;
+      }
+
+      candidates.push({
+        url:
+          normalized,
+        score
+      });
+    };
+
+  const walk =
+    (
+      node,
+      key = "",
+      context = "",
+      depth = 0
+    ) => {
+      if (
+        node == null ||
+        depth > 7 ||
+        visited++ > 2500
+      ) {
+        return;
+      }
+
+      if (
+        typeof node ===
+        "string"
+      ) {
+        if (
+          /(?:version|build)/i
+            .test(key)
+        ) {
+          addVersion(node);
+        }
+
+        addUrl(
+          node,
+          key,
+          context
+        );
+
+        return;
+      }
+
+      if (
+        Array.isArray(node)
+      ) {
+        for (
+          const item of
+          node.slice(0, 160)
+        ) {
+          walk(
+            item,
+            key,
+            context,
+            depth + 1
+          );
+        }
+
+        return;
+      }
+
+      if (
+        typeof node ===
+        "object"
+      ) {
+        let localContext =
+          context;
+
+        try {
+          localContext =
+            JSON.stringify(
+              node
+            )
+              .slice(
+                0,
+                1200
+              );
+        } catch {}
+
+        for (
+          const [
+            childKey,
+            child
+          ] of
+          Object.entries(node)
+            .slice(0, 180)
+        ) {
+          walk(
+            child,
+            childKey,
+            localContext,
+            depth + 1
+          );
+        }
+      }
+    };
+
+  walk(value);
+
+  candidates.sort(
+    (a, b) =>
+      b.score -
+      a.score
+  );
+
+  return {
+    candidates:
+      candidates.slice(
+        0,
+        8
+      ),
+
+    versions:
+      versions.slice(
+        0,
+        12
+      )
+  };
+}
+
+function novaEdgeCorsHeaders(
+  request,
+  env,
+  contentType =
+    "application/json; charset=utf-8"
+) {
+  const headers =
+    new Headers(
+      baseCorsHeaders(
+        request,
+        env,
+        contentType
+      )
+    );
+
+  headers.set(
+    "Access-Control-Expose-Headers",
+    [
+      "Content-Length",
+      "Content-Range",
+      "Accept-Ranges",
+      "ETag",
+      "Last-Modified",
+      "X-NovaSparx-Range-Source"
+    ].join(", ")
+  );
+
+  return headers;
+}
+
+async function handleNovaEdgeStatus(
+  request,
+  env
+) {
+  if (
+    !isAllowedOrigin(
+      request,
+      env
+    )
+  ) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Origin not allowed."
+      },
+      403
+    );
+  }
+
+  return json(
+    request,
+    env,
+    {
+      ok:
+        true,
+      schema:
+        "novasparx.edge.v1",
+      architecture:
+        "edge-metadata-device-compute",
+      backendRequired:
+        false,
+      maxRangeBytes:
+        NOVASPARX_EDGE_MAX_RANGE_BYTES,
+      allowedRangeHosts:
+        novaEdgeAllowedHosts(
+          env
+        ),
+      metadata: {
+        aes:
+          true,
+        manifests:
+          true
+      },
+      rangeRelay:
+        "/nova-edge/range"
+    },
+    200,
+    {
+      "Cache-Control":
+        "public, max-age=300"
+    }
+  );
+}
+
+async function handleNovaEdgeBootstrap(
+  request,
+  env
+) {
+  if (
+    !isAllowedOrigin(
+      request,
+      env
+    )
+  ) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Origin not allowed."
+      },
+      403
+    );
+  }
+
+  const [
+    aesResult,
+    manifestResult
+  ] =
+    await Promise.allSettled([
+      fetchNovaEdgeJson(
+        NOVASPARX_EDGE_AES_URL
+      ),
+      fetchNovaEdgeJson(
+        NOVASPARX_EDGE_MANIFESTS_URL
+      )
+    ]);
+
+  const aesOk =
+    aesResult.status ===
+    "fulfilled";
+
+  const manifestOk =
+    manifestResult.status ===
+    "fulfilled";
+
+  const compactManifest =
+    manifestOk
+      ? compactManifestMetadata(
+          manifestResult.value
+        )
+      : {
+          candidates: [],
+          versions: []
+        };
+
+  return json(
+    request,
+    env,
+    {
+      ok:
+        aesOk ||
+        manifestOk,
+
+      schema:
+        "novasparx.edge-bootstrap.v1",
+
+      generatedAt:
+        new Date()
+          .toISOString(),
+
+      aes: {
+        ok:
+          aesOk,
+        source:
+          "dilly",
+        data:
+          aesOk
+            ? aesResult.value
+            : null,
+        error:
+          aesOk
+            ? null
+            : String(
+                aesResult.reason
+                  ?.message ||
+                aesResult.reason ||
+                "AES metadata unavailable."
+              ).slice(
+                0,
+                240
+              )
+      },
+
+      manifest: {
+        ok:
+          manifestOk,
+        source:
+          "dilly",
+        candidates:
+          compactManifest
+            .candidates,
+        versions:
+          compactManifest
+            .versions,
+        error:
+          manifestOk
+            ? null
+            : String(
+                manifestResult.reason
+                  ?.message ||
+                manifestResult.reason ||
+                "Manifest metadata unavailable."
+              ).slice(
+                0,
+                240
+              )
+      },
+
+      transport: {
+        maxRangeBytes:
+          NOVASPARX_EDGE_MAX_RANGE_BYTES,
+        directFirst:
+          true,
+        relay:
+          "/nova-edge/range",
+        allowedHosts:
+          novaEdgeAllowedHosts(
+            env
+          )
+      }
+    },
+    aesOk ||
+    manifestOk
+      ? 200
+      : 503,
+    {
+      "Cache-Control":
+        "public, max-age=300, stale-while-revalidate=3600"
+    }
+  );
+}
+
+async function handleNovaEdgeRange(
+  request,
+  env,
+  url
+) {
+  if (
+    !isAllowedOrigin(
+      request,
+      env
+    )
+  ) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Origin not allowed."
+      },
+      403
+    );
+  }
+
+  const target =
+    cleanNovaEdgeUrl(
+      url.searchParams
+        .get("url"),
+      env
+    );
+
+  const range =
+    validateNovaEdgeRange(
+      url.searchParams
+        .get("start"),
+      url.searchParams
+        .get("end")
+    );
+
+  if (
+    !target ||
+    !range
+  ) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "invalid",
+        error:
+          "Invalid NovaSparx range request."
+      },
+      400
+    );
+  }
+
+  let upstream;
+
+  try {
+    upstream =
+      await fetchWithTimeout(
+        target.toString(),
+        {
+          method:
+            "GET",
+          redirect:
+            "error",
+          headers: {
+            Range:
+              "bytes=" +
+              range.start +
+              "-" +
+              range.end,
+            Accept:
+              "application/octet-stream,*/*;q=0.8"
+          }
+        },
+        18_000
+      );
+  } catch (error) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "offline",
+        error:
+          String(
+            error?.message ||
+            error ||
+            "Range source unavailable."
+          ).slice(
+            0,
+            240
+          )
+      },
+      502
+    );
+  }
+
+  if (
+    ![
+      200,
+      206
+    ].includes(
+      upstream.status
+    )
+  ) {
+    try {
+      await upstream.body?.cancel();
+    } catch {}
+
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Range source returned HTTP " +
+          upstream.status +
+          "."
+      },
+      502
+    );
+  }
+
+  const declared =
+    Number(
+      upstream.headers.get(
+        "content-length"
+      ) || 0
+    );
+
+  if (
+    declared > 0 &&
+    declared >
+      range.length
+  ) {
+    try {
+      await upstream.body?.cancel();
+    } catch {}
+
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Range source returned more data than requested."
+      },
+      502
+    );
+  }
+
+  if (
+    upstream.status ===
+      200 &&
+    (
+      declared === 0 ||
+      declared >
+        range.length
+    )
+  ) {
+    try {
+      await upstream.body?.cancel();
+    } catch {}
+
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Range source ignored the byte range."
+      },
+      502
+    );
+  }
+
+  const contentRange =
+    upstream.headers.get(
+      "content-range"
+    );
+
+  if (
+    upstream.status ===
+      206 &&
+    contentRange
+  ) {
+    const match =
+      contentRange.match(
+        /^bytes\s+(\d+)-(\d+)\/(?:\d+|\*)$/i
+      );
+
+    if (
+      !match ||
+      Number(
+        match[1]
+      ) !== range.start ||
+      Number(
+        match[2]
+      ) > range.end
+    ) {
+      try {
+        await upstream.body?.cancel();
+      } catch {}
+
+      return json(
+        request,
+        env,
+        {
+          state:
+            "error",
+          error:
+            "Range source returned an unexpected byte window."
+        },
+        502
+      );
+    }
+  }
+
+  const headers =
+    novaEdgeCorsHeaders(
+      request,
+      env,
+      upstream.headers.get(
+        "content-type"
+      ) ||
+      "application/octet-stream"
+    );
+
+  headers.set(
+    "Cache-Control",
+    "public, max-age=300, stale-while-revalidate=3600"
+  );
+
+  headers.set(
+    "Accept-Ranges",
+    "bytes"
+  );
+
+  headers.set(
+    "X-NovaSparx-Range-Source",
+    "cloudflare-relay"
+  );
+
+  if (contentRange) {
+    headers.set(
+      "Content-Range",
+      contentRange
+    );
+  }
+
+  if (declared > 0) {
+    headers.set(
+      "Content-Length",
+      String(
+        declared
+      )
+    );
+  }
+
+  for (
+    const name of [
+      "etag",
+      "last-modified"
+    ]
+  ) {
+    const value =
+      upstream.headers.get(
+        name
+      );
+
+    if (value) {
+      headers.set(
+        name,
+        value
+      );
+    }
+  }
+
+  return new Response(
+    upstream.body,
+    {
+      status:
+        upstream.status ===
+          206
+          ? 206
+          : 200,
+      headers
+    }
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -5854,6 +6896,64 @@ export default {
           storageMode:
             "stateless"
         }
+      );
+    }
+
+    if (
+      request.method ===
+        "GET" &&
+      url.pathname ===
+        "/nova-edge/status"
+    ) {
+      if (!allowByAssetLimit(request)) {
+        return assetRateLimitResponse(
+          request,
+          env
+        );
+      }
+
+      return handleNovaEdgeStatus(
+        request,
+        env
+      );
+    }
+
+    if (
+      request.method ===
+        "GET" &&
+      url.pathname ===
+        "/nova-edge/bootstrap"
+    ) {
+      if (!allowByAssetLimit(request)) {
+        return assetRateLimitResponse(
+          request,
+          env
+        );
+      }
+
+      return handleNovaEdgeBootstrap(
+        request,
+        env
+      );
+    }
+
+    if (
+      request.method ===
+        "GET" &&
+      url.pathname ===
+        "/nova-edge/range"
+    ) {
+      if (!allowByAssetLimit(request)) {
+        return assetRateLimitResponse(
+          request,
+          env
+        );
+      }
+
+      return handleNovaEdgeRange(
+        request,
+        env,
+        url
       );
     }
 
