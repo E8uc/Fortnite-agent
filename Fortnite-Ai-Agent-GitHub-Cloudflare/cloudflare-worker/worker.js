@@ -4016,9 +4016,12 @@ async function resolveDillyImage(
   // some other referenced visual. Those families are handled by NovaSparx's
   // verified association graph instead.
   if (
-    !directOnly &&
     (
       family === "mesh" ||
+      family === "blueprint"
+    ) &&
+    !(
+      directOnly &&
       family === "blueprint"
     )
   ) {
