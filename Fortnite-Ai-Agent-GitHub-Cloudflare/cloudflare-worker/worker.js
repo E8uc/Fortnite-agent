@@ -896,8 +896,10 @@ async function handleNovaEdgeStatus(
         "novasparx.edge.v1",
       architecture:
         "edge-metadata-device-compute",
-      backendRequired:
+      backendRequiredForEdgeTransport:
         false,
+      backendFallbackStillAvailable:
+        true,
       maxRangeBytes:
         NOVASPARX_EDGE_MAX_RANGE_BYTES,
       allowedRangeHosts:
@@ -1286,6 +1288,64 @@ async function handleNovaEdgeRange(
     }
   }
 
+  let payload;
+
+  try {
+    payload =
+      new Uint8Array(
+        await upstream
+          .arrayBuffer()
+      );
+  } catch {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Range source body could not be read."
+      },
+      502
+    );
+  }
+
+  if (
+    payload.byteLength >
+      range.length ||
+    payload.byteLength >
+      NOVASPARX_EDGE_MAX_RANGE_BYTES
+  ) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Range source exceeded the bounded relay window."
+      },
+      502
+    );
+  }
+
+  if (
+    payload.byteLength ===
+      0
+  ) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Range source returned an empty byte window."
+      },
+      502
+    );
+  }
+
   const headers =
     novaEdgeCorsHeaders(
       request,
@@ -1311,19 +1371,17 @@ async function handleNovaEdgeRange(
     "cloudflare-relay"
   );
 
+  headers.set(
+    "Content-Length",
+    String(
+      payload.byteLength
+    )
+  );
+
   if (contentRange) {
     headers.set(
       "Content-Range",
       contentRange
-    );
-  }
-
-  if (declared > 0) {
-    headers.set(
-      "Content-Length",
-      String(
-        declared
-      )
     );
   }
 
@@ -1347,7 +1405,7 @@ async function handleNovaEdgeRange(
   }
 
   return new Response(
-    upstream.body,
+    payload,
     {
       status:
         upstream.status ===
