@@ -78,6 +78,38 @@
     };
   }
 
+  async function settleWithin(
+    promise,
+    timeoutMs,
+    fallback = null
+  ) {
+    let timer = null;
+
+    try {
+      return await Promise.race([
+        promise,
+        new Promise(
+          (resolve) => {
+            timer =
+              setTimeout(
+                () =>
+                  resolve(
+                    fallback
+                  ),
+                timeoutMs
+              );
+          }
+        )
+      ]);
+    } finally {
+      if (timer) {
+        clearTimeout(
+          timer
+        );
+      }
+    }
+  }
+
   function clean(path) {
     return (
       window.NovaSparx
@@ -906,6 +938,12 @@
     if (
       !referenceManifestPromise
     ) {
+      const deadline =
+        deadlineSignal(
+          signal,
+          1_500
+        );
+
       referenceManifestPromise =
         fetch(
           `${REFERENCE_INDEX_BASE}/manifest.json`,
@@ -913,8 +951,7 @@
             cache:
               "force-cache",
             signal:
-              signal ||
-              undefined
+              deadline.signal
           }
         )
           .then(
@@ -930,6 +967,10 @@
           )
           .catch(
             () => null
+          )
+          .finally(
+            () =>
+              deadline.cleanup()
           );
     }
 
@@ -1048,26 +1089,44 @@
       );
 
     if (!payload) {
-      const response =
-        await fetch(
-          `${REFERENCE_INDEX_BASE}/mesh/${shard}.json.gz`,
-          {
-            cache:
-              "force-cache",
-            signal:
-              options.signal ||
-              undefined
-          }
+      const deadline =
+        deadlineSignal(
+          options.signal,
+          2_000
         );
 
-      if (!response.ok) {
+      try {
+        const response =
+          await fetch(
+            `${REFERENCE_INDEX_BASE}/mesh/${shard}.json.gz`,
+            {
+              cache:
+                "force-cache",
+              signal:
+                deadline.signal
+            }
+          );
+
+        if (!response.ok) {
+          return [];
+        }
+
+        payload =
+          await decodeReferenceShard(
+            response
+          );
+      } catch (error) {
+        if (
+          options.signal
+            ?.aborted
+        ) {
+          throw error;
+        }
+
         return [];
+      } finally {
+        deadline.cleanup();
       }
-
-      payload =
-        await decodeReferenceShard(
-          response
-        );
 
       referenceShardCache.set(
         shard,
@@ -1229,11 +1288,25 @@
       return [];
     }
 
+    const guard =
+      window.NovaSparxBrowserGuard
+        ?.status?.() || {};
+
     const result =
-      await search(
-        "all",
-        query
+      await settleWithin(
+        search(
+          "all",
+          query
+        ),
+        guard.isMobile
+          ? 2_500
+          : 4_000,
+        null
       );
+
+    if (!result) {
+      return [];
+    }
 
     return (
       Array.isArray(
@@ -1663,7 +1736,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.4.0",
+        "1.5.0",
       family,
       classify,
       allowDirectImage,
