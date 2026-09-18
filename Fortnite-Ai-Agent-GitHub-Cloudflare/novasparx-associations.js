@@ -388,6 +388,199 @@
     return null;
   }
 
+  function detectFamilyFromJson(
+    data,
+    fallbackPath = ""
+  ) {
+    let best =
+      family(
+        fallbackPath
+      );
+
+    let visited = 0;
+
+    const rank = {
+      other: 0,
+      material: 1,
+      texture: 2,
+      mesh: 3,
+      blueprint: 4
+    };
+
+    const consider = (
+      value,
+      key = ""
+    ) => {
+      const text =
+        `${key} ${String(value || "")}`
+          .toLowerCase();
+
+      let candidate =
+        "other";
+
+      if (
+        /blueprintgeneratedclass|\bblueprint\b|generatedclass/
+          .test(text)
+      ) {
+        candidate =
+          "blueprint";
+      } else if (
+        /skeletalmesh|staticmesh|\bmesh\b/
+          .test(text)
+      ) {
+        candidate =
+          "mesh";
+      } else if (
+        /texture2d|virtualtexture|\btexture\b/
+          .test(text)
+      ) {
+        candidate =
+          "texture";
+      } else if (
+        /materialinstance|materialinterface|\bmaterial\b/
+          .test(text)
+      ) {
+        candidate =
+          "material";
+      }
+
+      if (
+        rank[candidate] >
+        rank[best]
+      ) {
+        best =
+          candidate;
+      }
+    };
+
+    const walk = (
+      value,
+      key = "",
+      depth = 0
+    ) => {
+      if (
+        value == null ||
+        depth > 6 ||
+        visited++ > 900 ||
+        best === "blueprint"
+      ) {
+        return;
+      }
+
+      if (
+        typeof value ===
+          "string" ||
+        typeof value ===
+          "number"
+      ) {
+        consider(
+          value,
+          key
+        );
+        return;
+      }
+
+      if (
+        Array.isArray(value)
+      ) {
+        for (
+          const item of
+          value.slice(0, 60)
+        ) {
+          walk(
+            item,
+            key,
+            depth + 1
+          );
+        }
+
+        return;
+      }
+
+      if (
+        typeof value ===
+        "object"
+      ) {
+        for (
+          const [
+            childKey,
+            child
+          ] of
+          Object.entries(value)
+            .slice(0, 100)
+        ) {
+          if (
+            /^(?:Type|Class|ClassName|ExportType|ObjectName|AssetClass)$/i
+              .test(childKey)
+          ) {
+            consider(
+              child,
+              childKey
+            );
+          }
+
+          walk(
+            child,
+            childKey,
+            depth + 1
+          );
+        }
+      }
+    };
+
+    walk(data);
+
+    return best;
+  }
+
+  async function classify(
+    path,
+    options = {}
+  ) {
+    const pathFamily =
+      family(path);
+
+    // Strong Unreal naming prefixes are already deterministic enough to avoid
+    // a JSON request. Ambiguous paths fall through to bounded export JSON.
+    if (
+      pathFamily !==
+      "other"
+    ) {
+      return {
+        family:
+          pathFamily,
+        source:
+          "path-type"
+      };
+    }
+
+    const data =
+      await fetchExportJson(
+        path,
+        options.signal
+      );
+
+    if (!data) {
+      return {
+        family:
+          "other",
+        source:
+          "unknown"
+      };
+    }
+
+    return {
+      family:
+        detectFamilyFromJson(
+          data,
+          path
+        ),
+      source:
+        "export-json",
+      data
+    };
+  }
+
   function blueprintEvidence(data) {
     let found = false;
     let visited = 0;
@@ -897,8 +1090,9 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.0.0",
+        "1.1.0",
       family,
+      classify,
       allowDirectImage,
       allowTextureDecode,
       resolveVisual,
