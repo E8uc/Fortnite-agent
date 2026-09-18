@@ -3,15 +3,14 @@
 
   const CORE = () => globalThis.NovaSparx;
   const CACHE_NAME = "novasparx-device-mesh-v1";
-  const MAX_DEVICE_BYTES = 24 * 1024 * 1024;
+  const IS_MOBILE =
+    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || "");
+  const MAX_DEVICE_BYTES =
+    (IS_MOBILE ? 12 : 24) * 1024 * 1024;
   const MAX_DEVICE_ENTRIES =
-    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || "")
-      ? 4
-      : 8;
+    IS_MOBILE ? 3 : 8;
   const MAX_MEMORY_ENTRIES =
-    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || "")
-      ? 2
-      : 4;
+    IS_MOBILE ? 1 : 4;
 
   const memory = new Map();
   let lastTrace = [];
