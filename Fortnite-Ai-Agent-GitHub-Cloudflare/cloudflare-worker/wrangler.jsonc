@@ -4,5 +4,9 @@
   "name": "fortnite-ai-agent-api",
   "main": "worker.js",
   "compatibility_date": "2026-09-17",
-  "workers_dev": true
+  "workers_dev": true,
+  "keep_vars": true,
+  "vars": {
+    "NOVASPARX_AUTOLINK_URL": "https://fortnite-ai-agent-autolink.a39328122.workers.dev"
+  }
 }
