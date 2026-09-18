@@ -23,7 +23,8 @@ const NOVASPARX_EDGE_MAX_METADATA_BYTES =
 
 const NOVASPARX_EDGE_ALLOWED_RANGE_HOSTS = [
   "egdownload.fastly-edge.com",
-  "download.epicgames.com"
+  "download.epicgames.com",
+  "export-service-new.dillyapis.com"
 ];
 
 const SITE_URL =
@@ -561,8 +562,11 @@ function compactManifestMetadata(
   value
 ) {
   const candidates = [];
+  const ids = [];
   const versions = [];
   const seenUrls =
+    new Set();
+  const seenIds =
     new Set();
 
   let visited = 0;
@@ -747,6 +751,24 @@ function compactManifestMetadata(
           addVersion(node);
         }
 
+        if (
+          /^(?:manifestid|manifest_id|id)$/i
+            .test(key)
+        ) {
+          const id =
+            String(node || "")
+              .trim()
+              .slice(0, 240);
+
+          if (
+            id &&
+            !seenIds.has(id)
+          ) {
+            seenIds.add(id);
+            ids.push(id);
+          }
+        }
+
         addUrl(
           node,
           key,
@@ -821,6 +843,12 @@ function compactManifestMetadata(
   return {
     candidates:
       candidates.slice(
+        0,
+        8
+      ),
+
+    ids:
+      ids.slice(
         0,
         8
       ),
@@ -974,6 +1002,7 @@ async function handleNovaEdgeBootstrap(
         )
       : {
           candidates: [],
+          ids: [],
           versions: []
         };
 
@@ -1023,6 +1052,11 @@ async function handleNovaEdgeBootstrap(
         candidates:
           compactManifest
             .candidates,
+        ids:
+          compactManifest
+            .ids,
+        detailsBase:
+          NOVASPARX_EDGE_MANIFESTS_URL,
         versions:
           compactManifest
             .versions,
