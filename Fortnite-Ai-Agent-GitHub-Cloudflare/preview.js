@@ -626,7 +626,10 @@
               preferHQ: true,
               signal:
                 options.signal ||
-                null
+                null,
+              backend:
+                options.backend !==
+                false
             }
           );
 
@@ -2298,6 +2301,9 @@
             ui.meta,
             {
               signal,
+              backend:
+                !browserState.isMobile &&
+                !browserState.recoveryMode,
               sourceLabel:
                 association
                   ?.blueprintPath
@@ -2317,10 +2323,36 @@
             association
           };
         } catch (meshError) {
+          const browserState =
+            guard?.status?.() ||
+            {};
+
+          if (
+            browserState.isMobile ||
+            browserState.recoveryMode
+          ) {
+            return renderEvidenceImage(
+              clean,
+              info,
+              ui,
+              {
+                source:
+                  "device-safe-mesh-fallback",
+                attemptedReferences: [],
+                error:
+                  meshError?.message ||
+                  "No device-safe mesh preview layer was available."
+              }
+            );
+          }
+
           const universal =
             await tryUniversalPreview(
               clean,
-              ui
+              ui,
+              {
+                signal
+              }
             );
 
           if (universal.rendered) {
