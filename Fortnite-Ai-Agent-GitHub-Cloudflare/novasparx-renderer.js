@@ -572,6 +572,21 @@
     canvas.width = renderSize;
     canvas.height = renderSize;
 
+    let webglContextLost = false;
+
+    canvas.addEventListener(
+      "webglcontextlost",
+      () => {
+        webglContextLost = true;
+
+        guard?.setPressure?.(
+          "high",
+          "webgl-context-lost"
+        );
+      },
+      { once: true }
+    );
+
     const gl =
       canvas.getContext("webgl2", {
         alpha: true,
@@ -592,6 +607,8 @@
       });
 
     if (!gl) throw new Error("WebGL is unavailable on this device.");
+
+    try {
 
     const isWebGL2 =
       typeof WebGL2RenderingContext !== "undefined" &&
@@ -865,6 +882,15 @@
 
     gl.finish();
 
+    if (
+      webglContextLost ||
+      gl.isContextLost?.()
+    ) {
+      throw new Error(
+        "NovaSparx stopped this render because the browser lost its WebGL context."
+      );
+    }
+
     let outputCanvas = canvas;
 
     if (renderSize !== size) {
@@ -934,10 +960,25 @@
       bounds,
       materialFidelity: manifest.metadata?.materialFidelity || "unknown"
     };
+    } catch (error) {
+      // One-shot previews should never leave a failed GPU context alive.
+      // This matters especially on mobile Safari, where a failed WebGL render
+      // can otherwise keep a large drawing buffer until the tab is reclaimed.
+      try {
+        gl.getExtension(
+          "WEBGL_lose_context"
+        )?.loseContext();
+      } catch {}
+
+      canvas.width = 1;
+      canvas.height = 1;
+
+      throw error;
+    }
   }
 
   window.NovaSparxRenderer = Object.freeze({
-    version: "1.1.0",
+    version: "1.1.1",
     render
   });
 })();
