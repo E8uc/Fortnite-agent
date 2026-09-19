@@ -152,6 +152,14 @@
           true;
       }
 
+      try {
+        session.panel
+          ?.classList
+          .remove(
+            "novasparx-viewer-expanded"
+          );
+      } catch {}
+
       if (
         session.panel
           ?.dataset
@@ -1403,28 +1411,133 @@
             ?.webkitRequestFullscreen;
 
         fullscreenButton.disabled =
-          typeof requestFullscreen !==
-            "function";
+          false;
+
+        const syncFullscreenButton =
+          () => {
+            const nativeActive =
+              document.fullscreenElement ===
+                fullscreenTarget ||
+              document.webkitFullscreenElement ===
+                fullscreenTarget;
+
+            const fallbackActive =
+              fullscreenTarget
+                ?.classList
+                .contains(
+                  "novasparx-viewer-expanded"
+                );
+
+            const active =
+              nativeActive ||
+              fallbackActive;
+
+            fullscreenButton
+              .setAttribute(
+                "aria-pressed",
+                active
+                  ? "true"
+                  : "false"
+              );
+
+            fullscreenButton.textContent =
+              active
+                ? t(
+                    "exitFullscreen",
+                    "Exit Fullscreen"
+                  )
+                : t(
+                    "fullscreen",
+                    "Fullscreen"
+                  );
+          };
 
         fullscreenButton.onclick =
-          fullscreenButton.disabled
-            ? null
-            : async () => {
-                try {
-                  await requestFullscreen
+          async () => {
+            const nativeActive =
+              document.fullscreenElement ===
+                fullscreenTarget ||
+              document.webkitFullscreenElement ===
+                fullscreenTarget;
+
+            const fallbackActive =
+              fullscreenTarget
+                ?.classList
+                .contains(
+                  "novasparx-viewer-expanded"
+                );
+
+            try {
+              if (nativeActive) {
+                const exitFullscreen =
+                  document.exitFullscreen ||
+                  document.webkitExitFullscreen;
+
+                if (
+                  typeof exitFullscreen ===
+                    "function"
+                ) {
+                  await exitFullscreen
                     .call(
-                      fullscreenTarget
+                      document
                     );
-                } catch (error) {
-                  viewerNotice(
-                    ui,
-                    key,
-                    error?.message ||
-                      "Fullscreen is unavailable on this device.",
-                    "error"
-                  );
                 }
-              };
+              } else if (
+                fallbackActive
+              ) {
+                fullscreenTarget
+                  .classList
+                  .remove(
+                    "novasparx-viewer-expanded"
+                  );
+              } else if (
+                typeof requestFullscreen ===
+                  "function"
+              ) {
+                await requestFullscreen
+                  .call(
+                    fullscreenTarget
+                  );
+              } else {
+                fullscreenTarget
+                  .classList
+                  .add(
+                    "novasparx-viewer-expanded"
+                  );
+              }
+
+              syncFullscreenButton();
+            } catch (error) {
+              // Safari on iPhone does not expose arbitrary-element fullscreen.
+              // Fall back to an in-page full-viewport viewer instead.
+              try {
+                fullscreenTarget
+                  .classList
+                  .toggle(
+                    "novasparx-viewer-expanded",
+                    !fallbackActive
+                  );
+
+                syncFullscreenButton();
+              } catch {
+                viewerNotice(
+                  ui,
+                  key,
+                  error?.message ||
+                    "Fullscreen is unavailable on this device.",
+                  "error"
+                );
+              }
+            }
+          };
+
+        fullscreenButton
+          .setAttribute(
+            "aria-pressed",
+            "false"
+          );
+
+        syncFullscreenButton();
       }
     }
 
@@ -4115,7 +4228,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "2.2.0",
+      version: "2.2.1",
       toggle,
       render: renderPreview,
       release,
