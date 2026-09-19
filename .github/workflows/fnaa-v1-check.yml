@@ -63,6 +63,10 @@ jobs:
         shell: bash
         run: node Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-browser-guard.selftest.mjs
 
+      - name: Run NovaSparx browser transport security self-test
+        shell: bash
+        run: node Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-browser-transport.selftest.mjs
+
       - name: Verify required site files
         shell: bash
         run: |
@@ -77,6 +81,7 @@ jobs:
             'novasparx-browser-guard.js'
             'novasparx-core.js'
             'novasparx-browser-transport.js'
+            'novasparx-browser-transport.selftest.mjs'
             'novasparx-local-parser.js'
             'novasparx-layers.js'
             'novasparx-associations.js'
