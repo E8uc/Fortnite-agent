@@ -1418,8 +1418,1970 @@
     }
   }
 
+
+  function clamp(
+    value,
+    minimum,
+    maximum
+  ) {
+    return Math.min(
+      maximum,
+      Math.max(
+        minimum,
+        value
+      )
+    );
+  }
+
+  function wireframeIndices(
+    source,
+    Type,
+    signal = null
+  ) {
+    if (
+      source.length >
+      1_200_000
+    ) {
+      throw new Error(
+        "Wireframe is disabled for this very large mesh to protect browser memory."
+      );
+    }
+
+    const output =
+      new Type(
+        source.length * 2
+      );
+
+    let write = 0;
+
+    for (
+      let index = 0;
+      index + 2 <
+        source.length;
+      index += 3
+    ) {
+      if (
+        (index & 12287) ===
+        0
+      ) {
+        throwIfAborted(
+          signal
+        );
+      }
+
+      const a =
+        source[index];
+
+      const b =
+        source[index + 1];
+
+      const d =
+        source[index + 2];
+
+      output[write++] = a;
+      output[write++] = b;
+      output[write++] = b;
+      output[write++] = d;
+      output[write++] = d;
+      output[write++] = a;
+    }
+
+    return output;
+  }
+
+  async function mount(
+    manifest,
+    host,
+    options = {}
+  ) {
+    if (
+      !manifest?.geometry
+    ) {
+      throw new Error(
+        "NovaSparx manifest has no geometry."
+      );
+    }
+
+    if (
+      !host ||
+      typeof host
+        .replaceChildren !==
+        "function"
+    ) {
+      throw new Error(
+        "NovaSparx viewer host is missing."
+      );
+    }
+
+    const guard =
+      window.NovaSparxBrowserGuard;
+
+    const signal =
+      options.signal ||
+      guard?.activeSignal?.() ||
+      null;
+
+    throwIfAborted(
+      signal
+    );
+
+    guard
+      ?.assertManifestBudget?.(
+        manifest
+      );
+
+    const policy =
+      guard
+        ?.renderPolicy?.(
+          manifest
+        ) || {};
+
+    const geometry =
+      manifest.geometry;
+
+    const positions =
+      asTyped(
+        geometry.positions,
+        Float32Array
+      );
+
+    const indices32 =
+      asTyped(
+        geometry.indices,
+        Uint32Array
+      );
+
+    const vertexCount =
+      positions.length / 3;
+
+    const normals =
+      geometry.normals
+        ? asTyped(
+            geometry.normals,
+            Float32Array
+          )
+        : calculateNormals(
+            positions,
+            indices32,
+            signal
+          );
+
+    const uv0 =
+      geometry.uv0
+        ? asTyped(
+            geometry.uv0,
+            Float32Array
+          )
+        : null;
+
+    const colors =
+      geometry.colors
+        ? asTyped(
+            geometry.colors,
+            Float32Array
+          )
+        : null;
+
+    const tangents =
+      geometry.tangents
+        ? asTyped(
+            geometry.tangents,
+            Float32Array
+          )
+        : null;
+
+    if (
+      !positions.length ||
+      !indices32.length
+    ) {
+      throw new Error(
+        "NovaSparx mesh geometry is empty."
+      );
+    }
+
+    const canvas =
+      document.createElement(
+        "canvas"
+      );
+
+    canvas.className =
+      "novasparx-viewer-canvas";
+
+    canvas.tabIndex = 0;
+
+    canvas.setAttribute(
+      "aria-label",
+      "Interactive 3D model viewer"
+    );
+
+    host.replaceChildren(
+      canvas
+    );
+
+    let contextLost =
+      false;
+
+    canvas.addEventListener(
+      "webglcontextlost",
+      (event) => {
+        event.preventDefault();
+
+        contextLost =
+          true;
+
+        guard?.setPressure?.(
+          "high",
+          "webgl-context-lost"
+        );
+      }
+    );
+
+    const gl =
+      canvas.getContext(
+        "webgl2",
+        {
+          alpha: true,
+          antialias: true,
+          depth: true,
+          premultipliedAlpha:
+            false,
+          preserveDrawingBuffer:
+            true,
+          powerPreference:
+            policy.powerPreference ||
+            "high-performance"
+        }
+      ) ||
+      canvas.getContext(
+        "webgl",
+        {
+          alpha: true,
+          antialias: true,
+          depth: true,
+          premultipliedAlpha:
+            false,
+          preserveDrawingBuffer:
+            true
+        }
+      );
+
+    if (!gl) {
+      canvas.remove();
+
+      throw new Error(
+        "WebGL is unavailable on this device."
+      );
+    }
+
+    const isWebGL2 =
+      typeof WebGL2RenderingContext !==
+        "undefined" &&
+      gl instanceof
+        WebGL2RenderingContext;
+
+    const supportsUintIndices =
+      isWebGL2 ||
+      !!gl.getExtension(
+        "OES_element_index_uint"
+      );
+
+    if (
+      !supportsUintIndices &&
+      vertexCount >
+        65535
+    ) {
+      try {
+        gl.getExtension(
+          "WEBGL_lose_context"
+        )?.loseContext();
+      } catch {}
+
+      canvas.remove();
+
+      throw new Error(
+        "This device cannot render this mesh because 32-bit indices are unavailable."
+      );
+    }
+
+    const IndexType =
+      supportsUintIndices
+        ? Uint32Array
+        : Uint16Array;
+
+    const indices =
+      supportsUintIndices
+        ? indices32
+        : new Uint16Array(
+            indices32
+          );
+
+    const indexType =
+      supportsUintIndices
+        ? gl.UNSIGNED_INT
+        : gl.UNSIGNED_SHORT;
+
+    const bytesPerIndex =
+      supportsUintIndices
+        ? 4
+        : 2;
+
+    let disposed =
+      false;
+
+    let program =
+      null;
+
+    let white =
+      null;
+
+    let flatNormal =
+      null;
+
+    let black =
+      null;
+
+    let lineIndexBuffer =
+      null;
+
+    let lineIndexCount =
+      0;
+
+    const buffers = [];
+
+    const loadedMaterials =
+      [];
+
+    const listeners =
+      [];
+
+    let resizeObserver =
+      null;
+
+    let frame =
+      0;
+
+    const bounds =
+      getBounds(
+        positions,
+        signal
+      );
+
+    const model =
+      multiply(
+        uniformScale(
+          1 /
+          bounds.radius
+        ),
+        translation(
+          -bounds.centerX,
+          -bounds.centerY,
+          -bounds.centerZ
+        )
+      );
+
+    const cameraSeed =
+      chooseCamera(
+        bounds
+      );
+
+    const horizontalSeed =
+      Math.hypot(
+        cameraSeed[0],
+        cameraSeed[1]
+      ) || 1;
+
+    const state = {
+      yaw:
+        Math.atan2(
+          cameraSeed[1],
+          cameraSeed[0]
+        ),
+
+      pitch:
+        Math.atan2(
+          cameraSeed[2],
+          horizontalSeed
+        ),
+
+      zoom:
+        1,
+
+      panX:
+        0,
+
+      panY:
+        0,
+
+      wireframe:
+        false
+    };
+
+    const defaults = {
+      ...state
+    };
+
+    const materials =
+      (
+        manifest.materials?.length
+          ? manifest.materials
+          : [{}]
+      ).slice(
+        0,
+        Number(
+          policy.maxMaterials
+        ) ||
+        24
+      );
+
+    const sections =
+      manifest.sections?.length
+        ? manifest.sections
+        : [
+            {
+              firstIndex:
+                0,
+
+              indexCount:
+                indices.length,
+
+              materialIndex:
+                0
+            }
+          ];
+
+    const background =
+      Array.isArray(
+        options.background
+      )
+        ? options.background
+        : TRANSPARENT;
+
+    const addListener =
+      (
+        target,
+        type,
+        handler,
+        listenerOptions
+      ) => {
+        target.addEventListener(
+          type,
+          handler,
+          listenerOptions
+        );
+
+        listeners.push(
+          [
+            target,
+            type,
+            handler,
+            listenerOptions
+          ]
+        );
+      };
+
+    const releaseResources =
+      () => {
+        for (
+          const [
+            target,
+            type,
+            handler,
+            listenerOptions
+          ] of listeners.splice(
+            0
+          )
+        ) {
+          try {
+            target.removeEventListener(
+              type,
+              handler,
+              listenerOptions
+            );
+          } catch {}
+        }
+
+        try {
+          resizeObserver?.disconnect?.();
+        } catch {}
+
+        resizeObserver =
+          null;
+
+        if (frame) {
+          cancelAnimationFrame(
+            frame
+          );
+
+          frame = 0;
+        }
+
+        for (
+          const item of
+          loadedMaterials
+        ) {
+          for (
+            const map of
+            item.maps || []
+          ) {
+            if (
+              map?.loaded &&
+              map.texture
+            ) {
+              try {
+                gl.deleteTexture(
+                  map.texture
+                );
+              } catch {}
+            }
+          }
+        }
+
+        for (
+          const texture of
+          [
+            white,
+            flatNormal,
+            black
+          ]
+        ) {
+          if (texture) {
+            try {
+              gl.deleteTexture(
+                texture
+              );
+            } catch {}
+          }
+        }
+
+        if (
+          lineIndexBuffer
+        ) {
+          try {
+            gl.deleteBuffer(
+              lineIndexBuffer
+            );
+          } catch {}
+        }
+
+        for (
+          const buffer of
+          buffers
+        ) {
+          if (buffer) {
+            try {
+              gl.deleteBuffer(
+                buffer
+              );
+            } catch {}
+          }
+        }
+
+        if (program) {
+          try {
+            gl.deleteProgram(
+              program
+            );
+          } catch {}
+        }
+
+        try {
+          gl.getExtension(
+            "WEBGL_lose_context"
+          )?.loseContext();
+        } catch {}
+
+        canvas.width = 1;
+        canvas.height = 1;
+      };
+
+    const scheduleDraw =
+      () => {
+        if (
+          disposed ||
+          frame
+        ) {
+          return;
+        }
+
+        frame =
+          requestAnimationFrame(
+            () => {
+              frame = 0;
+
+              if (!disposed) {
+                draw();
+              }
+            }
+          );
+      };
+
+    const resize =
+      () => {
+        if (disposed) {
+          return;
+        }
+
+        const rect =
+          host.getBoundingClientRect();
+
+        const guardState =
+          guard?.status?.() ||
+          {};
+
+        const dpr =
+          Math.min(
+            Number(
+              window.devicePixelRatio ||
+              1
+            ),
+            guardState.isMobile
+              ? 1.5
+              : 2
+          );
+
+        const width =
+          Math.max(
+            240,
+            Math.min(
+              1400,
+              Math.round(
+                Math.max(
+                  1,
+                  rect.width
+                ) *
+                dpr
+              )
+            )
+          );
+
+        const height =
+          Math.max(
+            220,
+            Math.min(
+              1000,
+              Math.round(
+                Math.max(
+                  1,
+                  rect.height
+                ) *
+                dpr
+              )
+            )
+          );
+
+        if (
+          canvas.width !==
+            width ||
+          canvas.height !==
+            height
+        ) {
+          canvas.width =
+            width;
+
+          canvas.height =
+            height;
+
+          scheduleDraw();
+        }
+      };
+
+    const bindMaterial =
+      (loaded) => {
+        const material =
+          loaded?.material ||
+          {};
+
+        const maps =
+          loaded?.maps ||
+          [];
+
+        const baseColor =
+          material.baseColor ||
+          [1, 1, 1, 1];
+
+        const emissiveColor =
+          material.emissiveColor ||
+          [0, 0, 0, 1];
+
+        gl.uniform4f(
+          gl.getUniformLocation(
+            program,
+            "uBaseColor"
+          ),
+          ...baseColor
+        );
+
+        gl.uniform4f(
+          gl.getUniformLocation(
+            program,
+            "uEmissiveColor"
+          ),
+          ...emissiveColor
+        );
+
+        gl.uniform1f(
+          gl.getUniformLocation(
+            program,
+            "uRoughness"
+          ),
+          Number(
+            material.roughness ??
+            0.62
+          )
+        );
+
+        gl.uniform1f(
+          gl.getUniformLocation(
+            program,
+            "uMetallic"
+          ),
+          Number(
+            material.metallic ??
+            0
+          )
+        );
+
+        gl.uniform1f(
+          gl.getUniformLocation(
+            program,
+            "uSpecular"
+          ),
+          Number(
+            material.specular ??
+            0.5
+          )
+        );
+
+        gl.uniform1f(
+          gl.getUniformLocation(
+            program,
+            "uOpacity"
+          ),
+          Number(
+            material.opacity ??
+            1
+          )
+        );
+
+        gl.uniform1f(
+          gl.getUniformLocation(
+            program,
+            "uCutoff"
+          ),
+          Number(
+            material.opacityCutoff ??
+            0.333
+          )
+        );
+
+        gl.uniform1i(
+          gl.getUniformLocation(
+            program,
+            "uAlphaMode"
+          ),
+          alphaMode(
+            material.opacityMode
+          )
+        );
+
+        gl.uniform1i(
+          gl.getUniformLocation(
+            program,
+            "uUseVertexColor"
+          ),
+          colors &&
+          material.useVertexColor
+            ? 1
+            : 0
+        );
+
+        const uvScale =
+          material.uvScale ||
+          [1, 1];
+
+        const uvOffset =
+          material.uvOffset ||
+          [0, 0];
+
+        gl.uniform2f(
+          gl.getUniformLocation(
+            program,
+            "uUVScale"
+          ),
+          Number(
+            uvScale[0] ??
+            1
+          ),
+          Number(
+            uvScale[1] ??
+            1
+          )
+        );
+
+        gl.uniform2f(
+          gl.getUniformLocation(
+            program,
+            "uUVOffset"
+          ),
+          Number(
+            uvOffset[0] ??
+            0
+          ),
+          Number(
+            uvOffset[1] ??
+            0
+          )
+        );
+
+        const textureBindings =
+          [
+            [
+              "uBaseMap",
+              "uHasBase",
+              0,
+              !!(
+                uv0 &&
+                maps[0]?.loaded
+              )
+            ],
+            [
+              "uNormalMap",
+              "uHasNormal",
+              1,
+              !!(
+                uv0 &&
+                tangents &&
+                maps[1]?.loaded
+              )
+            ],
+            [
+              "uEmissiveMap",
+              "uHasEmissive",
+              2,
+              !!(
+                uv0 &&
+                maps[2]?.loaded
+              )
+            ],
+            [
+              "uOpacityMap",
+              "uHasOpacity",
+              3,
+              !!(
+                uv0 &&
+                maps[3]?.loaded
+              )
+            ],
+            [
+              "uPackedMap",
+              "uHasPacked",
+              4,
+              !!(
+                uv0 &&
+                maps[4]?.loaded
+              )
+            ]
+          ];
+
+        textureBindings
+          .forEach(
+            (
+              [
+                samplerName,
+                flagName,
+                unit,
+                enabled
+              ]
+            ) => {
+              gl.activeTexture(
+                gl.TEXTURE0 +
+                unit
+              );
+
+              gl.bindTexture(
+                gl.TEXTURE_2D,
+                maps[unit]
+                  ?.texture ||
+                (
+                  unit === 1
+                    ? flatNormal
+                    : unit === 2
+                      ? black
+                      : white
+                )
+              );
+
+              gl.uniform1i(
+                gl.getUniformLocation(
+                  program,
+                  samplerName
+                ),
+                unit
+              );
+
+              gl.uniform1i(
+                gl.getUniformLocation(
+                  program,
+                  flagName
+                ),
+                enabled
+                  ? 1
+                  : 0
+              );
+            }
+          );
+
+        gl.uniform1i(
+          gl.getUniformLocation(
+            program,
+            "uAOChannel"
+          ),
+          Number(
+            material
+              .packedChannels
+              ?.ao ??
+            -1
+          )
+        );
+
+        gl.uniform1i(
+          gl.getUniformLocation(
+            program,
+            "uRoughnessChannel"
+          ),
+          Number(
+            material
+              .packedChannels
+              ?.roughness ??
+            -1
+          )
+        );
+
+        gl.uniform1i(
+          gl.getUniformLocation(
+            program,
+            "uMetallicChannel"
+          ),
+          Number(
+            material
+              .packedChannels
+              ?.metallic ??
+            -1
+          )
+        );
+      };
+
+    function draw() {
+      if (
+        disposed ||
+        contextLost ||
+        gl.isContextLost?.()
+      ) {
+        return;
+      }
+
+      throwIfAborted(
+        signal
+      );
+
+      const width =
+        Math.max(
+          1,
+          canvas.width
+        );
+
+      const height =
+        Math.max(
+          1,
+          canvas.height
+        );
+
+      gl.viewport(
+        0,
+        0,
+        width,
+        height
+      );
+
+      gl.clearColor(
+        Number(
+          background[0] ||
+          0
+        ),
+        Number(
+          background[1] ||
+          0
+        ),
+        Number(
+          background[2] ||
+          0
+        ),
+        Number(
+          background[3] ??
+          0
+        )
+      );
+
+      gl.clearDepth(1);
+
+      gl.enable(
+        gl.DEPTH_TEST
+      );
+
+      gl.depthFunc(
+        gl.LEQUAL
+      );
+
+      gl.disable(
+        gl.CULL_FACE
+      );
+
+      gl.enable(
+        gl.BLEND
+      );
+
+      gl.blendFunc(
+        gl.SRC_ALPHA,
+        gl.ONE_MINUS_SRC_ALPHA
+      );
+
+      gl.clear(
+        gl.COLOR_BUFFER_BIT |
+        gl.DEPTH_BUFFER_BIT
+      );
+
+      const aspect =
+        width /
+        height;
+
+      const extentY =
+        1.12 /
+        state.zoom;
+
+      const extentX =
+        extentY *
+        aspect;
+
+      const projection =
+        orthographic(
+          -extentX,
+          extentX,
+          -extentY,
+          extentY,
+          0.01,
+          20
+        );
+
+      const cosPitch =
+        Math.cos(
+          state.pitch
+        );
+
+      const distance =
+        4.2;
+
+      const target = [
+        state.panX,
+        state.panY,
+        0
+      ];
+
+      const eye = [
+        target[0] +
+          Math.cos(
+            state.yaw
+          ) *
+          cosPitch *
+          distance,
+
+        target[1] +
+          Math.sin(
+            state.yaw
+          ) *
+          cosPitch *
+          distance,
+
+        target[2] +
+          Math.sin(
+            state.pitch
+          ) *
+          distance
+      ];
+
+      const view =
+        lookAt(
+          eye,
+          target,
+          [0, 0, 1]
+        );
+
+      const mvp =
+        multiply(
+          projection,
+          multiply(
+            view,
+            model
+          )
+        );
+
+      gl.uniformMatrix4fv(
+        gl.getUniformLocation(
+          program,
+          "uModel"
+        ),
+        false,
+        model
+      );
+
+      gl.uniformMatrix4fv(
+        gl.getUniformLocation(
+          program,
+          "uMVP"
+        ),
+        false,
+        mvp
+      );
+
+      if (
+        state.wireframe
+      ) {
+        bindMaterial(
+          loadedMaterials[0]
+        );
+
+        gl.bindBuffer(
+          gl.ELEMENT_ARRAY_BUFFER,
+          lineIndexBuffer
+        );
+
+        gl.drawElements(
+          gl.LINES,
+          lineIndexCount,
+          indexType,
+          0
+        );
+
+        return;
+      }
+
+      gl.bindBuffer(
+        gl.ELEMENT_ARRAY_BUFFER,
+        buffers[
+          buffers.length - 1
+        ]
+      );
+
+      for (
+        const section of
+        sections
+      ) {
+        const loaded =
+          loadedMaterials[
+            Math.min(
+              Number(
+                section
+                  .materialIndex ||
+                0
+              ),
+              loadedMaterials
+                .length -
+                1
+            )
+          ] ||
+          loadedMaterials[0];
+
+        bindMaterial(
+          loaded
+        );
+
+        const firstIndex =
+          Math.max(
+            0,
+            Math.min(
+              indices.length,
+              Number(
+                section
+                  .firstIndex
+              ) ||
+              0
+            )
+          );
+
+        let count =
+          Math.max(
+            0,
+            Math.min(
+              indices.length -
+                firstIndex,
+              Number(
+                section
+                  .indexCount
+              ) ||
+              0
+            )
+          );
+
+        count -=
+          count % 3;
+
+        if (
+          count > 0
+        ) {
+          gl.drawElements(
+            gl.TRIANGLES,
+            count,
+            indexType,
+            firstIndex *
+              bytesPerIndex
+          );
+        }
+      }
+    }
+
+    try {
+      program =
+        createProgram(
+          gl
+        );
+
+      gl.useProgram(
+        program
+      );
+
+      const positionBuffer =
+        createBuffer(
+          gl,
+          positions
+        );
+
+      const normalBuffer =
+        createBuffer(
+          gl,
+          normals
+        );
+
+      const uvBuffer =
+        uv0
+          ? createBuffer(
+              gl,
+              uv0
+            )
+          : null;
+
+      const colorBuffer =
+        colors
+          ? createBuffer(
+              gl,
+              colors
+            )
+          : null;
+
+      const tangentBuffer =
+        tangents
+          ? createBuffer(
+              gl,
+              tangents
+            )
+          : null;
+
+      const indexBuffer =
+        createBuffer(
+          gl,
+          indices,
+          gl.ELEMENT_ARRAY_BUFFER
+        );
+
+      buffers.push(
+        positionBuffer,
+        normalBuffer,
+        uvBuffer,
+        colorBuffer,
+        tangentBuffer,
+        indexBuffer
+      );
+
+      setAttribute(
+        gl,
+        program,
+        "aPosition",
+        positionBuffer,
+        3,
+        [0, 0, 0, 1]
+      );
+
+      setAttribute(
+        gl,
+        program,
+        "aNormal",
+        normalBuffer,
+        3,
+        [0, 0, 1, 1]
+      );
+
+      setAttribute(
+        gl,
+        program,
+        "aUV",
+        uvBuffer,
+        2,
+        [0, 0, 0, 1]
+      );
+
+      setAttribute(
+        gl,
+        program,
+        "aColor",
+        colorBuffer,
+        4,
+        [1, 1, 1, 1]
+      );
+
+      setAttribute(
+        gl,
+        program,
+        "aTangent",
+        tangentBuffer,
+        4,
+        [1, 0, 0, 1]
+      );
+
+      gl.bindBuffer(
+        gl.ELEMENT_ARRAY_BUFFER,
+        indexBuffer
+      );
+
+      white =
+        createSolidTexture(
+          gl,
+          [255, 255, 255, 255]
+        );
+
+      flatNormal =
+        createSolidTexture(
+          gl,
+          [128, 128, 255, 255]
+        );
+
+      black =
+        createSolidTexture(
+          gl,
+          [0, 0, 0, 255]
+        );
+
+      const textureModes =
+        new Set(
+          policy.textureModes ||
+          [
+            "base",
+            "normal",
+            "emissive",
+            "opacity",
+            "packed"
+          ]
+        );
+
+      let remainingTextureLoads =
+        Number(
+          policy.maxTextureLoads
+        ) ||
+        40;
+
+      const guardedTexture =
+        async (
+          mode,
+          url,
+          fallbackTexture
+        ) => {
+          if (
+            !url ||
+            !textureModes.has(
+              mode
+            ) ||
+            remainingTextureLoads <=
+              0
+          ) {
+            return {
+              texture:
+                fallbackTexture,
+
+              loaded:
+                false
+            };
+          }
+
+          remainingTextureLoads--;
+
+          return loadTexture(
+            gl,
+            url,
+            fallbackTexture,
+            {
+              mipmaps:
+                policy.mipmaps !==
+                false,
+
+              signal
+            }
+          );
+        };
+
+      for (
+        const material of
+        materials
+      ) {
+        throwIfAborted(
+          signal
+        );
+
+        const maps =
+          await Promise.all(
+            [
+              guardedTexture(
+                "base",
+                material
+                  .baseColorTexture,
+                white
+              ),
+
+              guardedTexture(
+                "normal",
+                material
+                  .normalTexture,
+                flatNormal
+              ),
+
+              guardedTexture(
+                "emissive",
+                material
+                  .emissiveTexture,
+                black
+              ),
+
+              guardedTexture(
+                "opacity",
+                material
+                  .opacityTexture,
+                white
+              ),
+
+              guardedTexture(
+                "packed",
+                material
+                  .packedTexture,
+                white
+              )
+            ]
+          );
+
+        loadedMaterials.push({
+          material,
+          maps
+        });
+      }
+
+      throwIfAborted(
+        signal
+      );
+
+      const pointers =
+        new Map();
+
+      let gesture =
+        null;
+
+      const pointerPoint =
+        (event) => ({
+          x:
+            event.clientX,
+
+          y:
+            event.clientY
+        });
+
+      const panByPixels =
+        (
+          deltaX,
+          deltaY
+        ) => {
+          const denominator =
+            Math.max(
+              180,
+              Math.min(
+                canvas.clientWidth ||
+                  1,
+                canvas.clientHeight ||
+                  1
+              )
+            );
+
+          const scale =
+            2.24 /
+            state.zoom /
+            denominator;
+
+          state.panX -=
+            deltaX *
+            scale;
+
+          state.panY +=
+            deltaY *
+            scale;
+        };
+
+      const onPointerDown =
+        (event) => {
+          if (disposed) {
+            return;
+          }
+
+          canvas.focus({
+            preventScroll:
+              true
+          });
+
+          try {
+            canvas.setPointerCapture(
+              event.pointerId
+            );
+          } catch {}
+
+          pointers.set(
+            event.pointerId,
+            pointerPoint(
+              event
+            )
+          );
+
+          gesture =
+            null;
+        };
+
+      const onPointerMove =
+        (event) => {
+          if (
+            disposed ||
+            !pointers.has(
+              event.pointerId
+            )
+          ) {
+            return;
+          }
+
+          const previous =
+            pointers.get(
+              event.pointerId
+            );
+
+          const current =
+            pointerPoint(
+              event
+            );
+
+          pointers.set(
+            event.pointerId,
+            current
+          );
+
+          if (
+            pointers.size >=
+            2
+          ) {
+            const pair =
+              [...pointers.values()]
+                .slice(
+                  0,
+                  2
+                );
+
+            const dx =
+              pair[1].x -
+              pair[0].x;
+
+            const dy =
+              pair[1].y -
+              pair[0].y;
+
+            const distance =
+              Math.max(
+                1,
+                Math.hypot(
+                  dx,
+                  dy
+                )
+              );
+
+            const midpoint = {
+              x:
+                (
+                  pair[0].x +
+                  pair[1].x
+                ) /
+                2,
+
+              y:
+                (
+                  pair[0].y +
+                  pair[1].y
+                ) /
+                2
+            };
+
+            if (gesture) {
+              state.zoom =
+                clamp(
+                  state.zoom *
+                  (
+                    distance /
+                    gesture.distance
+                  ),
+                  0.35,
+                  7
+                );
+
+              panByPixels(
+                midpoint.x -
+                  gesture.midpoint.x,
+                midpoint.y -
+                  gesture.midpoint.y
+              );
+            }
+
+            gesture = {
+              distance,
+              midpoint
+            };
+
+            scheduleDraw();
+
+            return;
+          }
+
+          gesture =
+            null;
+
+          const deltaX =
+            current.x -
+            previous.x;
+
+          const deltaY =
+            current.y -
+            previous.y;
+
+          const panMode =
+            event.shiftKey ||
+            event.button ===
+              2 ||
+            (
+              event.buttons &
+              2
+            ) ===
+              2;
+
+          if (panMode) {
+            panByPixels(
+              deltaX,
+              deltaY
+            );
+          } else {
+            state.yaw -=
+              deltaX *
+              0.008;
+
+            state.pitch =
+              clamp(
+                state.pitch +
+                deltaY *
+                0.008,
+                -1.45,
+                1.45
+              );
+          }
+
+          scheduleDraw();
+        };
+
+      const onPointerEnd =
+        (event) => {
+          pointers.delete(
+            event.pointerId
+          );
+
+          if (
+            pointers.size <
+            2
+          ) {
+            gesture =
+              null;
+          }
+
+          try {
+            canvas.releasePointerCapture(
+              event.pointerId
+            );
+          } catch {}
+        };
+
+      const onWheel =
+        (event) => {
+          event.preventDefault();
+
+          state.zoom =
+            clamp(
+              state.zoom *
+                Math.exp(
+                  -event.deltaY *
+                  0.0012
+                ),
+              0.35,
+              7
+            );
+
+          scheduleDraw();
+        };
+
+      const onContextMenu =
+        (event) => {
+          event.preventDefault();
+        };
+
+      addListener(
+        canvas,
+        "pointerdown",
+        onPointerDown
+      );
+
+      addListener(
+        canvas,
+        "pointermove",
+        onPointerMove
+      );
+
+      addListener(
+        canvas,
+        "pointerup",
+        onPointerEnd
+      );
+
+      addListener(
+        canvas,
+        "pointercancel",
+        onPointerEnd
+      );
+
+      addListener(
+        canvas,
+        "wheel",
+        onWheel,
+        {
+          passive:
+            false
+        }
+      );
+
+      addListener(
+        canvas,
+        "contextmenu",
+        onContextMenu
+      );
+
+      addListener(
+        canvas,
+        "dblclick",
+        () => {
+          Object.assign(
+            state,
+            defaults
+          );
+
+          scheduleDraw();
+        }
+      );
+
+      if (
+        typeof ResizeObserver ===
+          "function"
+      ) {
+        resizeObserver =
+          new ResizeObserver(
+            resize
+          );
+
+        resizeObserver.observe(
+          host
+        );
+      } else {
+        addListener(
+          window,
+          "resize",
+          resize
+        );
+      }
+
+      resize();
+      draw();
+
+      const textured =
+        loadedMaterials.some(
+          (item) =>
+            item.maps?.[0]
+              ?.loaded
+        );
+
+      const normalMapped =
+        loadedMaterials.some(
+          (item) =>
+            item.maps?.[1]
+              ?.loaded
+        );
+
+      return {
+        canvas,
+
+        vertexCount,
+
+        triangleCount:
+          indices.length /
+          3,
+
+        materialCount:
+          materials.length,
+
+        textured,
+
+        normalMapped,
+
+        bounds,
+
+        materialFidelity:
+          manifest.metadata
+            ?.materialFidelity ||
+          "unknown",
+
+        reset() {
+          if (disposed) {
+            return;
+          }
+
+          Object.assign(
+            state,
+            defaults
+          );
+
+          scheduleDraw();
+        },
+
+        zoomBy(
+          factor
+        ) {
+          if (disposed) {
+            return;
+          }
+
+          state.zoom =
+            clamp(
+              state.zoom *
+              Number(
+                factor ||
+                1
+              ),
+              0.35,
+              7
+            );
+
+          scheduleDraw();
+        },
+
+        toggleWireframe(
+          force
+        ) {
+          if (disposed) {
+            return false;
+          }
+
+          const next =
+            typeof force ===
+              "boolean"
+              ? force
+              : !state
+                  .wireframe;
+
+          if (
+            next &&
+            !lineIndexBuffer
+          ) {
+            const lineIndices =
+              wireframeIndices(
+                indices,
+                IndexType,
+                signal
+              );
+
+            lineIndexBuffer =
+              createBuffer(
+                gl,
+                lineIndices,
+                gl.ELEMENT_ARRAY_BUFFER
+              );
+
+            lineIndexCount =
+              lineIndices.length;
+          }
+
+          state.wireframe =
+            next;
+
+          scheduleDraw();
+
+          return state.wireframe;
+        },
+
+        async capture() {
+          if (disposed) {
+            throw new Error(
+              "NovaSparx viewer is closed."
+            );
+          }
+
+          draw();
+
+          return canvasToBlob(
+            canvas,
+            signal
+          );
+        },
+
+        dispose() {
+          if (disposed) {
+            return;
+          }
+
+          disposed =
+            true;
+
+          releaseResources();
+
+          try {
+            canvas.remove();
+          } catch {}
+        }
+      };
+    } catch (error) {
+      disposed =
+        true;
+
+      releaseResources();
+
+      try {
+        canvas.remove();
+      } catch {}
+
+      throw error;
+    }
+  }
+
   window.NovaSparxRenderer = Object.freeze({
-    version: "1.4.0",
-    render
+    version: "1.5.0",
+    render,
+    mount
   });
 })();
