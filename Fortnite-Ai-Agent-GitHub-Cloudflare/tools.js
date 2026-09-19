@@ -4656,7 +4656,55 @@
             "[data-image-placeholder]"
           );
 
+      let timeout = null;
+
+      const clearImageTimeout =
+        () => {
+          if (timeout) {
+            clearTimeout(
+              timeout
+            );
+
+            timeout = null;
+          }
+        };
+
+      const armImageTimeout =
+        () => {
+          clearImageTimeout();
+
+          timeout =
+            setTimeout(
+              () => {
+                timeout = null;
+
+                if (
+                  image.complete &&
+                  image.naturalWidth > 0 &&
+                  image.naturalHeight > 0
+                ) {
+                  return;
+                }
+
+                try {
+                  image.removeAttribute(
+                    "src"
+                  );
+                } catch {}
+
+                next();
+              },
+              window.NovaSparxBrowserGuard
+                ?.status?.()
+                ?.isMobile
+                ? 7_000
+                : 10_000
+            );
+        };
+
       const next = () => {
+        clearImageTimeout();
+
         let fallbacks = [];
 
         try {
@@ -4688,11 +4736,14 @@
         if (candidate) {
           image.hidden = false;
           image.src = candidate;
+          armImageTimeout();
           return;
         }
 
         image.hidden = true;
-        image.removeAttribute("src");
+        image.removeAttribute(
+          "src"
+        );
 
         if (placeholder) {
           placeholder.hidden = false;
@@ -4702,6 +4753,8 @@
       image.addEventListener(
         "load",
         () => {
+          clearImageTimeout();
+
           image.hidden = false;
 
           if (placeholder) {
@@ -4712,7 +4765,10 @@
 
       image.addEventListener(
         "error",
-        next
+        () => {
+          clearImageTimeout();
+          next();
+        }
       );
 
       if (!image.getAttribute("src")) {
@@ -4730,6 +4786,8 @@
         } else {
           next();
         }
+      } else {
+        armImageTimeout();
       }
     }
   }
