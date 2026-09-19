@@ -1618,38 +1618,107 @@
         );
       }
 
-      const url =
+      const urls = [];
+
+      if (API_ENDPOINT) {
+        try {
+          const direct =
+            new URL(
+              API_ENDPOINT +
+              "/image"
+            );
+
+          direct.searchParams.set(
+            "path",
+            texturePath
+          );
+
+          direct.searchParams.set(
+            "direct",
+            "1"
+          );
+
+          urls.push(
+            direct.toString()
+          );
+        } catch {}
+      }
+
+      const backendUrl =
         window.NovaSparx
           ?.textureUrl?.(
             texturePath
           );
 
-      if (!url) {
-        throw new Error(
-          "NovaSparx texture download is unavailable."
+      if (
+        backendUrl &&
+        !urls.includes(
+          backendUrl
+        )
+      ) {
+        urls.push(
+          backendUrl
         );
       }
 
-      const response =
-        await fetchWithTimeout(
-          url,
-          {
-            cache:
-              "force-cache",
-            headers: {
-              Accept:
-                "image/png,image/*;q=0.8"
-            },
-            signal:
-              signal ||
-              undefined
-          },
-          24_000
+      if (!urls.length) {
+        throw new Error(
+          "Texture download is unavailable."
+        );
+      }
+
+      let response = null;
+
+      for (
+        const url of urls
+      ) {
+        throwIfActionAborted(
+          signal
         );
 
-      if (!response.ok) {
+        const candidate =
+          await fetchWithTimeout(
+            url,
+            {
+              cache:
+                "force-cache",
+              headers: {
+                Accept:
+                  "image/png,image/*;q=0.8"
+              },
+              signal:
+                signal ||
+                undefined
+            },
+            16_000
+          );
+
+        if (
+          candidate.ok &&
+          String(
+            candidate.headers.get(
+              "content-type"
+            ) || ""
+          )
+            .toLowerCase()
+            .startsWith(
+              "image/"
+            )
+        ) {
+          response =
+            candidate;
+          break;
+        }
+
+        try {
+          await candidate.body
+            ?.cancel();
+        } catch {}
+      }
+
+      if (!response) {
         throw new Error(
-          `Texture download returned ${response.status}`
+          "No verified texture image was available to download."
         );
       }
 
@@ -7519,7 +7588,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.6.4",
+      version: "1.6.5",
       open,
       close,
       formatAssetPath,
