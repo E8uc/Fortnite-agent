@@ -4334,6 +4334,89 @@
       </div>`;
   }
 
+  function safeCatalogImageUrl(
+    raw
+  ) {
+    try {
+      const url =
+        new URL(
+          String(raw || ""),
+          location.origin
+        );
+
+      const host =
+        url.hostname
+          .toLowerCase();
+
+      const th3dry =
+        host ===
+          "raw.githubusercontent.com" &&
+        url.pathname.startsWith(
+          "/Th3DryZ69/FortniteToolsWeb/"
+        );
+
+      const fortniteApi =
+        host ===
+          "fortnite-api.com" ||
+        host.endsWith(
+          ".fortnite-api.com"
+        );
+
+      let apiOrigin =
+        "";
+
+      try {
+        apiOrigin =
+          API_ENDPOINT
+            ? new URL(
+                API_ENDPOINT,
+                location.origin
+              ).origin
+            : "";
+      } catch {}
+
+      const allowed =
+        url.origin ===
+          location.origin ||
+        (
+          apiOrigin &&
+          url.origin ===
+            apiOrigin
+        ) ||
+        th3dry ||
+        fortniteApi;
+
+      if (
+        !allowed ||
+        url.username ||
+        url.password ||
+        (
+          url.protocol !==
+            "https:" &&
+          !(
+            url.protocol ===
+              "http:" &&
+            [
+              "localhost",
+              "127.0.0.1",
+              "::1"
+            ].includes(
+              host
+            )
+          )
+        )
+      ) {
+        return "";
+      }
+
+      url.hash = "";
+
+      return url.toString();
+    } catch {
+      return "";
+    }
+  }
+
   function resolveCatalogImageUrl(
     value
   ) {
@@ -4345,7 +4428,9 @@
     if (!raw) return "";
 
     if (/^https?:\/\//i.test(raw)) {
-      return raw;
+      return safeCatalogImageUrl(
+        raw
+      );
     }
 
     const marker =
@@ -4376,8 +4461,10 @@
         .join("/");
 
     return relative
-      ? TH3DRY_IMAGE_BASE +
+      ? safeCatalogImageUrl(
+          TH3DRY_IMAGE_BASE +
           relative
+        )
       : "";
   }
 
@@ -4399,22 +4486,50 @@
       String(rawPath || "")
         .trim();
 
-    if (!API_ENDPOINT || !path) {
+    const cleanRoute =
+      String(route || "");
+
+    if (
+      !API_ENDPOINT ||
+      !path ||
+      ![
+        "/image",
+        "/nova/texture"
+      ].includes(
+        cleanRoute
+      )
+    ) {
       return "";
     }
 
     try {
+      const base =
+        new URL(
+          API_ENDPOINT,
+          location.origin
+        );
+
       const url =
         new URL(
-          `${API_ENDPOINT}${route}`
+          cleanRoute,
+          base.origin
         );
+
+      if (
+        url.origin !==
+          base.origin
+      ) {
+        return "";
+      }
 
       url.searchParams.set(
         "path",
         path
       );
 
-      return url.toString();
+      return safeCatalogImageUrl(
+        url.toString()
+      );
     } catch {
       return "";
     }
@@ -4485,6 +4600,9 @@
     const list =
       [...new Set(
         (candidates || [])
+          .map(
+            safeCatalogImageUrl
+          )
           .filter(Boolean)
       )];
 
@@ -4553,11 +4671,19 @@
         }
 
         const candidate =
-          fallbacks.shift() ||
-          "";
+          safeCatalogImageUrl(
+            fallbacks.shift() ||
+            ""
+          );
 
         image.dataset.imageFallbacks =
-          JSON.stringify(fallbacks);
+          JSON.stringify(
+            fallbacks
+              .map(
+                safeCatalogImageUrl
+              )
+              .filter(Boolean)
+          );
 
         if (candidate) {
           image.hidden = false;
@@ -7307,7 +7433,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.6.2",
+      version: "1.6.3",
       open,
       close,
       formatAssetPath,
