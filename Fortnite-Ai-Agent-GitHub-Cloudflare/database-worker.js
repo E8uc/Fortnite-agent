@@ -143,6 +143,34 @@ self.addEventListener(
       event.data || {};
 
     if (
+      msg.type ===
+      "cancel"
+    ) {
+      const cancelId =
+        Number(
+          msg.id
+        );
+
+      if (
+        Number.isSafeInteger(
+          cancelId
+        ) &&
+        cancelId > 0 &&
+        activeSearchId ===
+          cancelId
+      ) {
+        try {
+          activeSearchController
+            ?.abort(
+              "cancelled-by-client"
+            );
+        } catch {}
+      }
+
+      return;
+    }
+
+    if (
       msg.type !==
       "search"
     ) {
