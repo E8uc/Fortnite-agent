@@ -9,6 +9,9 @@
 
   const objectUrls = new Map();
 
+  const viewerSessions =
+    new Map();
+
   function objectUrlLimit() {
     const state =
       window.NovaSparxBrowserGuard
@@ -118,17 +121,68 @@
 
   function release(path) {
     const key =
-      String(path || "").trim();
+      String(path || "")
+        .trim();
 
     if (!key) return;
 
+    const session =
+      viewerSessions.get(
+        key
+      );
+
+    if (session) {
+      try {
+        session.controller
+          ?.dispose?.();
+      } catch {}
+
+      try {
+        session.host
+          ?.replaceChildren?.();
+      } catch {}
+
+      if (session.host) {
+        session.host.hidden =
+          true;
+      }
+
+      if (session.controls) {
+        session.controls.hidden =
+          true;
+      }
+
+      if (
+        session.panel
+          ?.dataset
+          ?.viewerPath ===
+        key
+      ) {
+        delete session.panel
+          .dataset.viewerPath;
+      }
+
+      viewerSessions.delete(
+        key
+      );
+    }
+
     const old =
-      objectUrls.get(key);
+      objectUrls.get(
+        key
+      );
 
-    if (!old) return;
+    if (old) {
+      try {
+        URL.revokeObjectURL(
+          old
+        );
+      } catch {}
 
-    URL.revokeObjectURL(old);
-    objectUrls.delete(key);
+      objectUrls.delete(
+        key
+      );
+    }
   }
 
   function endpoint(
@@ -509,7 +563,7 @@
         <div class="mesh-image-panel-head">
           <span>PREVIEW</span>
           <span class="fnaa-preview-engine">
-            NovaSparx 1.0
+            NovaSparx 2.0
           </span>
         </div>
 
@@ -519,12 +573,50 @@
             aria-live="polite"
           ></div>
 
+          <div
+            class="novasparx-live-viewer"
+            data-novasparx-viewer
+            hidden
+          ></div>
+
           <img
             class="mesh-preview-image"
             alt=""
             decoding="async"
             hidden
           />
+        </div>
+
+        <div
+          class="novasparx-viewer-controls"
+          data-novasparx-controls
+          hidden
+          aria-label="3D viewer controls"
+        >
+          <button
+            class="json-view-button"
+            type="button"
+            data-novasparx-reset
+          >Reset</button>
+
+          <button
+            class="json-view-button"
+            type="button"
+            data-novasparx-wireframe
+            aria-pressed="false"
+          >Wireframe</button>
+
+          <button
+            class="json-view-button"
+            type="button"
+            data-novasparx-capture
+          >Capture PNG</button>
+
+          <button
+            class="json-view-button"
+            type="button"
+            data-novasparx-fullscreen
+          >Fullscreen</button>
         </div>
 
         <div
@@ -558,6 +650,16 @@
       image:
         host.querySelector(
           ".mesh-preview-image"
+        ),
+
+      viewer:
+        host.querySelector(
+          "[data-novasparx-viewer]"
+        ),
+
+      controls:
+        host.querySelector(
+          "[data-novasparx-controls]"
         )
     };
   }
@@ -602,6 +704,16 @@
         image:
           existingPanel.querySelector(
             ".mesh-preview-image"
+          ),
+
+        viewer:
+          existingPanel.querySelector(
+            "[data-novasparx-viewer]"
+          ),
+
+        controls:
+          existingPanel.querySelector(
+            "[data-novasparx-controls]"
           )
       };
     }
@@ -622,11 +734,37 @@
       return;
     }
 
+    const mountedPath =
+      String(
+        ui.panel.dataset
+          .viewerPath ||
+        ""
+      ).trim();
+
+    if (mountedPath) {
+      release(
+        mountedPath
+      );
+    }
+
     ui.panel.hidden = false;
 
     if (ui.stage) {
       delete ui.stage.dataset
         .previewState;
+    }
+
+    if (ui.viewer) {
+      ui.viewer.hidden =
+        true;
+
+      ui.viewer
+        .replaceChildren();
+    }
+
+    if (ui.controls) {
+      ui.controls.hidden =
+        true;
     }
 
     ui.image.hidden = true;
@@ -697,6 +835,472 @@
     return true;
   }
 
+  function safePreviewFilename(
+    path
+  ) {
+    const base =
+      assetName(path)
+        .replace(
+          /[^A-Za-z0-9._-]+/g,
+          "_"
+        )
+        .replace(
+          /^_+|_+$/g,
+          ""
+        ) ||
+      "NovaSparx_Asset";
+
+    return (
+      base +
+      "_preview.png"
+    );
+  }
+
+  function savePreviewBlob(
+    blob,
+    filename
+  ) {
+    const url =
+      URL.createObjectURL(
+        blob
+      );
+
+    const anchor =
+      document.createElement(
+        "a"
+      );
+
+    anchor.href =
+      url;
+
+    anchor.download =
+      filename;
+
+    document.body
+      .appendChild(
+        anchor
+      );
+
+    anchor.click();
+    anchor.remove();
+
+    setTimeout(
+      () => {
+        try {
+          URL.revokeObjectURL(
+            url
+          );
+        } catch {}
+      },
+      1_500
+    );
+  }
+
+  function previewUiFromImage(
+    image
+  ) {
+    const panel =
+      image?.closest?.(
+        ".mesh-image-panel"
+      );
+
+    return panel
+      ? resolveUi(panel)
+      : null;
+  }
+
+  function viewerNotice(
+    ui,
+    path,
+    text,
+    state = ""
+  ) {
+    if (!ui?.status) {
+      return;
+    }
+
+    setStatus(
+      ui.status,
+      text,
+      state
+    );
+
+    setTimeout(
+      () => {
+        if (
+          String(
+            ui.panel?.dataset
+              ?.viewerPath ||
+            ""
+          ) ===
+            String(
+              path || ""
+            ).trim()
+        ) {
+          ui.status.hidden =
+            true;
+
+          delete ui.status
+            .dataset.state;
+        }
+      },
+      1_900
+    );
+  }
+
+  async function mountNovaManifest(
+    path,
+    manifest,
+    ui,
+    sourceLabel =
+      "NovaSparx • live 3D",
+    options = {}
+  ) {
+    if (
+      !ui?.viewer ||
+      !ui?.panel ||
+      !window.NovaSparxRenderer
+        ?.mount
+    ) {
+      return null;
+    }
+
+    const signal =
+      options.signal ||
+      window.NovaSparxBrowserGuard
+        ?.activeSignal?.() ||
+      null;
+
+    throwIfAborted(
+      signal
+    );
+
+    const key =
+      String(path || "")
+        .trim();
+
+    release(
+      key
+    );
+
+    ui.image.hidden =
+      true;
+
+    ui.image.removeAttribute(
+      "src"
+    );
+
+    ui.viewer.hidden =
+      false;
+
+    ui.viewer
+      .replaceChildren();
+
+    if (ui.controls) {
+      ui.controls.hidden =
+        true;
+    }
+
+    if (ui.stage) {
+      ui.stage.dataset
+        .previewState =
+        "live-3d";
+    }
+
+    setStatus(
+      ui.status,
+      "NovaSparx: opening interactive 3D viewer…"
+    );
+
+    let controller =
+      null;
+
+    try {
+      controller =
+        await window
+          .NovaSparxRenderer
+          .mount(
+            manifest,
+            ui.viewer,
+            {
+              signal
+            }
+          );
+
+      throwIfAborted(
+        signal
+      );
+    } catch (error) {
+      try {
+        controller
+          ?.dispose?.();
+      } catch {}
+
+      ui.viewer.hidden =
+        true;
+
+      ui.viewer
+        .replaceChildren();
+
+      throw error;
+    }
+
+    viewerSessions.set(
+      key,
+      {
+        controller,
+        host:
+          ui.viewer,
+        controls:
+          ui.controls,
+        panel:
+          ui.panel
+      }
+    );
+
+    ui.panel.dataset
+      .viewerPath =
+      key;
+
+    ui.status.hidden =
+      true;
+
+    if (ui.controls) {
+      ui.controls.hidden =
+        false;
+
+      const resetButton =
+        ui.controls
+          .querySelector(
+            "[data-novasparx-reset]"
+          );
+
+      const wireframeButton =
+        ui.controls
+          .querySelector(
+            "[data-novasparx-wireframe]"
+          );
+
+      const captureButton =
+        ui.controls
+          .querySelector(
+            "[data-novasparx-capture]"
+          );
+
+      const fullscreenButton =
+        ui.controls
+          .querySelector(
+            "[data-novasparx-fullscreen]"
+          );
+
+      if (resetButton) {
+        resetButton.onclick =
+          () => {
+            controller.reset?.();
+          };
+      }
+
+      if (wireframeButton) {
+        wireframeButton.setAttribute(
+          "aria-pressed",
+          "false"
+        );
+
+        wireframeButton.onclick =
+          () => {
+            try {
+              const enabled =
+                controller
+                  .toggleWireframe?.();
+
+              wireframeButton
+                .setAttribute(
+                  "aria-pressed",
+                  enabled
+                    ? "true"
+                    : "false"
+                );
+            } catch (error) {
+              viewerNotice(
+                ui,
+                key,
+                error?.message ||
+                  "Wireframe is unavailable for this mesh.",
+                "error"
+              );
+            }
+          };
+      }
+
+      if (captureButton) {
+        captureButton.onclick =
+          async () => {
+            if (
+              captureButton.disabled
+            ) {
+              return;
+            }
+
+            captureButton.disabled =
+              true;
+
+            try {
+              const blob =
+                await controller
+                  .capture?.();
+
+              if (!blob) {
+                throw new Error(
+                  "Capture could not be created."
+                );
+              }
+
+              savePreviewBlob(
+                blob,
+                safePreviewFilename(
+                  key
+                )
+              );
+
+              viewerNotice(
+                ui,
+                key,
+                "PNG capture ready."
+              );
+            } catch (error) {
+              viewerNotice(
+                ui,
+                key,
+                error?.message ||
+                  "PNG capture failed.",
+                "error"
+              );
+            } finally {
+              captureButton.disabled =
+                false;
+            }
+          };
+      }
+
+      if (fullscreenButton) {
+        const fullscreenTarget =
+          ui.panel;
+
+        const requestFullscreen =
+          fullscreenTarget
+            ?.requestFullscreen ||
+          fullscreenTarget
+            ?.webkitRequestFullscreen;
+
+        fullscreenButton.disabled =
+          typeof requestFullscreen !==
+            "function";
+
+        fullscreenButton.onclick =
+          fullscreenButton.disabled
+            ? null
+            : async () => {
+                try {
+                  await requestFullscreen
+                    .call(
+                      fullscreenTarget
+                    );
+                } catch (error) {
+                  viewerNotice(
+                    ui,
+                    key,
+                    error?.message ||
+                      "Fullscreen is unavailable on this device.",
+                    "error"
+                  );
+                }
+              };
+      }
+    }
+
+    const fidelity =
+      String(
+        controller
+          ?.materialFidelity ||
+        manifest?.metadata
+          ?.materialFidelity ||
+        "unknown"
+      ).toLowerCase();
+
+    const typeLabel =
+      String(
+        manifest?.assetType ||
+        manifest?.metadata
+          ?.assetType ||
+        manifest?.metadata
+          ?.type ||
+        "Mesh"
+      );
+
+    const lodValue =
+      manifest?.metadata
+        ?.lod ??
+      manifest?.lod ??
+      null;
+
+    const lodText =
+      lodValue ===
+        null ||
+      lodValue ===
+        undefined ||
+      lodValue ===
+        ""
+        ? ""
+        : ` • LOD ${lodValue}`;
+
+    setMeta(
+      ui.meta,
+      (
+        `${sourceLabel} • Interactive WebGL • ` +
+        `${typeLabel}${lodText} • ` +
+        `${Number(
+          controller?.vertexCount ||
+          0
+        ).toLocaleString()} vertices • ` +
+        `${Number(
+          controller?.triangleCount ||
+          0
+        ).toLocaleString()} triangles • ` +
+        `${Number(
+          controller?.materialCount ||
+          0
+        ).toLocaleString()} materials • ` +
+        `material fidelity: ${fidelity}`
+      ),
+      fidelity
+    );
+
+    return {
+      interactive:
+        true,
+      controller,
+      vertexCount:
+        controller?.vertexCount ||
+        0,
+      triangleCount:
+        controller?.triangleCount ||
+        0,
+      materialCount:
+        controller?.materialCount ||
+        0,
+      textured:
+        Boolean(
+          controller?.textured
+        ),
+      normalMapped:
+        Boolean(
+          controller?.normalMapped
+        ),
+      materialFidelity:
+        fidelity
+    };
+  }
+
   async function renderNovaManifest(
     path,
     manifest,
@@ -716,6 +1320,29 @@
     throwIfAborted(
       signal
     );
+
+    const ui =
+      options.ui ||
+      previewUiFromImage(
+        image
+      );
+
+    if (
+      ui &&
+      window.NovaSparxRenderer
+        ?.mount
+    ) {
+      return mountNovaManifest(
+        path,
+        manifest,
+        ui,
+        sourceLabel,
+        {
+          signal
+        }
+      );
+    }
+
     if (
       !window.NovaSparxRenderer
         ?.render
@@ -2136,7 +2763,8 @@
   async function renderPreview(
     target,
     path,
-    button
+    button,
+    options = {}
   ) {
     const clean =
       String(path || "")
@@ -2149,6 +2777,23 @@
           "Missing preview target or asset path."
       };
     }
+
+    const requestedKind =
+      String(
+        options.assetKind ||
+        options.classification
+          ?.kind ||
+        ""
+      ).toLowerCase();
+
+    const force3d =
+      [
+        "staticmesh",
+        "skeletalmesh",
+        "blueprint-visual"
+      ].includes(
+        requestedKind
+      );
 
     const ui =
       resolveUi(target);
@@ -2258,6 +2903,7 @@
       // 1) Th3Dry/FNAA's known catalogue images are the quickest and most
       // deterministic layer for islands and Creative devices.
       if (
+        !force3d &&
         await tryKnownCatalogImage(
           clean,
           ui
@@ -2283,6 +2929,7 @@
           {};
 
         if (
+          !force3d &&
           pathFamily ===
             "blueprint" &&
           await tryExactTypedImage(
@@ -2319,6 +2966,7 @@
         }
 
         if (
+          !force3d &&
           fastAssociation
             ?.blueprintPath &&
           await tryVerifiedBlueprintImage(
@@ -2788,6 +3436,7 @@
               );
 
           if (
+            !force3d &&
             association?.blueprintPath &&
             await tryVerifiedBlueprintImage(
               association,
@@ -2944,6 +3593,7 @@
           }
 
           if (
+            !force3d &&
             association?.blueprintPath &&
             await tryVerifiedBlueprintImage(
               association,
@@ -3203,18 +3853,31 @@
   async function toggle(
     target,
     path,
-    button
+    button,
+    options = {}
   ) {
     return renderPreview(
       target,
       path,
-      button
+      button,
+      options
     );
   }
 
   window.addEventListener(
     "pagehide",
     () => {
+      for (
+        const key of
+        [
+          ...viewerSessions.keys()
+        ]
+      ) {
+        release(
+          key
+        );
+      }
+
       for (
         const url of
         objectUrls.values()
@@ -3230,7 +3893,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "1.9.0",
+      version: "2.0.0",
       toggle,
       render: renderPreview,
       release
