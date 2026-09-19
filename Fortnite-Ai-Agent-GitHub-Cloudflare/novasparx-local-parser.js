@@ -87,7 +87,7 @@
     prepared =
       null;
 
-    preparePromise =
+    prepareTask =
       null;
 
     try {
@@ -322,7 +322,7 @@
 
     return {
       version:
-        "2.1.0",
+        "2.1.1",
       registered:
         Boolean(engine),
       prepared:
@@ -361,7 +361,7 @@
   globalThis.NovaSparxLocalParser =
     Object.freeze({
       version:
-        "2.1.0",
+        "2.1.1",
       register,
       reset,
       prepare,
