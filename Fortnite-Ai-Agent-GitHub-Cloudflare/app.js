@@ -240,6 +240,12 @@
 
   let busy = false;
 
+  let activeChatController =
+    null;
+
+  let activeChatRun =
+    0;
+
   let toastTimer = null;
 
   let dbWorker = null;
@@ -298,6 +304,16 @@
   window.addEventListener(
     "pagehide",
     () => {
+      try {
+        activeChatController
+          ?.abort(
+            "page-hidden"
+          );
+      } catch {}
+
+      activeChatController =
+        null;
+
       for (
         const pending of
         dbPending.values()
@@ -526,6 +542,21 @@
       ?.addEventListener(
         "click",
         () => {
+          try {
+            activeChatController
+              ?.abort(
+                "new-chat"
+              );
+          } catch {}
+
+          activeChatController =
+            null;
+
+          activeChatRun++;
+
+          setBusy(false);
+          removeTypingIndicator();
+
           activeId =
             createChat(true);
 
@@ -2033,7 +2064,7 @@
     const text =
       els.input.value.trim();
 
-    if (!text || busy) {
+    if (!text) {
       return;
     }
 
@@ -2068,19 +2099,61 @@
     );
   }
 
+  function chatAbortError(
+    signal
+  ) {
+    const error =
+      new Error(
+        "Chat request was replaced by a newer request."
+      );
+
+    error.name =
+      "AbortError";
+
+    error.code =
+      "CHAT_REQUEST_REPLACED";
+
+    error.reason =
+      signal?.reason ||
+      "cancelled";
+
+    return error;
+  }
+
+  function chatRequestCurrent(
+    runId,
+    controller
+  ) {
+    return Boolean(
+      runId ===
+        activeChatRun &&
+      activeChatController ===
+        controller &&
+      !controller.signal
+        .aborted
+    );
+  }
+
+  function throwIfChatStale(
+    runId,
+    controller
+  ) {
+    if (
+      !chatRequestCurrent(
+        runId,
+        controller
+      )
+    ) {
+      throw chatAbortError(
+        controller.signal
+      );
+    }
+  }
+
   async function sendTextMessage(
     text,
     options = {}
   ) {
-    if (busy) {
-      showToast(
-        "Wait for the current reply first.",
-        true
-      );
-
-      return;
-    }
-
     const clean =
       String(text || "")
         .trim();
@@ -2115,6 +2188,25 @@
         retryAfterSeconds: seconds
       };
     }
+
+    try {
+      activeChatController
+        ?.abort(
+          "replaced-by-new-chat-request"
+        );
+    } catch {}
+
+    const controller =
+      new AbortController();
+
+    const runId =
+      ++activeChatRun;
+
+    activeChatController =
+      controller;
+
+    const signal =
+      controller.signal;
 
     // Start the shared guest deadline on the accepted click, not after the AI
     // finishes. New Chat therefore cannot reset or bypass the active limit.
@@ -2177,13 +2269,22 @@
       ) {
         await runLocalPathCommand(
           chat,
-          plugin
+          plugin,
+          signal,
+          runId,
+          controller
+        );
+
+        throwIfChatStale(
+          runId,
+          controller
         );
       } else {
         const assetContext =
           assetPath
             ? await getAssetContext(
-                assetPath
+                assetPath,
+                signal
               )
             : null;
 
@@ -2191,8 +2292,14 @@
           assetPath
             ? null
             : await buildClientContext(
-                clean
+                clean,
+                signal
               );
+
+        throwIfChatStale(
+          runId,
+          controller
+        );
 
         const response =
           await requestChat(
@@ -2200,8 +2307,14 @@
             {
               assetContext,
               clientContext
-            }
+            },
+            signal
           );
+
+        throwIfChatStale(
+          runId,
+          controller
+        );
 
         removeTypingIndicator();
 
@@ -2216,12 +2329,32 @@
         });
       }
 
+      throwIfChatStale(
+        runId,
+        controller
+      );
+
       chat.updatedAt =
         Date.now();
 
       saveChats();
       renderAll();
     } catch (error) {
+      if (
+        signal.aborted ||
+        error?.name ===
+          "AbortError" ||
+        !chatRequestCurrent(
+          runId,
+          controller
+        )
+      ) {
+        return {
+          aborted:
+            true
+        };
+      }
+
       removeTypingIndicator();
 
       chat.messages.push({
@@ -2240,21 +2373,37 @@
       saveChats();
       renderAll();
     } finally {
-      setBusy(false);
+      if (
+        activeChatController ===
+          controller
+      ) {
+        activeChatController =
+          null;
 
-      els.input.focus({
-        preventScroll: true
-      });
+        setBusy(false);
+
+        removeTypingIndicator();
+
+        els.input.focus({
+          preventScroll:
+            true
+        });
+      }
     }
   }
 
   async function runLocalPathCommand(
     chat,
-    plugin
+    plugin,
+    signal,
+    runId,
+    controller
   ) {
-    removeTypingIndicator();
-
     if (!plugin.query) {
+      throwIfChatStale(
+        runId,
+        controller
+      );
       chat.messages.push({
         role: "assistant",
         content:
@@ -2264,15 +2413,17 @@
       return;
     }
 
-    addTypingIndicator();
-
     const result =
       await searchDatabase(
         "all",
-        plugin.query
+        plugin.query,
+        signal
       );
 
-    removeTypingIndicator();
+    throwIfChatStale(
+      runId,
+      controller
+    );
 
     const reply =
       formatDatabaseResult(
@@ -2297,7 +2448,8 @@
 
   async function requestChat(
     chat,
-    context
+    context,
+    signal = null
   ) {
     const loggedIn =
       !!getPublicAuthState()
@@ -2341,7 +2493,10 @@
               "application/json"
           },
           body:
-            JSON.stringify(body)
+            JSON.stringify(body),
+          signal:
+            signal ||
+            undefined
         },
         45_000
       );
@@ -2352,6 +2507,12 @@
         .catch(
           () => ({})
         );
+
+    if (signal?.aborted) {
+      throw chatAbortError(
+        signal
+      );
+    }
 
     if (
       !loggedIn &&
@@ -2420,7 +2581,8 @@
   }
 
   async function getAssetContext(
-    path
+    path,
+    signal = null
   ) {
     const clean =
       String(path || "")
@@ -2433,7 +2595,11 @@
         await apiFetch(
           `/asset/context?path=${encodeURIComponent(clean)}`,
           {
-            method: "GET"
+            method:
+              "GET",
+            signal:
+              signal ||
+              undefined
           },
           30_000
         );
@@ -2452,7 +2618,17 @@
       ) {
         return data;
       }
-    } catch {
+    } catch (error) {
+      if (
+        signal?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        throw chatAbortError(
+          signal
+        );
+      }
+
       // A context lookup failure must never cause the model to invent evidence.
     }
 
@@ -2467,7 +2643,8 @@
   }
 
   async function buildClientContext(
-    userText
+    userText,
+    signal = null
   ) {
     if (
       !looksLikeAssetQuestion(
@@ -2490,8 +2667,15 @@
           searchScope(
             userText
           ),
-          query
+          query,
+          signal
         );
+
+      if (signal?.aborted) {
+        throw chatAbortError(
+          signal
+        );
+      }
 
       const rows =
         Array.isArray(
@@ -2538,7 +2722,17 @@
             })
           )
       };
-    } catch {
+    } catch (error) {
+      if (
+        signal?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        throw chatAbortError(
+          signal
+        );
+      }
+
       return {
         version:
           CURRENT_FN_VERSION,
@@ -3949,7 +4143,6 @@
       );
 
     els.send.disabled =
-      busy ||
       !text ||
       blocked;
   }
