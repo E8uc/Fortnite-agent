@@ -5,6 +5,8 @@
   const MAX_VERTICES = 700000;
   const MAX_INDICES = 2100000;
   const MAX_MATERIALS = 64;
+  const MAX_CLIENT_HEADER_BYTES =
+    512 * 1024;
 
   function fallbackClean(raw) {
     let value = String(raw || "").trim().replace(/\\/g, "/");
@@ -345,8 +347,13 @@
 
     if (
       !headerLength ||
-      paddedHeaderLength < headerLength ||
-      paddedHeaderLength % 4 !== 0
+      headerLength >
+        MAX_CLIENT_HEADER_BYTES ||
+      paddedHeaderLength <
+        headerLength ||
+      paddedHeaderLength %
+        4 !==
+        0
     ) {
       throw new Error("NovaSparx mesh package has an invalid header.");
     }
@@ -554,15 +561,54 @@
         ? header.asset
         : {};
 
+    const packagedPath =
+      cleanPath(
+        asset.path ||
+        ""
+      );
+
+    const expectedPath =
+      cleanPath(
+        requestedPath ||
+        ""
+      );
+
+    if (
+      packagedPath &&
+      expectedPath &&
+      packagedPath
+        .toLowerCase() !==
+        expectedPath
+          .toLowerCase()
+    ) {
+      throw new Error(
+        "NovaSparx mesh package belongs to a different asset."
+      );
+    }
+
+    for (
+      let index = 0;
+      index <
+      indices.length;
+      index++
+    ) {
+      if (
+        indices[index] >=
+        vertexCount
+      ) {
+        throw new Error(
+          "NovaSparx mesh package contains an out-of-range index."
+        );
+      }
+    }
+
     return {
       schema:
         "novasparx.preview.v1",
 
       path:
-        cleanPath(
-          asset.path ||
-          requestedPath
-        ),
+        packagedPath ||
+        expectedPath,
 
       resolvedPath:
         String(
