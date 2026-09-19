@@ -60,6 +60,21 @@
   const GUEST_SLOWMODE_MS =
     15_000;
 
+  const MAX_STORED_CHATS =
+    30;
+
+  const MAX_STORED_MESSAGES_PER_CHAT =
+    120;
+
+  const MAX_STORED_MESSAGE_CHARS =
+    24_000;
+
+  const MAX_STORED_ATTACHMENT_CHARS =
+    160_000;
+
+  const MAX_STORED_TOTAL_CHARS =
+    2_000_000;
+
   const GENERATED_FILE_NAME =
     "Subscribe to my YT channel @27lf.txt";
 
@@ -965,30 +980,254 @@
   // Chat persistence / rendering
   // ---------------------------------------------------------------------------
 
+  function cleanStoredMessage(
+    value
+  ) {
+    if (
+      !value ||
+      typeof value !==
+        "object" ||
+      Array.isArray(value)
+    ) {
+      return null;
+    }
+
+    const role =
+      value.role === "user"
+        ? "user"
+        : value.role ===
+            "assistant"
+          ? "assistant"
+          : "";
+
+    if (!role) {
+      return null;
+    }
+
+    const message = {
+      role,
+      content:
+        String(
+          value.content ||
+          ""
+        ).slice(
+          0,
+          MAX_STORED_MESSAGE_CHARS
+        )
+    };
+
+    const attachment =
+      value.attachment;
+
+    if (
+      attachment &&
+      typeof attachment ===
+        "object" &&
+      !Array.isArray(
+        attachment
+      ) &&
+      typeof attachment.content ===
+        "string" &&
+      attachment.content
+    ) {
+      message.attachment = {
+        name:
+          String(
+            attachment.name ||
+            GENERATED_FILE_NAME
+          ).slice(
+            0,
+            120
+          ),
+
+        content:
+          attachment.content
+            .slice(
+              0,
+              MAX_STORED_ATTACHMENT_CHARS
+            )
+      };
+    }
+
+    return message;
+  }
+
+  function sanitizeChats(
+    value
+  ) {
+    const output =
+      Object.create(null);
+
+    if (
+      !value ||
+      typeof value !==
+        "object" ||
+      Array.isArray(value)
+    ) {
+      return output;
+    }
+
+    const entries =
+      Object.entries(value)
+        .filter(
+          ([id, chat]) =>
+            /^[A-Za-z0-9_.-]{1,128}$/
+              .test(
+                String(id || "")
+              ) &&
+            chat &&
+            typeof chat ===
+              "object" &&
+            !Array.isArray(chat)
+        )
+        .sort(
+          (left, right) =>
+            Number(
+              right[1]
+                ?.updatedAt ||
+              0
+            ) -
+            Number(
+              left[1]
+                ?.updatedAt ||
+              0
+            )
+        )
+        .slice(
+          0,
+          MAX_STORED_CHATS
+        );
+
+    let remaining =
+      MAX_STORED_TOTAL_CHARS;
+
+    for (
+      const [id, chat] of
+      entries
+    ) {
+      if (
+        remaining <= 0
+      ) {
+        break;
+      }
+
+      const rawMessages =
+        Array.isArray(
+          chat.messages
+        )
+          ? chat.messages
+              .slice(
+                -MAX_STORED_MESSAGES_PER_CHAT
+              )
+          : [];
+
+      const messages = [];
+
+      for (
+        let index =
+          rawMessages.length - 1;
+        index >= 0;
+        index--
+      ) {
+        const message =
+          cleanStoredMessage(
+            rawMessages[index]
+          );
+
+        if (!message) {
+          continue;
+        }
+
+        const cost =
+          message.content.length +
+          (
+            message.attachment
+              ?.content
+              ?.length ||
+            0
+          ) +
+          256;
+
+        if (
+          cost >
+          remaining
+        ) {
+          continue;
+        }
+
+        remaining -=
+          cost;
+
+        messages.unshift(
+          message
+        );
+      }
+
+      output[id] = {
+        id,
+        title:
+          String(
+            chat.title ||
+            "New chat"
+          ).slice(
+            0,
+            96
+          ),
+        createdAt:
+          Number.isFinite(
+            Number(
+              chat.createdAt
+            )
+          )
+            ? Number(
+                chat.createdAt
+              )
+            : Date.now(),
+        updatedAt:
+          Number.isFinite(
+            Number(
+              chat.updatedAt
+            )
+          )
+            ? Number(
+                chat.updatedAt
+              )
+            : Date.now(),
+        messages
+      };
+    }
+
+    return output;
+  }
+
   function loadChats() {
     try {
-      const value =
+      return sanitizeChats(
         JSON.parse(
           safeStorageGet(
             STORAGE_KEY
-          ) || "{}"
-        );
-
-      return (
-        value &&
-        typeof value === "object"
-          ? value
-          : {}
+          ) ||
+          "{}"
+        )
       );
     } catch {
-      return {};
+      return Object.create(
+        null
+      );
     }
   }
 
   function saveChats() {
+    const snapshot =
+      sanitizeChats(
+        chats
+      );
+
     safeStorageSet(
       STORAGE_KEY,
-      JSON.stringify(chats)
+      JSON.stringify(
+        snapshot
+      )
     );
 
     safeStorageSet(
@@ -2652,7 +2891,7 @@
 
   dbWorker =
     new Worker(
-      "/Fortnite-agent/database-worker.js?v=5"
+      "/Fortnite-agent/database-worker.js?v=6"
     );
     dbWorker.addEventListener(
       "message",
