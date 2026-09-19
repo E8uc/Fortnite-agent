@@ -4860,8 +4860,19 @@
       );
     }
 
+    const guardState =
+      window.NovaSparxBrowserGuard
+        ?.status?.() ||
+      {};
+
     const payload =
-      await response.json();
+      await readJsonResponseBounded(
+        response,
+        guardState.isMobile
+          ? 12 * 1024 * 1024
+          : 32 * 1024 * 1024,
+        signal
+      );
 
     throwIfActionAborted(
       signal
@@ -5027,7 +5038,10 @@
     }
 
     const payload =
-      await response.json();
+      await readJsonResponseBounded(
+        response,
+        4 * 1024 * 1024
+      );
 
     return payload?.data || null;
   }
@@ -7142,7 +7156,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.5.0",
+      version: "1.6.0",
       open,
       close,
       formatAssetPath,
