@@ -69,6 +69,47 @@
   const FNAA_CLIENT =
     "web-v1";
 
+  function safeStorageGet(
+    key
+  ) {
+    try {
+      return window.localStorage
+        .getItem(key);
+    } catch {
+      return null;
+    }
+  }
+
+  function safeStorageSet(
+    key,
+    value
+  ) {
+    try {
+      window.localStorage
+        .setItem(
+          key,
+          value
+        );
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function safeStorageRemove(
+    key
+  ) {
+    try {
+      window.localStorage
+        .removeItem(key);
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   const PLUGINS = [
     {
       id: "path",
@@ -178,7 +219,7 @@
     loadChats();
 
   let activeId =
-    localStorage.getItem(
+    safeStorageGet(
       ACTIVE_KEY
     ) || null;
 
@@ -213,7 +254,7 @@
 
   restoreGitHubPagesRoute();
   applyTheme(
-    localStorage.getItem(
+    safeStorageGet(
       THEME_KEY
     ) || "fortnite"
   );
@@ -928,7 +969,7 @@
     try {
       const value =
         JSON.parse(
-          localStorage.getItem(
+          safeStorageGet(
             STORAGE_KEY
           ) || "{}"
         );
@@ -945,12 +986,12 @@
   }
 
   function saveChats() {
-    localStorage.setItem(
+    safeStorageSet(
       STORAGE_KEY,
       JSON.stringify(chats)
     );
 
-    localStorage.setItem(
+    safeStorageSet(
       ACTIVE_KEY,
       activeId
     );
@@ -2087,12 +2128,12 @@
 
       const current =
         Number(
-          localStorage.getItem(
+          safeStorageGet(
             GUEST_NEXT_AT
           ) || 0
         );
 
-      localStorage.setItem(
+      safeStorageSet(
         GUEST_NEXT_AT,
         String(
           Math.max(
@@ -2569,7 +2610,7 @@
 
   function guestId() {
     const existing =
-      localStorage.getItem(
+      safeStorageGet(
         GUEST_ID_KEY
       );
 
@@ -2592,7 +2633,7 @@
           "_"
         );
 
-    localStorage.setItem(
+    safeStorageSet(
       GUEST_ID_KEY,
       value
     );
@@ -2975,7 +3016,7 @@
     return Math.max(
       0,
       Number(
-        localStorage.getItem(
+        safeStorageGet(
           GUEST_NEXT_AT
         ) || 0
       ) -
@@ -3127,7 +3168,7 @@
       return;
     }
 
-    localStorage.setItem(
+    safeStorageSet(
       GUEST_NEXT_AT,
       String(
         Date.now() +
@@ -4806,7 +4847,7 @@
       .dataset.theme =
       next;
 
-    localStorage.setItem(
+    safeStorageSet(
       THEME_KEY,
       next
     );
