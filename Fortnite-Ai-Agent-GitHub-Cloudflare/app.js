@@ -306,6 +306,12 @@
           pending.timer
         );
 
+        pending.signal
+          ?.removeEventListener?.(
+            "abort",
+            pending.abortHandler
+          );
+
         pending.reject(
           new Error(
             "Database search stopped because the page was hidden."
@@ -3001,6 +3007,12 @@
           pending.timer
         );
 
+        pending.signal
+          ?.removeEventListener?.(
+            "abort",
+            pending.abortHandler
+          );
+
         if (ok) {
           pending.resolve(
             data
@@ -3041,6 +3053,12 @@
             pending.timer
           );
 
+          pending.signal
+            ?.removeEventListener?.(
+              "abort",
+              pending.abortHandler
+            );
+
           pending.reject(
             new Error(
               event.message ||
@@ -3063,7 +3081,8 @@
 
   function searchDatabase(
     scope,
-    query
+    query,
+    signal = null
   ) {
     const cleanQuery =
       String(
@@ -3074,6 +3093,20 @@
           0,
           512
         );
+
+    if (signal?.aborted) {
+      const error =
+        new Error(
+          "Database search was cancelled."
+        );
+
+      error.name =
+        "AbortError";
+
+      return Promise.reject(
+        error
+      );
+    }
 
     if (!cleanQuery) {
       return Promise.resolve({
@@ -3096,21 +3129,68 @@
 
     return new Promise(
       (resolve, reject) => {
-        const timer =
-          setTimeout(
-            () => {
-              const pending =
-                dbPending.get(
-                  id
-                );
+        const cleanup =
+          () => {
+            const pending =
+              dbPending.get(
+                id
+              );
 
-              if (!pending) {
-                return;
-              }
+            if (pending) {
+              clearTimeout(
+                pending.timer
+              );
+
+              pending.signal
+                ?.removeEventListener?.(
+                  "abort",
+                  pending.abortHandler
+                );
 
               dbPending.delete(
                 id
               );
+            }
+          };
+
+        const abortHandler =
+          () => {
+            cleanup();
+
+            try {
+              worker.postMessage({
+                type:
+                  "cancel",
+                id
+              });
+            } catch {}
+
+            const error =
+              new Error(
+                "Database search was cancelled."
+              );
+
+            error.name =
+              "AbortError";
+
+            error.code =
+              "SEARCH_REPLACED";
+
+            reject(error);
+          };
+
+        const timer =
+          setTimeout(
+            () => {
+              cleanup();
+
+              try {
+                worker.postMessage({
+                  type:
+                    "cancel",
+                  id
+                });
+              } catch {}
 
               reject(
                 new Error(
@@ -3126,9 +3206,21 @@
           {
             resolve,
             reject,
-            timer
+            timer,
+            signal,
+            abortHandler
           }
         );
+
+        signal
+          ?.addEventListener?.(
+            "abort",
+            abortHandler,
+            {
+              once:
+                true
+            }
+          );
 
         worker.postMessage({
           id,
