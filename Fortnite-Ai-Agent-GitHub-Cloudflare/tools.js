@@ -5843,7 +5843,12 @@
       looksLikeId
         ? "id"
         : "name",
-      query
+      String(
+        query || ""
+      ).slice(
+        0,
+        160
+      )
     );
 
     params.set(
@@ -5888,7 +5893,11 @@
     }
 
     if (Array.isArray(payload?.data)) {
-      return payload.data;
+      return payload.data
+        .slice(
+          0,
+          500
+        );
     }
 
     return payload?.data
@@ -5951,11 +5960,48 @@
     return type.includes(filter);
   }
 
+  function safeCosmeticImageUrl(
+    raw
+  ) {
+    try {
+      const url =
+        new URL(
+          String(raw || "")
+        );
+
+      const host =
+        url.hostname
+          .toLowerCase();
+
+      if (
+        url.protocol !==
+          "https:" ||
+        url.username ||
+        url.password ||
+        !(
+          host ===
+            "fortnite-api.com" ||
+          host.endsWith(
+            ".fortnite-api.com"
+          )
+        )
+      ) {
+        return "";
+      }
+
+      url.hash = "";
+
+      return url.toString();
+    } catch {
+      return "";
+    }
+  }
+
   function cosmeticApiImage(item) {
     const images =
       item?.images || {};
 
-    return (
+    return safeCosmeticImageUrl(
       images.icon ||
       images.smallIcon ||
       images.featured ||
