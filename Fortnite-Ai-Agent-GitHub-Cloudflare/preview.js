@@ -635,6 +635,50 @@
         ></div>
       </div>`;
 
+    const viewerLabels = [
+      [
+        "[data-novasparx-reset]",
+        "resetView",
+        "Reset"
+      ],
+      [
+        "[data-novasparx-wireframe]",
+        "wireframe",
+        "Wireframe"
+      ],
+      [
+        "[data-novasparx-capture]",
+        "capturePNG",
+        "Capture PNG"
+      ],
+      [
+        "[data-novasparx-fullscreen]",
+        "fullscreen",
+        "Fullscreen"
+      ]
+    ];
+
+    for (
+      const [
+        selector,
+        key,
+        fallback
+      ] of viewerLabels
+    ) {
+      const button =
+        host.querySelector(
+          selector
+        );
+
+      if (button) {
+        button.textContent =
+          t(
+            key,
+            fallback
+          );
+      }
+    }
+
     return {
       hostMode: true,
       panel:
@@ -3928,7 +3972,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "2.0.1",
+      version: "2.0.2",
       toggle,
       render: renderPreview,
       release
