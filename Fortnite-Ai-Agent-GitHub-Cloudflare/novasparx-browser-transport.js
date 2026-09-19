@@ -13,8 +13,39 @@
   let bootstrapCache =
     null;
 
-  let bootstrapPromise =
+  let bootstrapTask =
     null;
+
+  function abortError(
+    signal
+  ) {
+    const error =
+      new Error(
+        "NovaSparx network work was cancelled because a newer request replaced it."
+      );
+
+    error.name =
+      "AbortError";
+
+    error.code =
+      "NOVASPARX_REQUEST_REPLACED";
+
+    error.reason =
+      signal?.reason ||
+      "cancelled";
+
+    return error;
+  }
+
+  function throwIfAborted(
+    signal
+  ) {
+    if (signal?.aborted) {
+      throw abortError(
+        signal
+      );
+    }
+  }
 
   function apiBase() {
     return String(
@@ -117,8 +148,12 @@
   async function readBounded(
     response,
     maxBytes,
-    label
+    label,
+    signal = null
   ) {
+    throwIfAborted(
+      signal
+    );
     const declared =
       Number(
         response.headers.get(
@@ -144,6 +179,10 @@
     const buffer =
       await response
         .arrayBuffer();
+
+    throwIfAborted(
+      signal
+    );
 
     if (
       buffer.byteLength >
@@ -259,7 +298,9 @@
       await readBounded(
         response,
         range.length,
-        "NovaSparx direct range"
+        "NovaSparx direct range",
+        options.signal ||
+          null
       );
 
     return rangeResult(
@@ -370,7 +411,9 @@
       await readBounded(
         response,
         range.length,
-        "NovaSparx relayed range"
+        "NovaSparx relayed range",
+        options.signal ||
+          null
       );
 
     return rangeResult(
@@ -386,6 +429,10 @@
     end,
     options = {}
   ) {
+    throwIfAborted(
+      options.signal
+    );
+
     const range =
       validateRange(
         start,
@@ -413,7 +460,9 @@
           options.signal
             ?.aborted
         ) {
-          throw error;
+          throw abortError(
+            options.signal
+          );
         }
 
         directError =
@@ -432,6 +481,10 @@
         )
       );
     }
+
+    throwIfAborted(
+      options.signal
+    );
 
     try {
       return await fetchRelayRange(
@@ -469,6 +522,10 @@
   async function bootstrap(
     options = {}
   ) {
+    throwIfAborted(
+      options.signal
+    );
+
     const now =
       Date.now();
 
@@ -483,11 +540,22 @@
         .value;
     }
 
+    const requestSignal =
+      options.signal ||
+      null;
+
     if (
       !options.refresh &&
-      bootstrapPromise
+      bootstrapTask &&
+      (
+        bootstrapTask.signal ===
+          null ||
+        bootstrapTask.signal ===
+          requestSignal
+      )
     ) {
-      return bootstrapPromise;
+      return bootstrapTask
+        .promise;
     }
 
     const endpoint =
@@ -509,6 +577,10 @@
 
     const request =
       (async () => {
+        throwIfAborted(
+          requestSignal
+        );
+
         const response =
           await fetch(
             endpoint,
@@ -524,7 +596,7 @@
                   ? "no-store"
                   : "force-cache",
               signal:
-                options.signal ||
+                requestSignal ||
                 undefined,
               headers: {
                 Accept:
@@ -537,7 +609,8 @@
           await readBounded(
             response,
             MAX_BOOTSTRAP_BYTES,
-            "NovaSparx edge metadata"
+            "NovaSparx edge metadata",
+            requestSignal
           );
 
         let data;
@@ -553,6 +626,10 @@
             "NovaSparx edge metadata could not be decoded."
           );
         }
+
+        throwIfAborted(
+          requestSignal
+        );
 
         if (
           !response.ok ||
@@ -579,17 +656,22 @@
         return data;
       })();
 
-    bootstrapPromise =
-      request;
+    bootstrapTask = {
+      promise:
+        request,
+      signal:
+        requestSignal
+    };
 
     try {
       return await request;
     } finally {
       if (
-        bootstrapPromise ===
+        bootstrapTask
+          ?.promise ===
         request
       ) {
-        bootstrapPromise =
+        bootstrapTask =
           null;
       }
     }
@@ -693,10 +775,50 @@
     );
   }
 
+  function transferProfile() {
+    const guard =
+      globalThis
+        .NovaSparxBrowserGuard
+        ?.status?.() ||
+      {};
+
+    if (guard.isIOS) {
+      return {
+        chunkBytes:
+          512 * 1024,
+        concurrency:
+          1
+      };
+    }
+
+    if (guard.isMobile) {
+      return {
+        chunkBytes:
+          1024 * 1024,
+        concurrency:
+          2
+      };
+    }
+
+    return {
+      chunkBytes:
+        2 * 1024 * 1024,
+      concurrency:
+        4
+    };
+  }
+
   async function fetchFile(
     url,
     options = {}
   ) {
+    throwIfAborted(
+      options.signal
+    );
+
+    const profile =
+      transferProfile();
+
     const maxBytes =
       Math.max(
         1,
@@ -713,8 +835,20 @@
           64 * 1024,
           Number(
             options.chunkBytes ||
-            1024 * 1024
+            profile.chunkBytes
           ) || 0
+        )
+      );
+
+    const concurrency =
+      Math.max(
+        1,
+        Math.min(
+          6,
+          Number(
+            options.concurrency ||
+            profile.concurrency
+          ) || 1
         )
       );
 
@@ -725,6 +859,10 @@
         0,
         options
       );
+
+    throwIfAborted(
+      options.signal
+    );
 
     const total =
       parseTotalLength(
@@ -758,84 +896,143 @@
       0
     );
 
-    let offset =
+    let loaded =
       first.buffer
         .byteLength;
 
     options.onProgress?.({
-      loaded:
-        offset,
+      loaded,
       total
     });
 
-    while (
-      offset <
-      total
+    const ranges = [];
+
+    for (
+      let start = loaded;
+      start < total;
+      start += chunkBytes
     ) {
-      if (
-        options.signal
-          ?.aborted
-      ) {
-        const error =
-          new Error(
-            "NovaSparx file fetch was cancelled."
-          );
-
-        error.name =
-          "AbortError";
-
-        throw error;
-      }
-
-      const end =
-        Math.min(
-          total - 1,
-          offset +
-          chunkBytes -
-          1
-        );
-
-      const part =
-        await fetchRange(
-          url,
-          offset,
-          end,
-          options
-        );
-
-      const bytes =
-        new Uint8Array(
-          part.buffer
-        );
-
-      const expected =
-        end -
-        offset +
-        1;
-
-      if (
-        bytes.byteLength !==
-        expected
-      ) {
-        throw new Error(
-          "NovaSparx source returned an incomplete byte range."
-        );
-      }
-
-      output.set(
-        bytes,
-        offset
-      );
-
-      offset +=
-        bytes.byteLength;
-
-      options.onProgress?.({
-        loaded:
-          offset,
-        total
+      ranges.push({
+        start,
+        end:
+          Math.min(
+            total - 1,
+            start +
+            chunkBytes -
+            1
+          )
       });
     }
+
+    let cursor = 0;
+
+    const fixedTransport =
+      first.source ===
+        "edge-relay"
+        ? {
+            direct:
+              false
+          }
+        : first.source ===
+            "direct"
+          ? {
+              relay:
+                false
+            }
+          : {};
+
+    const worker =
+      async () => {
+        while (true) {
+          throwIfAborted(
+            options.signal
+          );
+
+          const index =
+            cursor++;
+
+          if (
+            index >=
+            ranges.length
+          ) {
+            return;
+          }
+
+          const range =
+            ranges[index];
+
+          const part =
+            await fetchRange(
+              url,
+              range.start,
+              range.end,
+              {
+                ...options,
+                ...fixedTransport
+              }
+            );
+
+          throwIfAborted(
+            options.signal
+          );
+
+          const bytes =
+            new Uint8Array(
+              part.buffer
+            );
+
+          const expected =
+            range.end -
+            range.start +
+            1;
+
+          if (
+            bytes.byteLength !==
+            expected
+          ) {
+            throw new Error(
+              "NovaSparx source returned an incomplete byte range."
+            );
+          }
+
+          output.set(
+            bytes,
+            range.start
+          );
+
+          loaded +=
+            bytes.byteLength;
+
+          options.onProgress?.({
+            loaded:
+              Math.min(
+                loaded,
+                total
+              ),
+            total
+          });
+        }
+      };
+
+    await Promise.all(
+      Array.from(
+        {
+          length:
+            Math.min(
+              concurrency,
+              Math.max(
+                1,
+                ranges.length
+              )
+            )
+        },
+        worker
+      )
+    );
+
+    throwIfAborted(
+      options.signal
+    );
 
     return {
       buffer:
@@ -955,14 +1152,14 @@
     bootstrapCache =
       null;
 
-    bootstrapPromise =
+    bootstrapTask =
       null;
   }
 
   function status() {
     return {
       version:
-        "2.1.0",
+        "2.2.0",
       apiConfigured:
         Boolean(
           apiBase()
@@ -980,10 +1177,42 @@
     };
   }
 
+  const warmBootstrap =
+    () => {
+      if (!apiBase()) {
+        return;
+      }
+
+      bootstrap()
+        .catch(
+          () => {}
+        );
+    };
+
+  if (
+    typeof globalThis
+      .requestIdleCallback ===
+      "function"
+  ) {
+    globalThis
+      .requestIdleCallback(
+        warmBootstrap,
+        {
+          timeout:
+            800
+        }
+      );
+  } else {
+    setTimeout(
+      warmBootstrap,
+      250
+    );
+  }
+
   globalThis.NovaSparxBrowserTransport =
     Object.freeze({
       version:
-        "2.1.0",
+        "2.2.0",
       maxRangeBytes:
         MAX_RANGE_BYTES,
       fetchRange,
