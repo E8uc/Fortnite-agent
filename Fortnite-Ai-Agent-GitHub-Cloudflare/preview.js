@@ -9,6 +9,37 @@
 
   const objectUrls = new Map();
 
+  function abortError(
+    signal
+  ) {
+    const error =
+      new Error(
+        "NovaSparx preview was cancelled because a newer request replaced it."
+      );
+
+    error.name =
+      "AbortError";
+
+    error.code =
+      "NOVASPARX_REQUEST_REPLACED";
+
+    error.reason =
+      signal?.reason ||
+      "cancelled";
+
+    return error;
+  }
+
+  function throwIfAborted(
+    signal
+  ) {
+    if (signal?.aborted) {
+      throw abortError(
+        signal
+      );
+    }
+  }
+
   const t = (key, fallback = "") =>
     window.FortniteI18n?.t?.(key) ||
     fallback ||
@@ -61,34 +92,102 @@
   function loadImage(
     image,
     url,
-    timeoutMs = 18_000
+    timeoutMs = 18_000,
+    signal =
+      window.NovaSparxBrowserGuard
+        ?.activeSignal?.() ||
+      null
   ) {
     return new Promise(
-      (resolve) => {
+      (resolve, reject) => {
         if (!url) {
           resolve(false);
           return;
         }
 
+        throwIfAborted(
+          signal
+        );
+
         let finished = false;
+        let timer = null;
 
-        const done = (ok) => {
-          if (finished) return;
+        const cleanup =
+          () => {
+            if (timer) {
+              clearTimeout(
+                timer
+              );
+            }
 
-          finished = true;
+            image.onload =
+              null;
 
-          clearTimeout(timer);
+            image.onerror =
+              null;
 
-          image.onload = null;
-          image.onerror = null;
+            signal
+              ?.removeEventListener?.(
+                "abort",
+                onAbort
+              );
+          };
 
-          resolve(Boolean(ok));
-        };
+        const done =
+          (ok) => {
+            if (finished) {
+              return;
+            }
 
-        const timer =
+            finished =
+              true;
+
+            cleanup();
+
+            resolve(
+              Boolean(ok)
+            );
+          };
+
+        const onAbort =
+          () => {
+            if (finished) {
+              return;
+            }
+
+            finished =
+              true;
+
+            cleanup();
+
+            try {
+              image.removeAttribute(
+                "src"
+              );
+            } catch {}
+
+            reject(
+              abortError(
+                signal
+              )
+            );
+          };
+
+        timer =
           setTimeout(
-            () => done(false),
+            () =>
+              done(false),
             timeoutMs
+          );
+
+        signal
+          ?.addEventListener?.(
+            "abort",
+            onAbort,
+            {
+              once:
+                true
+            }
           );
 
         image.onload =
@@ -99,7 +198,8 @@
             );
 
         image.onerror =
-          () => done(false);
+          () =>
+            done(false);
 
         image.src = url;
       }
@@ -118,7 +218,18 @@
             options
           )
       ) || null;
-    } catch {
+    } catch (error) {
+      if (
+        options.signal
+          ?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        throw abortError(
+          options.signal
+        );
+      }
+
       return null;
     }
   }
@@ -522,8 +633,18 @@
     status,
     meta,
     sourceLabel =
-      "NovaSparx 1.1"
+      "NovaSparx 1.1",
+    options = {}
   ) {
+    const signal =
+      options.signal ||
+      window.NovaSparxBrowserGuard
+        ?.activeSignal?.() ||
+      null;
+
+    throwIfAborted(
+      signal
+    );
     if (
       !window.NovaSparxRenderer
         ?.render
@@ -540,7 +661,16 @@
 
     const result =
       await window.NovaSparxRenderer
-        .render(manifest);
+        .render(
+          manifest,
+          {
+            signal
+          }
+        );
+
+    throwIfAborted(
+      signal
+    );
 
     release(path);
 
@@ -641,7 +771,12 @@
         meta,
         options.sourceLabel ||
           result.sourceLabel ||
-          "NovaSparx • layered mesh"
+          "NovaSparx • layered mesh",
+        {
+          signal:
+            options.signal ||
+            null
+        }
       );
     }
 
@@ -709,7 +844,12 @@
       image,
       status,
       meta,
-      sourceLabel
+      sourceLabel,
+      {
+        signal:
+          options.signal ||
+          null
+      }
     );
   }
 
@@ -1055,7 +1195,12 @@
           ui.image,
           ui.status,
           ui.meta,
-          "Layer 8 • CUE4Parse referenced model"
+          "Layer 8 • CUE4Parse referenced model",
+          {
+            signal:
+              options.signal ||
+              null
+          }
         );
 
         return {
@@ -1069,6 +1214,17 @@
         plan
       };
     } catch (error) {
+      if (
+        options.signal
+          ?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        throw abortError(
+          options.signal
+        );
+      }
+
       return {
         rendered: false,
         error: true,
@@ -1389,6 +1545,14 @@
     ui,
     plan = null
   ) {
+    const signal =
+      ui?.requestSignal ||
+      null;
+
+    throwIfAborted(
+      signal
+    );
+
     const canvas =
       document.createElement(
         "canvas"
@@ -1652,6 +1816,10 @@
           canvas
         );
 
+      throwIfAborted(
+        signal
+      );
+
       url =
         URL.createObjectURL(blob);
 
@@ -1673,6 +1841,10 @@
         );
       }
     }
+
+    throwIfAborted(
+      signal
+    );
 
     return showEvidenceImage(
       path,
@@ -1885,7 +2057,13 @@
       operation?.signal ||
       null;
 
+    ui.requestSignal =
+      signal;
+
     try {
+      throwIfAborted(
+        signal
+      );
       let pathFamily =
         window.NovaSparxAssociations
           ?.family?.(
@@ -2049,7 +2227,17 @@
                   fastAssociation
               };
             }
-          } catch {}
+          } catch (error) {
+            if (
+              signal?.aborted ||
+              error?.name ===
+                "AbortError"
+            ) {
+              throw abortError(
+                signal
+              );
+            }
+          }
 
           return renderEvidenceImage(
             clean,
@@ -2572,6 +2760,16 @@
             association
           };
         } catch (meshError) {
+          if (
+            signal?.aborted ||
+            meshError?.name ===
+              "AbortError"
+          ) {
+            throw abortError(
+              signal
+            );
+          }
+
           const browserState =
             guard?.status?.() ||
             {};
@@ -2674,6 +2872,19 @@
         universal.plan
       );
     } catch (error) {
+      if (
+        signal?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        return {
+          state:
+            "aborted",
+          kind:
+            "cancelled"
+        };
+      }
+
       console.warn(
         "FNAA preview:",
         error
@@ -2693,11 +2904,21 @@
         }
       );
     } finally {
+      const wasCurrent =
+        guard
+          ?.isCurrentOperation?.(
+            operation
+          ) ??
+        !signal?.aborted;
+
       guard?.endOperation?.(
         operation
       );
 
-      if (button) {
+      if (
+        button &&
+        wasCurrent
+      ) {
         button.disabled = false;
 
         if (
@@ -2743,7 +2964,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "1.6.0",
+      version: "1.7.0",
       toggle,
       render: renderPreview,
       release
