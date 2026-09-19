@@ -41,7 +41,8 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const OAUTH_TTL_MS = 10 * 60 * 1000;
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const MAX_NOVA_BINARY_BYTES = 64 * 1024 * 1024;
+const MAX_NOVA_BINARY_BYTES = 16 * 1024 * 1024;
+const MAX_NOVA_JSON_BYTES = 2 * 1024 * 1024;
 const MAX_ASSET_PATH = 2400;
 
 const ABUSE_WINDOW_MS = 60_000;
@@ -1265,15 +1266,7 @@ async function handleNovaEdgeBootstrap(
         error:
           aesOk
             ? null
-            : String(
-                aesResult.reason
-                  ?.message ||
-                aesResult.reason ||
-                "AES metadata unavailable."
-              ).slice(
-                0,
-                240
-              )
+            : "AES metadata unavailable."
       },
 
       manifest: {
@@ -1295,15 +1288,7 @@ async function handleNovaEdgeBootstrap(
         error:
           manifestOk
             ? null
-            : String(
-                manifestResult.reason
-                  ?.message ||
-                manifestResult.reason ||
-                "Manifest metadata unavailable."
-              ).slice(
-                0,
-                240
-              )
+            : "Manifest metadata unavailable."
       },
 
       transport: {
@@ -1413,6 +1398,13 @@ async function handleNovaEdgeRange(
         18_000
       );
   } catch (error) {
+    if (
+      request.signal
+        ?.aborted
+    ) {
+      throw error;
+    }
+
     return json(
       request,
       env,
@@ -1420,14 +1412,7 @@ async function handleNovaEdgeRange(
         state:
           "offline",
         error:
-          String(
-            error?.message ||
-            error ||
-            "Range source unavailable."
-          ).slice(
-            0,
-            240
-          )
+          "Range source unavailable."
       },
       502
     );
@@ -4411,13 +4396,10 @@ async function handleNovaStatus(
           `NovaSparx health returned HTTP ${upstream.status}.`
         ).slice(0, 300);
     }
-  } catch (error) {
+  } catch {
     result.ok = false;
     result.backend.error =
-      String(
-        error?.message ||
-        error
-      ).slice(0, 300);
+      "NovaSparx health check failed.";
   }
 
   return json(
@@ -4586,31 +4568,31 @@ async function handleNovaProxy(
         "image/"
       )
     ) {
-      const length =
-        Number(
-          upstream.headers.get(
-            "content-length"
-          ) || 0
-        );
+      let payload;
 
-      if (
-        length >
-        MAX_NOVA_BINARY_BYTES
-      ) {
-        try {
-          await upstream.body
-            ?.cancel();
-        } catch {}
-
+      try {
+        payload =
+          await readResponseBytesBounded(
+            upstream,
+            MAX_IMAGE_BYTES,
+            "NovaSparx texture"
+          );
+      } catch (error) {
         return json(
           request,
           env,
           {
             state: "error",
             error:
-              "NovaSparx texture is too large."
+              error?.code ===
+                "BODY_TOO_LARGE"
+                ? "NovaSparx texture is too large."
+                : "NovaSparx texture could not be read."
           },
-          413
+          error?.code ===
+            "BODY_TOO_LARGE"
+            ? 413
+            : 502
         );
       }
 
@@ -4621,7 +4603,12 @@ async function handleNovaProxy(
         ),
 
         "X-FNAA-Nova-Source":
-          source
+          source,
+
+        "Content-Length":
+          String(
+            payload.byteLength
+          )
       };
 
       const etag =
@@ -4634,7 +4621,7 @@ async function handleNovaProxy(
       }
 
       return new Response(
-        upstream.body,
+        payload,
         {
           status: 200,
           headers
@@ -4647,31 +4634,31 @@ async function handleNovaProxy(
         "/v1/client-mesh" &&
       upstream.ok
     ) {
-      const length =
-        Number(
-          upstream.headers.get(
-            "content-length"
-          ) || 0
-        );
+      let payload;
 
-      if (
-        length >
-        MAX_NOVA_BINARY_BYTES
-      ) {
-        try {
-          await upstream.body
-            ?.cancel();
-        } catch {}
-
+      try {
+        payload =
+          await readResponseBytesBounded(
+            upstream,
+            MAX_NOVA_BINARY_BYTES,
+            "NovaSparx mesh package"
+          );
+      } catch (error) {
         return json(
           request,
           env,
           {
             state: "error",
             error:
-              "NovaSparx mesh package is too large."
+              error?.code ===
+                "BODY_TOO_LARGE"
+                ? "NovaSparx mesh package is too large."
+                : "NovaSparx mesh package could not be read."
           },
-          413
+          error?.code ===
+            "BODY_TOO_LARGE"
+            ? 413
+            : 502
         );
       }
 
@@ -4689,17 +4676,16 @@ async function handleNovaProxy(
         ),
 
         "X-FNAA-Nova-Source":
-          source
+          source,
+
+        "Content-Length":
+          String(
+            payload.byteLength
+          )
       };
 
-      if (length > 0) {
-        headers[
-          "Content-Length"
-        ] = String(length);
-      }
-
       return new Response(
-        upstream.body,
+        payload,
         {
           status: 200,
           headers
@@ -4707,8 +4693,36 @@ async function handleNovaProxy(
       );
     }
 
-    const body =
-      await upstream.text();
+    let body;
+
+    try {
+      const bodyBytes =
+        await readResponseBytesBounded(
+          upstream,
+          MAX_NOVA_JSON_BYTES,
+          "NovaSparx JSON response"
+        );
+
+      body =
+        new TextDecoder()
+          .decode(
+            bodyBytes
+          );
+    } catch (error) {
+      return json(
+        request,
+        env,
+        {
+          state: "error",
+          error:
+            error?.code ===
+              "BODY_TOO_LARGE"
+              ? "NovaSparx response is too large."
+              : "NovaSparx response could not be read."
+        },
+        502
+      );
+    }
 
     const responseHeaders =
       baseCorsHeaders(
@@ -4761,10 +4775,7 @@ async function handleNovaProxy(
           error?.name ===
           "AbortError"
             ? "NovaSparx timed out."
-            : String(
-                error?.message ||
-                error
-              )
+            : "NovaSparx backend is unavailable."
       },
       error?.name ===
       "AbortError"
@@ -7019,9 +7030,6 @@ export default {
       url.pathname ===
         "/health"
     ) {
-      const nova =
-        novaConfig(env);
-
       return json(
         request,
         env,
@@ -7042,23 +7050,7 @@ export default {
               ""
             ).length >= 32,
           storageMode:
-            "stateless-encrypted-session",
-          novaSparx: {
-            configured:
-              novaConfigured(env),
-            autoLinkConfigured:
-              !!(
-                nova.autoLinkUrl &&
-                nova.autoLinkTokens.length
-              ),
-            directFallbackConfigured:
-              !!(
-                nova.directUrl &&
-                nova.directTokens.length
-              ),
-            directTokenConfigured:
-              !!nova.directTokens.length
-          }
+            "stateless-encrypted-session"
         }
       );
     }
