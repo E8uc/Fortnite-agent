@@ -11,6 +11,37 @@
   const ARRAY_BUFFER = 34962;
   const ELEMENT_ARRAY_BUFFER = 34963;
 
+  function exportAbortError(
+    signal
+  ) {
+    const error =
+      new Error(
+        "NovaSparx export was cancelled because a newer request replaced it."
+      );
+
+    error.name =
+      "AbortError";
+
+    error.code =
+      "NOVASPARX_REQUEST_REPLACED";
+
+    error.reason =
+      signal?.reason ||
+      "cancelled";
+
+    return error;
+  }
+
+  function throwIfAborted(
+    signal
+  ) {
+    if (signal?.aborted) {
+      throw exportAbortError(
+        signal
+      );
+    }
+  }
+
   function align4(value) {
     return (Number(value) + 3) & ~3;
   }
@@ -64,7 +95,10 @@
     );
   }
 
-  function transformPositions(input) {
+  function transformPositions(
+    input,
+    signal = null
+  ) {
     const source =
       input instanceof Float32Array
         ? input
@@ -80,6 +114,14 @@
       index + 2 < source.length;
       index += 3
     ) {
+      if (
+        (index & 12287) === 0
+      ) {
+        throwIfAborted(
+          signal
+        );
+      }
+
       const x = source[index];
       const y = source[index + 1];
       const z = source[index + 2];
@@ -92,7 +134,10 @@
     return out;
   }
 
-  function transformNormals(input) {
+  function transformNormals(
+    input,
+    signal = null
+  ) {
     if (!input) return null;
 
     const source =
@@ -110,6 +155,14 @@
       index + 2 < source.length;
       index += 3
     ) {
+      if (
+        (index & 12287) === 0
+      ) {
+        throwIfAborted(
+          signal
+        );
+      }
+
       const x = source[index];
       const y = source[index + 1];
       const z = source[index + 2];
@@ -133,7 +186,10 @@
     return out;
   }
 
-  function transformIndices(input) {
+  function transformIndices(
+    input,
+    signal = null
+  ) {
     const source =
       input instanceof Uint32Array
         ? input
@@ -149,6 +205,14 @@
       index + 2 < source.length;
       index += 3
     ) {
+      if (
+        (index & 12287) === 0
+      ) {
+        throwIfAborted(
+          signal
+        );
+      }
+
       out[index] = source[index];
       out[index + 1] = source[index + 2];
       out[index + 2] = source[index + 1];
@@ -157,7 +221,10 @@
     return out;
   }
 
-  function positionBounds(positions) {
+  function positionBounds(
+    positions,
+    signal = null
+  ) {
     const min =
       [Infinity, Infinity, Infinity];
 
@@ -169,6 +236,14 @@
       index + 2 < positions.length;
       index += 3
     ) {
+      if (
+        (index & 12287) === 0
+      ) {
+        throwIfAborted(
+          signal
+        );
+      }
+
       for (
         let axis = 0;
         axis < 3;
@@ -386,10 +461,37 @@
   }
 
   function deadlineSignal(
-    timeoutMs
+    timeoutMs,
+    parentSignal = null
   ) {
     const controller =
       new AbortController();
+
+    const abortFromParent =
+      () => {
+        try {
+          controller.abort(
+            parentSignal?.reason ||
+            "replaced-by-new-request"
+          );
+        } catch {}
+      };
+
+    if (
+      parentSignal?.aborted
+    ) {
+      abortFromParent();
+    } else {
+      parentSignal
+        ?.addEventListener?.(
+          "abort",
+          abortFromParent,
+          {
+            once:
+              true
+          }
+        );
+    }
 
     const timer =
       setTimeout(
@@ -410,20 +512,32 @@
         clearTimeout(
           timer
         );
+
+        parentSignal
+          ?.removeEventListener?.(
+            "abort",
+            abortFromParent
+          );
       }
     };
   }
 
   async function fetchImage(
-    url
+    url,
+    signal = null
   ) {
     if (!url) {
       return null;
     }
 
+    throwIfAborted(
+      signal
+    );
+
     const deadline =
       deadlineSignal(
-        20_000
+        20_000,
+        signal
       );
 
     try {
@@ -441,6 +555,10 @@
             }
           }
         );
+
+      throwIfAborted(
+        signal
+      );
 
       if (!response.ok) {
         return null;
@@ -472,11 +590,25 @@
           await response.arrayBuffer()
         );
 
+      throwIfAborted(
+        signal
+      );
+
       return {
         bytes,
         mime
       };
-    } catch {
+    } catch (error) {
+      if (
+        signal?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        throw exportAbortError(
+          signal
+        );
+      }
+
       return null;
     } finally {
       deadline.cleanup();
@@ -486,7 +618,8 @@
   async function mapLimit(
     values,
     limit,
-    worker
+    worker,
+    signal = null
   ) {
     const output =
       new Array(
@@ -498,6 +631,10 @@
     const run =
       async () => {
         while (true) {
+          throwIfAborted(
+            signal
+          );
+
           const index =
             cursor++;
 
@@ -531,6 +668,10 @@
         },
         run
       )
+    );
+
+    throwIfAborted(
+      signal
     );
 
     return output;
@@ -574,8 +715,12 @@
     gltf,
     builder,
     materials,
-    warnings
+    warnings,
+    signal = null
   ) {
+    throwIfAborted(
+      signal
+    );
     const urls =
       materialTextureUrls(
         materials
@@ -596,7 +741,10 @@
         budget.textureConcurrency,
         async (url) => {
           const result =
-            await fetchImage(url);
+            await fetchImage(
+              url,
+              signal
+            );
 
           if (!result) {
             warnings.push(
@@ -613,8 +761,13 @@
             url,
             result
           };
-        }
+        },
+        signal
       );
+
+    throwIfAborted(
+      signal
+    );
 
     const map =
       new Map();
@@ -622,6 +775,9 @@
     for (
       const item of fetched
     ) {
+      throwIfAborted(
+        signal
+      );
       if (!item.result) {
         continue;
       }
@@ -832,6 +988,14 @@
     manifest,
     options = {}
   ) {
+    const signal =
+      options.signal ||
+      null;
+
+    throwIfAborted(
+      signal
+    );
+
     if (
       !manifest?.geometry
     ) {
@@ -843,13 +1007,15 @@
     const positions =
       transformPositions(
         manifest.geometry
-          .positions
+          .positions,
+        signal
       );
 
     const normals =
       transformNormals(
         manifest.geometry
-          .normals
+          .normals,
+        signal
       );
 
     const uv0 =
@@ -870,7 +1036,8 @@
     const indices =
       transformIndices(
         manifest.geometry
-          .indices
+          .indices,
+        signal
       );
 
     if (
@@ -1011,7 +1178,8 @@
 
     const bounds =
       positionBounds(
-        positions
+        positions,
+        signal
       );
 
     const positionAccessor =
@@ -1114,8 +1282,13 @@
             gltf,
             builder,
             materials,
-            warnings
+            warnings,
+            signal
           );
+
+    throwIfAborted(
+      signal
+    );
 
     gltf.materials =
       materials.map(
@@ -1155,6 +1328,10 @@
     for (
       const section of sections
     ) {
+      throwIfAborted(
+        signal
+      );
+
       const firstIndex =
         Math.max(
           0,
@@ -1260,8 +1437,16 @@
       );
     }
 
+    throwIfAborted(
+      signal
+    );
+
     const binary =
       builder.finish();
+
+    throwIfAborted(
+      signal
+    );
 
     if (
       binary.byteLength >
@@ -1275,6 +1460,10 @@
     gltf.buffers[0]
       .byteLength =
       binary.byteLength;
+
+    throwIfAborted(
+      signal
+    );
 
     const jsonBytes =
       new TextEncoder()
@@ -1377,6 +1566,10 @@
       binHeader + 8
     );
 
+    throwIfAborted(
+      signal
+    );
+
     return {
       buffer:
         output,
@@ -1427,8 +1620,12 @@
 
   async function meshTarget(
     path,
-    classification
+    classification,
+    signal = null
   ) {
+    throwIfAborted(
+      signal
+    );
     if (
       kindOf(
         classification
@@ -1442,8 +1639,16 @@
       await globalThis
         .NovaSparxAssociations
         ?.resolveVisual?.(
-          path
+          path,
+          null,
+          {
+            signal
+          }
         );
+
+    throwIfAborted(
+      signal
+    );
 
     return (
       visual?.visualPath ||
@@ -1458,8 +1663,14 @@
     const target =
       await meshTarget(
         path,
-        options.classification
+        options.classification,
+        options.signal ||
+          null
       );
+
+    throwIfAborted(
+      options.signal
+    );
 
     const resolved =
       await globalThis
@@ -1472,6 +1683,10 @@
               options.signal
           }
         );
+
+    throwIfAborted(
+      options.signal
+    );
 
     if (
       !resolved?.manifest
@@ -1508,14 +1723,25 @@
           "",
         embedTextures:
           options.embedTextures !==
-          false
+          false,
+        signal:
+          options.signal ||
+          null
       }
     );
   }
 
   async function exportTexture(
-    path
+    path,
+    options = {}
   ) {
+    const signal =
+      options.signal ||
+      null;
+
+    throwIfAborted(
+      signal
+    );
     const url =
       globalThis.NovaSparx
         ?.textureUrl?.(
@@ -1534,6 +1760,9 @@
         {
           cache:
             "force-cache",
+          signal:
+            signal ||
+            undefined,
           headers: {
             Accept:
               "image/png,image/*;q=0.8"
@@ -1549,6 +1778,10 @@
 
     const blob =
       await response.blob();
+
+    throwIfAborted(
+      signal
+    );
 
     return {
       blob,
@@ -1576,7 +1809,8 @@
       kind === "texture"
     ) {
       return exportTexture(
-        path
+        path,
+        options
       );
     }
 
@@ -1603,7 +1837,7 @@
   globalThis.NovaSparxExporter =
     Object.freeze({
       version:
-        "1.0.0",
+        "1.1.0",
       supports,
       buildGlb,
       exportGlb,
