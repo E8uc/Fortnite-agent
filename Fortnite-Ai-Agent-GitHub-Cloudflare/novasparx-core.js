@@ -71,6 +71,36 @@
     return url;
   }
 
+  function unsafeAssetPath(
+    value
+  ) {
+    const text =
+      String(value || "");
+
+    if (
+      !text ||
+      text.length >
+        MAX_ASSET_PATH_LENGTH ||
+      /[\u0000-\u001F\u007F]/.test(
+        text
+      )
+    ) {
+      return true;
+    }
+
+    return text
+      .replace(
+        /\\/g,
+        "/"
+      )
+      .split("/")
+      .some(
+        (segment) =>
+          segment === "." ||
+          segment === ".."
+      );
+  }
+
   function requestAssetPath(
     raw
   ) {
@@ -78,9 +108,9 @@
       cleanPath(raw);
 
     if (
-      !path ||
-      path.length >
-        MAX_ASSET_PATH_LENGTH
+      unsafeAssetPath(
+        path
+      )
     ) {
       throw new Error(
         "NovaSparx asset path is invalid or too long."
@@ -768,17 +798,294 @@
     };
   }
 
-  async function requestJson(url, options = {}) {
-    const response = await fetch(url, {
-      cache: options.noCache ? "no-store" : "force-cache",
-      signal:
-        options.signal ||
-        undefined,
-      headers: { Accept: "application/json" }
-    });
+  function jsonRequestLimit() {
+    const state =
+      window.NovaSparxBrowserGuard
+        ?.status?.() ||
+      {};
 
-    const data = await response.json().catch(() => ({}));
-    return { response, data };
+    return state.isIOS
+      ? 3 * 1024 * 1024
+      : state.isMobile
+        ? 4 * 1024 * 1024
+        : 8 * 1024 * 1024;
+  }
+
+  function linkedDeadline(
+    signal,
+    timeoutMs
+  ) {
+    const controller =
+      new AbortController();
+
+    const abortFromParent =
+      () => {
+        try {
+          controller.abort(
+            signal?.reason ||
+            "request-cancelled"
+          );
+        } catch {}
+      };
+
+    if (signal?.aborted) {
+      abortFromParent();
+    } else {
+      signal
+        ?.addEventListener?.(
+          "abort",
+          abortFromParent,
+          {
+            once:
+              true
+          }
+        );
+    }
+
+    const timer =
+      setTimeout(
+        () => {
+          try {
+            controller.abort(
+              "request-timeout"
+            );
+          } catch {}
+        },
+        Math.max(
+          1000,
+          Number(timeoutMs) ||
+          20_000
+        )
+      );
+
+    return {
+      signal:
+        controller.signal,
+
+      cleanup() {
+        clearTimeout(
+          timer
+        );
+
+        signal
+          ?.removeEventListener?.(
+            "abort",
+            abortFromParent
+          );
+      }
+    };
+  }
+
+  async function readJsonBounded(
+    response,
+    maxBytes,
+    signal
+  ) {
+    const declared =
+      Number(
+        response.headers.get(
+          "content-length"
+        ) || 0
+      );
+
+    if (
+      declared > 0 &&
+      declared > maxBytes
+    ) {
+      try {
+        await response.body
+          ?.cancel(
+            "json-too-large"
+          );
+      } catch {}
+
+      throw new Error(
+        "NovaSparx JSON response exceeded the browser safety limit."
+      );
+    }
+
+    if (
+      !response.body ||
+      typeof response.body
+        .getReader !==
+        "function"
+    ) {
+      const text =
+        await response.text();
+
+      if (signal?.aborted) {
+        const error =
+          new Error(
+            "NovaSparx JSON request was cancelled."
+          );
+
+        error.name =
+          "AbortError";
+
+        throw error;
+      }
+
+      if (
+        new TextEncoder()
+          .encode(text)
+          .byteLength >
+        maxBytes
+      ) {
+        throw new Error(
+          "NovaSparx JSON response exceeded the browser safety limit."
+        );
+      }
+
+      try {
+        return JSON.parse(text);
+      } catch {
+        return {};
+      }
+    }
+
+    const reader =
+      response.body
+        .getReader();
+
+    const decoder =
+      new TextDecoder();
+
+    const chunks = [];
+    let total = 0;
+
+    try {
+      while (true) {
+        if (signal?.aborted) {
+          const error =
+            new Error(
+              "NovaSparx JSON request was cancelled."
+            );
+
+          error.name =
+            "AbortError";
+
+          throw error;
+        }
+
+        const {
+          done,
+          value
+        } =
+          await reader.read();
+
+        if (done) break;
+
+        if (!value?.byteLength) {
+          continue;
+        }
+
+        total +=
+          value.byteLength;
+
+        if (
+          total >
+          maxBytes
+        ) {
+          try {
+            await reader.cancel(
+              "json-too-large"
+            );
+          } catch {}
+
+          throw new Error(
+            "NovaSparx JSON response exceeded the browser safety limit."
+          );
+        }
+
+        chunks.push(
+          decoder.decode(
+            value,
+            {
+              stream:
+                true
+            }
+          )
+        );
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {}
+    }
+
+    chunks.push(
+      decoder.decode()
+    );
+
+    try {
+      return JSON.parse(
+        chunks.join("")
+      );
+    } catch {
+      return {};
+    }
+  }
+
+  async function requestJson(
+    url,
+    options = {}
+  ) {
+    const pathname =
+      String(
+        url?.pathname ||
+        ""
+      );
+
+    const timeoutMs =
+      pathname.endsWith(
+        "/resolve"
+      )
+        ? 32_000
+        : pathname.endsWith(
+              "/preview"
+            )
+          ? 22_000
+          : 18_000;
+
+    const deadline =
+      linkedDeadline(
+        options.signal ||
+        null,
+        timeoutMs
+      );
+
+    try {
+      const response =
+        await fetch(
+          url,
+          {
+            cache:
+              options.noCache
+                ? "no-store"
+                : "force-cache",
+            signal:
+              deadline.signal,
+            headers: {
+              Accept:
+                "application/json"
+            }
+          }
+        );
+
+      const data =
+        await readJsonBounded(
+          response,
+          jsonRequestLimit(),
+          deadline.signal
+        );
+
+      return {
+        response,
+        data
+      };
+    } finally {
+      deadline.cleanup();
+    }
   }
 
   async function resolve(path, options = {}) {
@@ -1121,7 +1428,7 @@
   }
 
   window.NovaSparx = Object.freeze({
-    version: "1.5.0",
+    version: "1.6.0",
     resolve,
     clientMesh,
     clientMeshBuffer,
