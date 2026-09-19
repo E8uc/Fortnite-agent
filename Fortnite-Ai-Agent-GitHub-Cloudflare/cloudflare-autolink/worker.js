@@ -5,6 +5,7 @@ const BACKEND_TAG = "nova-backend";
 
 const MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
 const MAX_CONTROL_BYTES = 256 * 1024;
+const MAX_PENDING_REQUESTS = 32;
 
 function requestTimeoutMs(path) {
   if (
@@ -198,7 +199,7 @@ export default {
             ok: false,
             service: "NovaSparx AutoLink",
             connected: false,
-            error: String(error?.message || error)
+            error: "AutoLink health check failed."
           },
           503
         );
@@ -436,6 +437,24 @@ export class NovaLinkDurableObject extends DurableObject {
         },
         503,
         { "retry-after": "5" }
+      );
+    }
+
+    if (
+      this.pending.size >=
+      MAX_PENDING_REQUESTS
+    ) {
+      return json(
+        {
+          state: "busy",
+          error:
+            "NovaSparx AutoLink is busy. Retry shortly."
+        },
+        503,
+        {
+          "retry-after":
+            "1"
+        }
       );
     }
 
