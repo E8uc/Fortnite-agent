@@ -246,6 +246,10 @@
         const pending of
         dbPending.values()
       ) {
+        clearTimeout(
+          pending.timer
+        );
+
         pending.reject(
           new Error(
             "Database search stopped because the page was hidden."
@@ -2607,7 +2611,7 @@
 
   dbWorker =
     new Worker(
-      "/Fortnite-agent/database-worker.js?v=4"
+      "/Fortnite-agent/database-worker.js?v=5"
     );
     dbWorker.addEventListener(
       "message",
@@ -2616,7 +2620,8 @@
           id,
           ok,
           data,
-          error
+          error,
+          code
         } =
           event.data || {};
 
@@ -2625,16 +2630,38 @@
 
         if (!pending) return;
 
-        dbPending.delete(id);
+        dbPending.delete(
+          id
+        );
+
+        clearTimeout(
+          pending.timer
+        );
 
         if (ok) {
-          pending.resolve(data);
+          pending.resolve(
+            data
+          );
         } else {
-          pending.reject(
+          const workerError =
             new Error(
               error ||
               "Database worker error"
-            )
+            );
+
+          if (
+            code ===
+            "SEARCH_REPLACED"
+          ) {
+            workerError.name =
+              "AbortError";
+
+            workerError.code =
+              "SEARCH_REPLACED";
+          }
+
+          pending.reject(
+            workerError
           );
         }
       }
@@ -2647,6 +2674,10 @@
           const pending of
           dbPending.values()
         ) {
+          clearTimeout(
+            pending.timer
+          );
+
           pending.reject(
             new Error(
               event.message ||
@@ -2671,6 +2702,29 @@
     scope,
     query
   ) {
+    const cleanQuery =
+      String(
+        query || ""
+      )
+        .trim()
+        .slice(
+          0,
+          512
+        );
+
+    if (!cleanQuery) {
+      return Promise.resolve({
+        total:
+          0,
+        results: [],
+        allResults: [],
+        makeFile:
+          false,
+        source:
+          "none"
+      });
+    }
+
     const worker =
       ensureDbWorker();
 
@@ -2679,45 +2733,50 @@
 
     return new Promise(
       (resolve, reject) => {
+        const timer =
+          setTimeout(
+            () => {
+              const pending =
+                dbPending.get(
+                  id
+                );
+
+              if (!pending) {
+                return;
+              }
+
+              dbPending.delete(
+                id
+              );
+
+              reject(
+                new Error(
+                  "Database search timed out."
+                )
+              );
+            },
+            30_000
+          );
+
         dbPending.set(
           id,
           {
             resolve,
-            reject
+            reject,
+            timer
           }
         );
 
         worker.postMessage({
           id,
-          type: "search",
+          type:
+            "search",
           scope,
-          query,
+          query:
+            cleanQuery,
           config:
             DB_CONFIG
         });
-
-        setTimeout(
-          () => {
-            if (
-              !dbPending.has(
-                id
-              )
-            ) {
-              return;
-            }
-
-            dbPending.delete(
-              id
-            );
-
-            reject(
-              new Error(
-                "Database search timed out."
-              )
-            );
-          },
-          30_000
-        );
       }
     );
   }
