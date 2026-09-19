@@ -68,6 +68,7 @@
       return {
         maxBinaryBytes: 18 * 1024 * 1024,
         maxTextureBytes: 6 * 1024 * 1024,
+        maxSingleTextureBytes: 3 * 1024 * 1024,
         textureConcurrency: 1
       };
     }
@@ -76,6 +77,7 @@
       return {
         maxBinaryBytes: 32 * 1024 * 1024,
         maxTextureBytes: 12 * 1024 * 1024,
+        maxSingleTextureBytes: 5 * 1024 * 1024,
         textureConcurrency: 2
       };
     }
@@ -83,6 +85,7 @@
     return {
       maxBinaryBytes: 128 * 1024 * 1024,
       maxTextureBytes: 40 * 1024 * 1024,
+      maxSingleTextureBytes: 12 * 1024 * 1024,
       textureConcurrency: 4
     };
   }
@@ -522,9 +525,219 @@
     };
   }
 
+  async function readBytesBounded(
+    response,
+    maxBytes,
+    signal = null
+  ) {
+    maxBytes =
+      Math.max(
+        1,
+        Number(maxBytes) ||
+        1
+      );
+
+    const declared =
+      Number(
+        response.headers.get(
+          "content-length"
+        ) || 0
+      );
+
+    if (
+      declared > 0 &&
+      declared > maxBytes
+    ) {
+      try {
+        await response.body
+          ?.cancel();
+      } catch {}
+
+      throw new Error(
+        "Texture response exceeded the safe browser export budget."
+      );
+    }
+
+    if (
+      !response.body ||
+      typeof response.body
+        .getReader !==
+        "function"
+    ) {
+      const bytes =
+        new Uint8Array(
+          await response.arrayBuffer()
+        );
+
+      throwIfAborted(
+        signal
+      );
+
+      if (
+        bytes.byteLength >
+        maxBytes
+      ) {
+        throw new Error(
+          "Texture response exceeded the safe browser export budget."
+        );
+      }
+
+      return bytes;
+    }
+
+    const reader =
+      response.body
+        .getReader();
+
+    const chunks = [];
+    let total = 0;
+
+    try {
+      while (true) {
+        throwIfAborted(
+          signal
+        );
+
+        const {
+          done,
+          value
+        } =
+          await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        if (!value?.byteLength) {
+          continue;
+        }
+
+        total +=
+          value.byteLength;
+
+        if (total > maxBytes) {
+          try {
+            await reader.cancel();
+          } catch {}
+
+          throw new Error(
+            "Texture response exceeded the safe browser export budget."
+          );
+        }
+
+        chunks.push(
+          value
+        );
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {}
+    }
+
+    throwIfAborted(
+      signal
+    );
+
+    const output =
+      new Uint8Array(
+        total
+      );
+
+    let offset = 0;
+
+    for (const chunk of chunks) {
+      output.set(
+        chunk,
+        offset
+      );
+
+      offset +=
+        chunk.byteLength;
+    }
+
+    return output;
+  }
+
+  function textureFetchUrl(
+    value
+  ) {
+    const raw =
+      String(value || "")
+        .trim();
+
+    if (!raw) {
+      return "";
+    }
+
+    let candidate =
+      raw;
+
+    if (
+      !/^https?:\/\//i.test(
+        raw
+      )
+    ) {
+      candidate =
+        globalThis.NovaSparx
+          ?.textureUrl?.(
+            raw
+          ) ||
+        raw;
+    }
+
+    try {
+      const url =
+        new URL(
+          candidate,
+          globalThis.location
+            ?.href ||
+          "https://invalid.local/"
+        );
+
+      const loopback =
+        [
+          "localhost",
+          "127.0.0.1",
+          "::1",
+          "[::1]"
+        ].includes(
+          url.hostname
+        );
+
+      if (
+        url.protocol !==
+          "https:" &&
+        !(
+          url.protocol ===
+            "http:" &&
+          loopback
+        )
+      ) {
+        return "";
+      }
+
+      if (
+        url.username ||
+        url.password
+      ) {
+        return "";
+      }
+
+      url.hash = "";
+
+      return url.toString();
+    } catch {
+      return "";
+    }
+  }
+
   async function fetchImage(
     url,
-    signal = null
+    signal = null,
+    maxBytes =
+      exportBudget()
+        .maxSingleTextureBytes
   ) {
     if (!url) {
       return null;
@@ -533,6 +746,15 @@
     throwIfAborted(
       signal
     );
+
+    const requestUrl =
+      textureFetchUrl(
+        url
+      );
+
+    if (!requestUrl) {
+      return null;
+    }
 
     const deadline =
       deadlineSignal(
@@ -543,10 +765,12 @@
     try {
       const response =
         await fetch(
-          url,
+          requestUrl,
           {
             cache:
               "force-cache",
+            credentials:
+              "omit",
             signal:
               deadline.signal,
             headers: {
@@ -561,6 +785,11 @@
       );
 
       if (!response.ok) {
+        try {
+          await response.body
+            ?.cancel();
+        } catch {}
+
         return null;
       }
 
@@ -582,12 +811,19 @@
           "image/jpeg"
         ].includes(mime)
       ) {
+        try {
+          await response.body
+            ?.cancel();
+        } catch {}
+
         return null;
       }
 
       const bytes =
-        new Uint8Array(
-          await response.arrayBuffer()
+        await readBytesBounded(
+          response,
+          maxBytes,
+          signal
         );
 
       throwIfAborted(
@@ -743,7 +979,9 @@
           const result =
             await fetchImage(
               url,
-              signal
+              signal,
+              budget
+                .maxSingleTextureBytes
             );
 
           if (!result) {
@@ -1742,6 +1980,7 @@
     throwIfAborted(
       signal
     );
+
     const url =
       globalThis.NovaSparx
         ?.textureUrl?.(
@@ -1754,12 +1993,25 @@
       );
     }
 
+    const requestUrl =
+      textureFetchUrl(
+        url
+      );
+
+    if (!requestUrl) {
+      throw new Error(
+        "NovaSparx texture export URL is invalid."
+      );
+    }
+
     const response =
       await fetch(
-        url,
+        requestUrl,
         {
           cache:
             "force-cache",
+          credentials:
+            "omit",
           signal:
             signal ||
             undefined,
@@ -1770,14 +2022,59 @@
         }
       );
 
+    throwIfAborted(
+      signal
+    );
+
     if (!response.ok) {
+      try {
+        await response.body
+          ?.cancel();
+      } catch {}
+
       throw new Error(
         `Texture export returned HTTP ${response.status}.`
       );
     }
 
+    const mime =
+      String(
+        response.headers.get(
+          "content-type"
+        ) ||
+        "image/png"
+      )
+        .split(";")[0]
+        .trim()
+        .toLowerCase();
+
+    if (mime !== "image/png") {
+      try {
+        await response.body
+          ?.cancel();
+      } catch {}
+
+      throw new Error(
+        "NovaSparx texture export did not return PNG data."
+      );
+    }
+
+    const bytes =
+      await readBytesBounded(
+        response,
+        exportBudget()
+          .maxSingleTextureBytes,
+        signal
+      );
+
     const blob =
-      await response.blob();
+      new Blob(
+        [bytes],
+        {
+          type:
+            "image/png"
+        }
+      );
 
     throwIfAborted(
       signal
@@ -1789,7 +2086,6 @@
         cleanName(path) +
         ".png",
       mimeType:
-        blob.type ||
         "image/png",
       warnings: []
     };
@@ -1837,7 +2133,7 @@
   globalThis.NovaSparxExporter =
     Object.freeze({
       version:
-        "1.1.0",
+        "1.2.0",
       supports,
       buildGlb,
       exportGlb,
