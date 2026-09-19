@@ -140,48 +140,58 @@
   }
 
   function family(path, inspection = null) {
-    const type =
-      String(
-        inspection?.assetType ||
-        inspection?.AssetType ||
-        ""
-      ).toLowerCase();
-
-    const name =
-      leaf(path)
-        .toLowerCase();
+    const inspectedKind =
+      kindFromType(
+        inspectionType(
+          inspection
+        )
+      );
 
     if (
-      type.includes("texture") ||
-      /^(?:t_|tex_|texture_)/i.test(name)
-    ) {
-      return "texture";
-    }
-
-    if (
-      type.includes("staticmesh") ||
-      type.includes("skeletalmesh") ||
-      /^(?:sm_|sk_)/i.test(name)
+      inspectedKind ===
+        "staticmesh" ||
+      inspectedKind ===
+        "skeletalmesh"
     ) {
       return "mesh";
     }
 
     if (
-      type.includes("blueprint") ||
-      type.includes("generatedclass") ||
-      /^(?:bp_|bpc_)/i.test(name)
+      inspectedKind.startsWith(
+        "blueprint"
+      )
     ) {
       return "blueprint";
     }
 
     if (
-      type.includes("material") ||
-      /^(?:m_|mi_)/i.test(name)
+      inspectedKind !==
+        "other"
     ) {
-      return "material";
+      return inspectedKind;
     }
 
-    return "other";
+    const detectedKind =
+      pathKind(path);
+
+    if (
+      detectedKind ===
+        "staticmesh" ||
+      detectedKind ===
+        "skeletalmesh"
+    ) {
+      return "mesh";
+    }
+
+    if (
+      detectedKind.startsWith(
+        "blueprint"
+      )
+    ) {
+      return "blueprint";
+    }
+
+    return detectedKind;
   }
 
   function allowDirectImage(path) {
@@ -516,145 +526,40 @@
     data,
     fallbackPath = ""
   ) {
-    let best =
-      family(
+    const evidence =
+      jsonTypeEvidence(
+        data,
         fallbackPath
       );
 
-    let visited = 0;
+    const kind =
+      kindFromType(
+        evidence?.value ||
+        ""
+      );
 
-    const rank = {
-      other: 0,
-      material: 1,
-      texture: 2,
-      mesh: 3,
-      blueprint: 4
-    };
+    if (
+      kind === "staticmesh" ||
+      kind === "skeletalmesh"
+    ) {
+      return "mesh";
+    }
 
-    const consider = (
-      value,
-      key = ""
-    ) => {
-      const text =
-        `${key} ${String(value || "")}`
-          .toLowerCase();
+    if (
+      kind.startsWith(
+        "blueprint"
+      )
+    ) {
+      return "blueprint";
+    }
 
-      let candidate =
-        "other";
+    if (kind !== "other") {
+      return kind;
+    }
 
-      if (
-        /blueprintgeneratedclass|\bblueprint\b|generatedclass/
-          .test(text)
-      ) {
-        candidate =
-          "blueprint";
-      } else if (
-        /skeletalmesh|staticmesh|\bmesh\b/
-          .test(text)
-      ) {
-        candidate =
-          "mesh";
-      } else if (
-        /texture2d|virtualtexture|\btexture\b/
-          .test(text)
-      ) {
-        candidate =
-          "texture";
-      } else if (
-        /materialinstance|materialinterface|\bmaterial\b/
-          .test(text)
-      ) {
-        candidate =
-          "material";
-      }
-
-      if (
-        rank[candidate] >
-        rank[best]
-      ) {
-        best =
-          candidate;
-      }
-    };
-
-    const walk = (
-      value,
-      key = "",
-      depth = 0
-    ) => {
-      if (
-        value == null ||
-        depth > 6 ||
-        visited++ > 900 ||
-        best === "blueprint"
-      ) {
-        return;
-      }
-
-      if (
-        typeof value ===
-          "string" ||
-        typeof value ===
-          "number"
-      ) {
-        consider(
-          value,
-          key
-        );
-        return;
-      }
-
-      if (
-        Array.isArray(value)
-      ) {
-        for (
-          const item of
-          value.slice(0, 60)
-        ) {
-          walk(
-            item,
-            key,
-            depth + 1
-          );
-        }
-
-        return;
-      }
-
-      if (
-        typeof value ===
-        "object"
-      ) {
-        for (
-          const [
-            childKey,
-            child
-          ] of
-          Object.entries(value)
-            .slice(0, 100)
-        ) {
-          if (
-            /^(?:Type|Class|ClassName|ExportType|ObjectName|AssetClass)$/i
-              .test(childKey)
-          ) {
-            consider(
-              child,
-              childKey
-            );
-          }
-
-          walk(
-            child,
-            childKey,
-            depth + 1
-          );
-        }
-      }
-    };
-
-    walk(data);
-
-    return best;
+    return family(
+      fallbackPath
+    );
   }
 
   function normalizedTypeValue(
@@ -711,116 +616,264 @@
   }
 
   function jsonTypeEvidence(
-    data
+    data,
+    requestedPath = ""
   ) {
     const candidates = [];
     let visited = 0;
 
-    const add = (
-      value,
-      key,
-      score
-    ) => {
-      if (
-        typeof value !==
-          "string" ||
-        !value.trim()
-      ) {
-        return;
-      }
+    const targetName =
+      leaf(
+        requestedPath
+      ).toLowerCase();
 
-      candidates.push({
-        value:
-          value.trim(),
-        key:
-          String(key || ""),
-        score:
-          Number(score) || 0
-      });
-    };
-
-    const walk = (
-      value,
-      depth = 0
-    ) => {
-      if (
-        value == null ||
-        depth > 6 ||
-        visited++ > 1200
-      ) {
-        return;
-      }
-
-      if (Array.isArray(value)) {
-        for (
-          const item of
-          value.slice(0, 90)
-        ) {
-          walk(
-            item,
-            depth + 1
-          );
-        }
-
-        return;
-      }
-
-      if (
-        typeof value !==
-          "object"
-      ) {
-        return;
-      }
-
-      for (
-        const [
-          key,
-          child
-        ] of
-        Object.entries(value)
-          .slice(0, 140)
-      ) {
-        if (
-          /^(?:ClassName|AssetClass|ExportType)$/i
-            .test(key)
-        ) {
-          add(
-            child,
-            key,
-            100
-          );
-        } else if (
-          /^(?:Type|Class|ObjectType)$/i
-            .test(key)
-        ) {
-          add(
-            child,
-            key,
-            90
-          );
-        } else if (
-          /^ObjectName$/i
-            .test(key)
-        ) {
-          add(
-            child,
-            key,
-            55
-          );
-        }
-
-        walk(
-          child,
-          depth + 1
+    const targetPath =
+      clean(
+        requestedPath
+      )
+        .toLowerCase()
+        .replace(
+          /_c$/,
+          ""
         );
-      }
-    };
+
+    const typeKeys =
+      /^(?:ClassName|AssetClass|ExportType|Type|Class|ObjectType)$/i;
+
+    const identityKeys =
+      /^(?:Name|ObjectName|PathName|ObjectPath|FullName|AssetName|PackageName)$/i;
+
+    const identityScore =
+      (value) => {
+        if (
+          typeof value !==
+            "string" ||
+          !value.trim() ||
+          !targetName
+        ) {
+          return 0;
+        }
+
+        const raw =
+          value
+            .trim()
+            .toLowerCase()
+            .replace(
+              /_c(?=['"]?$)/,
+              ""
+            );
+
+        let score = 0;
+
+        if (
+          targetPath &&
+          raw.includes(
+            targetPath
+          )
+        ) {
+          score += 260;
+        }
+
+        const normalizedName =
+          raw
+            .split("/")
+            .pop()
+            ?.split(".")
+            .pop()
+            ?.replace(
+              /^.*'/,
+              ""
+            )
+            ?.replace(
+              /['"]+$/g,
+              ""
+            ) || "";
+
+        if (
+          normalizedName ===
+          targetName
+        ) {
+          score += 220;
+        } else if (
+          raw.includes(
+            targetName
+          )
+        ) {
+          score += 90;
+        }
+
+        return score;
+      };
+
+    const inspectObject =
+      (
+        value,
+        depth = 0
+      ) => {
+        if (
+          !value ||
+          typeof value !==
+            "object" ||
+          Array.isArray(value)
+        ) {
+          return;
+        }
+
+        const entries =
+          Object.entries(
+            value
+          )
+            .slice(0, 160);
+
+        let objectIdentity = 0;
+
+        for (
+          const [
+            key,
+            child
+          ] of entries
+        ) {
+          if (
+            identityKeys.test(
+              key
+            )
+          ) {
+            objectIdentity =
+              Math.max(
+                objectIdentity,
+                identityScore(
+                  child
+                )
+              );
+          }
+        }
+
+        for (
+          const [
+            key,
+            child
+          ] of entries
+        ) {
+          if (
+            !typeKeys.test(
+              key
+            ) ||
+            typeof child !==
+              "string" ||
+            !child.trim()
+          ) {
+            continue;
+          }
+
+          const kind =
+            kindFromType(
+              child
+            );
+
+          if (kind === "other") {
+            continue;
+          }
+
+          const keyWeight =
+            /^(?:ClassName|AssetClass|ExportType)$/i
+              .test(key)
+              ? 120
+              : /^(?:Type|ObjectType)$/i
+                  .test(key)
+                ? 105
+                : 90;
+
+          const depthWeight =
+            Math.max(
+              0,
+              110 -
+              depth * 28
+            );
+
+          candidates.push({
+            value:
+              child.trim(),
+            key:
+              String(key),
+            score:
+              keyWeight +
+              depthWeight +
+              objectIdentity,
+            depth,
+            kind
+          });
+        }
+      };
+
+    const walk =
+      (
+        value,
+        depth = 0
+      ) => {
+        if (
+          value == null ||
+          depth > 7 ||
+          visited++ > 1500
+        ) {
+          return;
+        }
+
+        if (
+          Array.isArray(value)
+        ) {
+          for (
+            const item of
+            value.slice(0, 100)
+          ) {
+            // Export services commonly return an array of root exports.
+            // Do not penalize those entries as if they were nested references.
+            walk(
+              item,
+              depth === 0
+                ? 0
+                : depth + 1
+            );
+          }
+
+          return;
+        }
+
+        if (
+          typeof value !==
+            "object"
+        ) {
+          return;
+        }
+
+        inspectObject(
+          value,
+          depth
+        );
+
+        for (
+          const child of
+          Object.values(value)
+            .slice(0, 160)
+        ) {
+          if (
+            child &&
+            typeof child ===
+              "object"
+          ) {
+            walk(
+              child,
+              depth + 1
+            );
+          }
+        }
+      };
 
     walk(data);
 
     candidates.sort(
       (a, b) =>
-        b.score - a.score
+        b.score - a.score ||
+        a.depth - b.depth
     );
 
     return (
@@ -834,6 +887,10 @@
   ) {
     const name =
       leaf(path)
+        .toLowerCase();
+
+    const full =
+      clean(path)
         .toLowerCase();
 
     if (/^sk_/.test(name)) {
@@ -852,27 +909,104 @@
     }
 
     if (
-      /^(?:mi_|m_)/
+      /^(?:mi_|m_|mf_)/
         .test(name)
     ) {
       return "material";
     }
 
     if (
-      /^(?:bp_|bpc_)/
+      /^(?:bp_|bpc_|abp_|wbp_)/
         .test(name)
     ) {
       return "blueprint";
     }
 
     if (
-      /^(?:ns_|ps_|vfx_|fx_)/
+      /^(?:sw_|soundwave_|sc_|soundcue_|s_|ms_|metasound_|audio_|sfx_|music_)/
+        .test(name) ||
+      /\/(?:sounds?|audio|music)\//
+        .test(full)
+    ) {
+      return "audio";
+    }
+
+    if (
+      /^(?:anim_|am_|montage_)/
+        .test(name) ||
+      /\/(?:animations?|anims?|montages?)\//
+        .test(full)
+    ) {
+      return "animation";
+    }
+
+    if (
+      /^(?:ns_|ne_|ps_|vfx_|fx_)/
         .test(name)
     ) {
       return "vfx";
     }
 
+    if (
+      /^(?:cid_|bid_|eid_|pickaxe_)/
+        .test(name)
+    ) {
+      return "cosmetic";
+    }
+
+    if (
+      /^(?:da_|dt_|data_)/
+        .test(name)
+    ) {
+      return "data";
+    }
+
+    if (
+      /\/skeletalmeshes?\//
+        .test(full)
+    ) {
+      return "skeletalmesh";
+    }
+
+    if (
+      /\/staticmeshes?\//
+        .test(full)
+    ) {
+      return "staticmesh";
+    }
+
     return "other";
+  }
+
+  function diagnosePath(
+    path
+  ) {
+    const kind =
+      pathKind(path);
+
+    const resultFamily =
+      kind === "staticmesh" ||
+      kind === "skeletalmesh"
+        ? "mesh"
+        : kind.startsWith(
+            "blueprint"
+          )
+          ? "blueprint"
+          : kind;
+
+    return {
+      family:
+        resultFamily,
+      kind,
+      source:
+        kind === "other"
+          ? "unknown"
+          : "path-fallback",
+      confidence:
+        kind === "other"
+          ? 0
+          : 55
+    };
   }
 
   function kindFromType(
@@ -1102,23 +1236,23 @@
 
     const tagMap = {
       texture:
-        ["TEXTURE", "IMAGE"],
+        ["TEXTURE"],
       cosmetic:
-        ["COSMETIC", "IMAGE"],
+        ["COSMETIC"],
       material:
         ["MATERIAL"],
       staticmesh:
-        ["STATIC MESH", "3D"],
+        ["STATIC MESH", "MESH"],
       skeletalmesh:
-        ["SKELETAL MESH", "3D"],
+        ["SKELETAL MESH", "MESH"],
       "blueprint-visual":
-        ["BLUEPRINT", "3D"],
+        ["BLUEPRINT", "VISUAL"],
       "blueprint-image":
         ["BLUEPRINT", "IMAGE"],
       "blueprint-logic":
         ["BLUEPRINT", "LOGIC"],
       audio:
-        ["AUDIO"],
+        ["AUDIO", "SOUND"],
       animation:
         ["ANIMATION"],
       vfx:
@@ -1237,7 +1371,8 @@
     const jsonEvidence =
       data
         ? jsonTypeEvidence(
-            data
+            data,
+            path
           )
         : null;
 
@@ -2918,8 +3053,9 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.7.5",
+        "1.8.0",
       family,
+      diagnosePath,
       classify,
       capabilityProfile,
       allowDirectImage,
