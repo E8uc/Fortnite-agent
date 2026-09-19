@@ -1,5 +1,5 @@
 const CHAT_MODEL = "openai/gpt-oss-120b";
-const ACCOUNT_MODEL = "openai/gpt-oss-120b:free";
+const ACCOUNT_MODEL = "openai/gpt-oss-120b";
 const FAST_RESEARCH_MODEL = "groq/compound-mini";
 const DEEP_RESEARCH_MODEL = "groq/compound";
 
