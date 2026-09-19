@@ -1034,6 +1034,73 @@
     normalizeImages(grid);
   }
 
+  async function readJsonResponseBoundedV101(
+    response,
+    maxBytes,
+    signal = null
+  ) {
+    if (signal?.aborted) {
+      const error =
+        new Error(
+          "Cosmetic search was cancelled."
+        );
+
+      error.name =
+        "AbortError";
+
+      throw error;
+    }
+
+    const declared =
+      Number(
+        response.headers.get(
+          "content-length"
+        ) || 0
+      );
+
+    if (
+      declared > 0 &&
+      declared > maxBytes
+    ) {
+      try {
+        await response.body
+          ?.cancel();
+      } catch {}
+
+      throw new Error(
+        "The cosmetic response is too large for this device."
+      );
+    }
+
+    const text =
+      await response.text();
+
+    if (signal?.aborted) {
+      const error =
+        new Error(
+          "Cosmetic search was cancelled."
+        );
+
+      error.name =
+        "AbortError";
+
+      throw error;
+    }
+
+    if (
+      new TextEncoder()
+        .encode(text)
+        .byteLength >
+      maxBytes
+    ) {
+      throw new Error(
+        "The cosmetic response is too large for this device."
+      );
+    }
+
+    return JSON.parse(text);
+  }
+
   async function searchCosmeticsV2() {
     const input =
       document.getElementById(
@@ -1052,6 +1119,23 @@
       if (status) {
         status.textContent =
           "Search for a skin, emote, back bling, ID or cosmetic name.";
+      }
+
+      return;
+    }
+
+    const looksLikeId =
+      /^(?:CID_|EID_|BID_|Pickaxe_|Glider_|Wrap_|MusicPack_|LSID_|Emoji_|Spray_|SparksAura_)/i
+        .test(query);
+
+    if (
+      !looksLikeId &&
+      Array.from(query)
+        .length < 2
+    ) {
+      if (status) {
+        status.textContent =
+          "Type at least two characters for a cosmetic name search.";
       }
 
       return;
@@ -1094,10 +1178,6 @@
     const params =
       new URLSearchParams();
 
-    const looksLikeId =
-      /^(?:CID_|EID_|BID_|Pickaxe_|Glider_|Wrap_|MusicPack_|LSID_|Emoji_|Spray_|SparksAura_)/i
-        .test(query);
-
     params.set(
       looksLikeId
         ? "id"
@@ -1136,12 +1216,21 @@
         );
       }
 
+      const guardState =
+        window.NovaSparxBrowserGuard
+          ?.status?.() ||
+        {};
+
       const payload =
-        await response
-          .json()
-          .catch(
-            () => ({})
-          );
+        await readJsonResponseBoundedV101(
+          response,
+          guardState.isMobile
+            ? 8 * 1024 * 1024
+            : 16 * 1024 * 1024,
+          controller.signal
+        ).catch(
+          () => ({})
+        );
 
       if (
         controller.signal
