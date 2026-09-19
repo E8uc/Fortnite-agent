@@ -670,6 +670,14 @@
         ) ||
       {
         kind,
+        canPreview:
+          true,
+        previewMode:
+          family === "mesh"
+            ? "3d"
+            : family === "texture"
+              ? "image"
+              : "universal",
         canViewImage:
           family === "texture",
         canView3D:
@@ -1025,6 +1033,26 @@
           t(
             "hideImage",
             "Hide Image"
+          );
+      } else if (
+        capabilities.canPreview !==
+          false
+      ) {
+        previewButton.disabled =
+          false;
+
+        previewButton.dataset
+          .closedLabel =
+          t(
+            "viewPreview",
+            "View Preview"
+          );
+
+        previewButton.dataset
+          .openLabel =
+          t(
+            "hidePreview",
+            "Hide Preview"
           );
       } else {
         previewButton.disabled =
@@ -1768,7 +1796,7 @@
             class="json-view-button"
             type="button"
             data-asset-action="preview"
-          >${escapeHtml(t("viewImage", "View Image"))}</button>
+          >${escapeHtml(t("viewPreview", "View Preview"))}</button>
 
           <button
             class="json-view-button"
@@ -7491,7 +7519,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.6.3",
+      version: "1.6.4",
       open,
       close,
       formatAssetPath,
