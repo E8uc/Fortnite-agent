@@ -23,9 +23,41 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          site='Fortnite-Ai-Agent-GitHub-Cloudflare'
+
           while IFS= read -r -d '' file; do
             node --check "$file"
-          done < <(find Fortnite-Ai-Agent-GitHub-Cloudflare -type f -name '*.js' -print0)
+          done < <(
+            find "$site"               -type f               -name '*.js'               ! -path "$site/cloudflare-worker/*"               ! -path "$site/cloudflare-autolink/*"               -print0
+          )
+
+          # Cloudflare Workers are ES modules. Parse them explicitly as modules
+          # so CI does not accidentally treat worker.js as CommonJS.
+          node --input-type=module --check < "$site/cloudflare-worker/worker.js"
+          node --input-type=module --check < "$site/cloudflare-autolink/worker.js"
+
+      - name: Check Python syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile Fortnite-Ai-Agent-GitHub-Cloudflare/build_database.py
+
+      - name: Validate JSON assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const files = [
+            'Fortnite-Ai-Agent-GitHub-Cloudflare/pak-setup-v42.json',
+            'Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-autolink/package.json'
+          ];
+
+          for (const file of files) {
+            JSON.parse(fs.readFileSync(file, 'utf8'));
+          }
+          NODE
 
       - name: Run NovaSparx browser memory self-test
         shell: bash
@@ -49,9 +81,14 @@ jobs:
             'novasparx-layers.js'
             'novasparx-associations.js'
             'novasparx-renderer.js'
+            'novasparx-exporter.js'
             'preview.js'
             'tools.js'
             'app.js'
+            'cloudflare-worker/worker.js'
+            'cloudflare-worker/wrangler.jsonc'
+            'cloudflare-autolink/worker.js'
+            'cloudflare-autolink/wrangler.jsonc'
           )
 
           for file in "${required[@]}"; do
