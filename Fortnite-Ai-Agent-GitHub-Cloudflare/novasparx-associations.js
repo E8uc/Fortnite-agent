@@ -1085,6 +1085,18 @@
   function diagnosePath(
     path
   ) {
+    const typedKind =
+      typedPathKind(
+        path
+      );
+
+    const generatedClass =
+      objectPathLooksGeneratedClass(
+        diagnosticPathText(
+          path
+        )
+      );
+
     const kind =
       pathKind(path);
 
@@ -1098,18 +1110,31 @@
           ? "blueprint"
           : kind;
 
+    const source =
+      typedKind !== "other"
+        ? "typed-path"
+        : generatedClass &&
+          kind === "blueprint"
+          ? "generated-class-path"
+          : kind === "other"
+            ? "unknown"
+            : "path-fallback";
+
     return {
       family:
         resultFamily,
       kind,
-      source:
-        kind === "other"
-          ? "unknown"
-          : "path-fallback",
+      source,
       confidence:
-        kind === "other"
-          ? 0
-          : 55
+        source === "typed-path"
+          ? 98
+          : source ===
+              "generated-class-path"
+            ? 88
+            : source ===
+                "path-fallback"
+              ? 55
+              : 0
     };
   }
 
@@ -1435,8 +1460,15 @@
         inspectedType
       );
 
+    const typedKind =
+      typedPathKind(
+        path
+      );
+
     const fallbackKind =
-      pathKind(path);
+      typedKind !== "other"
+        ? typedKind
+        : pathKind(path);
 
     const pathFamily =
       family(
@@ -1444,17 +1476,26 @@
         inspection
       );
 
+    const explicitTypedKind =
+      typedKind !== "other";
+
     const needsJson =
       !data &&
       (
-        options.verifyKnown ===
-          true ||
-        inspectedKind ===
-          "other" ||
         inspectedKind ===
           "blueprint" ||
+        typedKind ===
+          "blueprint" ||
+        (
+          options.verifyKnown ===
+            true &&
+          inspectedKind ===
+            "other" &&
+          !explicitTypedKind
+        ) ||
         (
           !inspectedType &&
+          !explicitTypedKind &&
           (
             fallbackKind ===
               "other" ||
@@ -3157,7 +3198,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.8.1",
+        "1.8.2",
       family,
       diagnosePath,
       classify,
