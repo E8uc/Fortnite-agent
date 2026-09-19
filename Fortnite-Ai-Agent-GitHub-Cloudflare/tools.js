@@ -35,6 +35,8 @@
   const DEVICE_DETAIL_PAGE = 20;
   const STATIC_DATA_TIMEOUT_MS = 12_000;
   const ACTION_FLASH_MS = 3_000;
+  const MAX_DOWNLOAD_IMAGE_BYTES =
+    10 * 1024 * 1024;
 
   function actionAbortError(
     signal
@@ -1178,6 +1180,128 @@
     );
   }
 
+  async function responseBlobBounded(
+    response,
+    maxBytes,
+    signal = null
+  ) {
+    throwIfActionAborted(
+      signal
+    );
+
+    const declared =
+      Number(
+        response.headers.get(
+          "content-length"
+        ) || 0
+      );
+
+    if (
+      declared > 0 &&
+      declared > maxBytes
+    ) {
+      try {
+        await response.body
+          ?.cancel();
+      } catch {}
+
+      throw new Error(
+        "The download exceeded this device's safe image limit."
+      );
+    }
+
+    if (
+      !response.body ||
+      typeof response.body
+        .getReader !==
+        "function"
+    ) {
+      const blob =
+        await response.blob();
+
+      throwIfActionAborted(
+        signal
+      );
+
+      if (
+        blob.size >
+        maxBytes
+      ) {
+        throw new Error(
+          "The download exceeded this device's safe image limit."
+        );
+      }
+
+      return blob;
+    }
+
+    const reader =
+      response.body
+        .getReader();
+
+    const chunks = [];
+    let total = 0;
+
+    try {
+      while (true) {
+        throwIfActionAborted(
+          signal
+        );
+
+        const {
+          done,
+          value
+        } =
+          await reader.read();
+
+        if (done) break;
+
+        if (!value?.byteLength) {
+          continue;
+        }
+
+        total +=
+          value.byteLength;
+
+        if (
+          total >
+          maxBytes
+        ) {
+          try {
+            await reader.cancel(
+              "download-too-large"
+            );
+          } catch {}
+
+          throw new Error(
+            "The download exceeded this device's safe image limit."
+          );
+        }
+
+        chunks.push(value);
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {}
+    }
+
+    throwIfActionAborted(
+      signal
+    );
+
+    return new Blob(
+      chunks,
+      {
+        type:
+          response.headers.get(
+            "content-type"
+          ) ||
+          "application/octet-stream"
+      }
+    );
+  }
+
   async function downloadableMeshPath(
     path,
     classification,
@@ -1411,7 +1535,11 @@
       }
 
       const blob =
-        await response.blob();
+        await responseBlobBounded(
+          response,
+          MAX_DOWNLOAD_IMAGE_BYTES,
+          signal
+        );
 
       throwIfActionAborted(
         signal
