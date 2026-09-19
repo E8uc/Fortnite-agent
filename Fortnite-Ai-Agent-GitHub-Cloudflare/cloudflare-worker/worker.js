@@ -3378,7 +3378,8 @@ async function fetchNovaUpstream(
     method = "GET",
     search = "",
     body = null,
-    source = "nova"
+    source = "nova",
+    signal = null
   } = {}
 ) {
   const url =
@@ -3448,7 +3449,11 @@ async function fetchNovaUpstream(
       {
         method,
         headers,
-        body: payload
+        body:
+          payload,
+        signal:
+          signal ||
+          undefined
       },
       timeoutMs
     );
@@ -3510,6 +3515,94 @@ async function fetchNovaWithTokenFallback(
   return response;
 }
 
+function novaAbortError(
+  signal
+) {
+  const error =
+    new Error(
+      "NovaSparx request was cancelled by a newer browser request."
+    );
+
+  error.name =
+    "AbortError";
+
+  error.reason =
+    signal?.reason ||
+    "cancelled";
+
+  return error;
+}
+
+function throwIfNovaAborted(
+  signal
+) {
+  if (signal?.aborted) {
+    throw novaAbortError(
+      signal
+    );
+  }
+}
+
+function novaDelay(
+  ms,
+  signal = null
+) {
+  throwIfNovaAborted(
+    signal
+  );
+
+  return new Promise(
+    (resolve, reject) => {
+      let timer = null;
+
+      const cleanup =
+        () => {
+          if (timer) {
+            clearTimeout(
+              timer
+            );
+          }
+
+          signal
+            ?.removeEventListener?.(
+              "abort",
+              onAbort
+            );
+        };
+
+      const onAbort =
+        () => {
+          cleanup();
+
+          reject(
+            novaAbortError(
+              signal
+            )
+          );
+        };
+
+      signal
+        ?.addEventListener?.(
+          "abort",
+          onAbort,
+          {
+            once:
+              true
+          }
+        );
+
+      timer =
+        setTimeout(
+          () => {
+            cleanup();
+            resolve();
+          },
+          ms
+        );
+    }
+  );
+}
+
 async function fetchNovaAutoLinkWithReconnectRetry(
   base,
   tokens,
@@ -3543,12 +3636,10 @@ async function fetchNovaAutoLinkWithReconnectRetry(
         ?.cancel();
     } catch {}
 
-    await new Promise(
-      (resolve) =>
-        setTimeout(
-          resolve,
-          750
-        )
+    await novaDelay(
+      750,
+      options?.signal ||
+        null
     );
   }
 
@@ -3612,6 +3703,15 @@ async function novaFetch(
         // Ignore.
       }
     } catch (error) {
+      if (
+        options.signal
+          ?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        throw error;
+      }
+
       firstError =
         error;
 
@@ -3622,6 +3722,10 @@ async function novaFetch(
       }
     }
   }
+
+  throwIfNovaAborted(
+    options.signal
+  );
 
   if (
     config.directUrl &&
@@ -4249,9 +4353,12 @@ async function handleNovaProxy(
         env,
         novaRoute,
         {
-          method: "GET",
+          method:
+            "GET",
           search:
-            search.toString()
+            search.toString(),
+          signal:
+            request.signal
         }
       );
 
