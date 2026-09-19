@@ -8,6 +8,9 @@
   const MAX_CLIENT_HEADER_BYTES =
     512 * 1024;
 
+  const MAX_SKIN_BONES =
+    2048;
+
   const MAX_ASSET_PATH_LENGTH =
     2400;
 
@@ -351,6 +354,220 @@
     }).filter((section) => section.indexCount > 0);
   }
 
+  function finiteTuple(
+    raw,
+    length,
+    fallback
+  ) {
+    if (
+      !Array.isArray(raw) ||
+      raw.length < length
+    ) {
+      return fallback.slice();
+    }
+
+    const out =
+      new Array(length);
+
+    for (
+      let index = 0;
+      index < length;
+      index++
+    ) {
+      const value =
+        Number(raw[index]);
+
+      if (!Number.isFinite(value)) {
+        return fallback.slice();
+      }
+
+      out[index] =
+        value;
+    }
+
+    return out;
+  }
+
+  function normalizeSkinning(
+    header,
+    joints0,
+    weights0,
+    vertexCount
+  ) {
+    const source =
+      header?.skinning &&
+      typeof header.skinning ===
+        "object"
+        ? header.skinning
+        : null;
+
+    const bonesRaw =
+      Array.isArray(
+        source?.bones
+      )
+        ? source.bones
+        : [];
+
+    if (
+      !joints0 &&
+      !weights0 &&
+      !bonesRaw.length
+    ) {
+      return null;
+    }
+
+    if (
+      !joints0 ||
+      !weights0 ||
+      joints0.length !==
+        vertexCount * 4 ||
+      weights0.length !==
+        vertexCount * 4 ||
+      bonesRaw.length <= 0 ||
+      bonesRaw.length >
+        MAX_SKIN_BONES
+    ) {
+      throw new Error(
+        "NovaSparx skeletal streams are incomplete or inconsistent."
+      );
+    }
+
+    const bones =
+      bonesRaw.map(
+        (raw, index) => {
+          const bone =
+            raw &&
+            typeof raw ===
+              "object"
+              ? raw
+              : {};
+
+          const parentIndex =
+            Number(
+              bone.parentIndex ??
+              bone.ParentIndex ??
+              -1
+            );
+
+          if (
+            !Number.isInteger(
+              parentIndex
+            ) ||
+            parentIndex < -1 ||
+            parentIndex >=
+              bonesRaw.length ||
+            parentIndex ===
+              index
+          ) {
+            throw new Error(
+              "NovaSparx skeletal hierarchy contains an invalid parent."
+            );
+          }
+
+          const name =
+            String(
+              bone.name ??
+              bone.Name ??
+              `Bone_${index}`
+            )
+              .replace(
+                /[\u0000-\u001f\u007f]/g,
+                ""
+              )
+              .trim()
+              .slice(
+                0,
+                128
+              ) ||
+            `Bone_${index}`;
+
+          return {
+            name,
+            parentIndex,
+            translation:
+              finiteTuple(
+                bone.translation ??
+                bone.Translation,
+                3,
+                [0, 0, 0]
+              ),
+            rotation:
+              finiteTuple(
+                bone.rotation ??
+                bone.Rotation,
+                4,
+                [0, 0, 0, 1]
+              ),
+            scale:
+              finiteTuple(
+                bone.scale ??
+                bone.Scale,
+                3,
+                [1, 1, 1]
+              )
+          };
+        }
+      );
+
+    for (
+      let vertex = 0;
+      vertex < vertexCount;
+      vertex++
+    ) {
+      let totalWeight = 0;
+
+      for (
+        let influence = 0;
+        influence < 4;
+        influence++
+      ) {
+        const offset =
+          vertex * 4 +
+          influence;
+
+        const joint =
+          joints0[offset];
+
+        const weight =
+          weights0[offset];
+
+        if (
+          joint >= bones.length ||
+          !Number.isFinite(
+            weight
+          ) ||
+          weight < 0 ||
+          weight > 1.001
+        ) {
+          throw new Error(
+            "NovaSparx skeletal vertex influences are invalid."
+          );
+        }
+
+        totalWeight +=
+          weight;
+      }
+
+      if (
+        totalWeight <=
+        0.00001
+      ) {
+        throw new Error(
+          "NovaSparx skeletal vertex has no usable skin weights."
+        );
+      }
+    }
+
+    return {
+      bones,
+      maxInfluences: 4,
+      jointComponentType:
+        "u16",
+      weightComponentType:
+        "f32"
+    };
+  }
+
   function normalizeReferences(raw) {
     if (!Array.isArray(raw)) return [];
 
@@ -610,6 +827,18 @@
         Uint32Array
       );
 
+    const joints0 =
+      array(
+        "joints0",
+        Uint16Array
+      );
+
+    const weights0 =
+      array(
+        "weights0",
+        Float32Array
+      );
+
     if (
       !positions ||
       !normals ||
@@ -648,6 +877,14 @@
         "NovaSparx mesh package has inconsistent geometry."
       );
     }
+
+    const skinning =
+      normalizeSkinning(
+        header,
+        joints0,
+        weights0,
+        vertexCount
+      );
 
     const materialsRaw =
       Array.isArray(header.materials)
@@ -766,8 +1003,18 @@
         normals,
         tangents,
         uv0,
-        colors
+        colors,
+        joints0:
+          skinning
+            ? joints0
+            : null,
+        weights0:
+          skinning
+            ? weights0
+            : null
       },
+
+      skinning,
 
       sections,
       materials,
@@ -793,7 +1040,12 @@
           String(
             asset.materialFidelity ||
             "unknown"
-          ).toLowerCase()
+          ).toLowerCase(),
+        boneCount:
+          skinning
+            ?.bones
+            ?.length ||
+          0
       }
     };
   }
@@ -1428,7 +1680,7 @@
   }
 
   window.NovaSparx = Object.freeze({
-    version: "1.6.0",
+    version: "1.7.0",
     resolve,
     clientMesh,
     clientMeshBuffer,
