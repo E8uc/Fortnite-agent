@@ -47,6 +47,43 @@
     try { sessionStorage.removeItem(key); } catch {}
   }
 
+  function sessionStorageGet(
+    key
+  ) {
+    try {
+      return sessionStorage
+        .getItem(key);
+    } catch {
+      return null;
+    }
+  }
+
+  function sessionStorageSet(
+    key,
+    value
+  ) {
+    try {
+      sessionStorage
+        .setItem(
+          key,
+          value
+        );
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function sessionStorageRemove(
+    key
+  ) {
+    try {
+      sessionStorage
+        .removeItem(key);
+    } catch {}
+  }
+
   function profileStorageKey(uid) {
     return `${PROFILE_PREFIX}${String(uid || "").replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 180)}`;
   }
@@ -170,9 +207,31 @@
   }
 
   function persistSession(token) {
-    sessionToken = cleanSessionToken(token);
-    if (sessionToken) storageSet(SESSION_KEY, sessionToken);
-    else storageRemove(SESSION_KEY);
+    sessionToken =
+      cleanSessionToken(
+        token
+      );
+
+    // Bearer credentials must never survive in localStorage. This limits
+    // exposure if a future DOM bug is introduced and also avoids leaving a
+    // reusable token behind after the tab/browser session ends.
+    try {
+      localStorage
+        .removeItem(
+          SESSION_KEY
+        );
+    } catch {}
+
+    if (sessionToken) {
+      sessionStorageSet(
+        SESSION_KEY,
+        sessionToken
+      );
+    } else {
+      sessionStorageRemove(
+        SESSION_KEY
+      );
+    }
   }
 
   function clearLoginFragment() {
@@ -436,7 +495,40 @@
 
   async function boot() {
     consumeLoginRedirect();
-    sessionToken = cleanSessionToken(storageGet(SESSION_KEY));
+    // Delete any token left by older builds, then restore only the
+    // current tab-scoped session token.
+    let legacySessionToken = "";
+
+    try {
+      legacySessionToken =
+        cleanSessionToken(
+          localStorage
+            .getItem(
+              SESSION_KEY
+            )
+        );
+
+      localStorage
+        .removeItem(
+          SESSION_KEY
+        );
+    } catch {}
+
+    sessionToken =
+      cleanSessionToken(
+        sessionStorageGet(
+          SESSION_KEY
+        ) ||
+        legacySessionToken
+      );
+
+    if (sessionToken) {
+      // One-time migration from legacy localStorage into sessionStorage.
+      sessionStorageSet(
+        SESSION_KEY,
+        sessionToken
+      );
+    }
     window.FortniteAuth = {
       configured,
       provider: "openrouter",
