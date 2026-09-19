@@ -8,6 +8,88 @@
   const MAX_CLIENT_HEADER_BYTES =
     512 * 1024;
 
+  const MAX_ASSET_PATH_LENGTH =
+    2400;
+
+  function apiUrl(
+    route
+  ) {
+    if (!API) {
+      throw new Error(
+        "FNAA API endpoint is not configured."
+      );
+    }
+
+    const base =
+      new URL(
+        API,
+        location.origin
+      );
+
+    const loopback =
+      [
+        "localhost",
+        "127.0.0.1",
+        "::1"
+      ].includes(
+        base.hostname
+      );
+
+    if (
+      (
+        base.protocol !==
+          "https:" &&
+        !(
+          base.protocol ===
+            "http:" &&
+          loopback
+        )
+      ) ||
+      base.username ||
+      base.password
+    ) {
+      throw new Error(
+        "FNAA API endpoint is not allowed."
+      );
+    }
+
+    const url =
+      new URL(
+        String(route || "/"),
+        base.origin
+      );
+
+    if (
+      url.origin !==
+        base.origin
+    ) {
+      throw new Error(
+        "FNAA API request target is not allowed."
+      );
+    }
+
+    return url;
+  }
+
+  function requestAssetPath(
+    raw
+  ) {
+    const path =
+      cleanPath(raw);
+
+    if (
+      !path ||
+      path.length >
+        MAX_ASSET_PATH_LENGTH
+    ) {
+      throw new Error(
+        "NovaSparx asset path is invalid or too long."
+      );
+    }
+
+    return path;
+  }
+
   function fallbackClean(raw) {
     let value = String(raw || "").trim().replace(/\\/g, "/");
 
@@ -59,9 +141,26 @@
   }
 
   function textureUrl(path) {
-    const value = String(path || "").trim();
-    if (!value || !API) return "";
-    return `${API}/nova/texture?path=${encodeURIComponent(value)}`;
+    try {
+      const value =
+        requestAssetPath(
+          path
+        );
+
+      const url =
+        apiUrl(
+          "/nova/texture"
+        );
+
+      url.searchParams.set(
+        "path",
+        value
+      );
+
+      return url.toString();
+    } catch {
+      return "";
+    }
   }
 
   function clamp(value, min, max, fallback) {
@@ -683,10 +782,17 @@
   }
 
   async function resolve(path, options = {}) {
-    if (!API) throw new Error("FNAA API endpoint is not configured.");
+    const url =
+      apiUrl(
+        "/nova/resolve"
+      );
 
-    const url = new URL(`${API}/nova/resolve`);
-    url.searchParams.set("path", String(path || ""));
+    url.searchParams.set(
+      "path",
+      requestAssetPath(
+        path
+      )
+    );
     url.searchParams.set("quality", options.preferHQ === false ? "normal" : "hq");
 
     const { response, data } = await requestJson(url, options);
@@ -702,20 +808,16 @@
   }
 
   async function clientMeshBuffer(path, options = {}) {
-    if (!API) {
-      throw new Error(
-        "FNAA API endpoint is not configured."
-      );
-    }
-
     const url =
-      new URL(
-        `${API}/nova/client-mesh`
+      apiUrl(
+        "/nova/client-mesh"
       );
 
     url.searchParams.set(
       "path",
-      String(path || "")
+      requestAssetPath(
+        path
+      )
     );
 
     if (options.retry) {
@@ -822,10 +924,17 @@
   }
 
   async function inspect(path, options = {}) {
-    if (!API) throw new Error("FNAA API endpoint is not configured.");
+    const url =
+      apiUrl(
+        "/nova/inspect"
+      );
 
-    const url = new URL(`${API}/nova/inspect`);
-    url.searchParams.set("path", String(path || ""));
+    url.searchParams.set(
+      "path",
+      requestAssetPath(
+        path
+      )
+    );
 
     const { response, data } = await requestJson(url, { ...options, noCache: true });
 
@@ -840,10 +949,17 @@
   }
 
   async function preview(path, options = {}) {
-    if (!API) throw new Error("FNAA API endpoint is not configured.");
+    const url =
+      apiUrl(
+        "/nova/preview"
+      );
 
-    const url = new URL(`${API}/nova/preview`);
-    url.searchParams.set("path", String(path || ""));
+    url.searchParams.set(
+      "path",
+      requestAssetPath(
+        path
+      )
+    );
 
     if (options.retry) {
       url.searchParams.set("retry", String(Date.now()));
@@ -878,7 +994,7 @@
   }
 
   window.NovaSparx = Object.freeze({
-    version: "1.3.1",
+    version: "1.4.0",
     resolve,
     clientMesh,
     clientMeshBuffer,
