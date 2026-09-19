@@ -1161,10 +1161,6 @@ async function handleNovaEdgeStatus(
         true,
       maxRangeBytes:
         NOVASPARX_EDGE_MAX_RANGE_BYTES,
-      allowedRangeHosts:
-        novaEdgeAllowedHosts(
-          env
-        ),
       metadata: {
         aes:
           true,
@@ -4252,11 +4248,8 @@ async function handleNovaStatus(
           config.autoLinkUrl &&
           config.autoLinkTokens.length
         ),
-      url:
-        config.autoLinkUrl || null,
       connected: null,
-      healthStatus: null,
-      healthBody: null
+      healthStatus: null
     },
     backend: {
       source: "none",
@@ -4290,24 +4283,23 @@ async function handleNovaStatus(
       result.autoLink.healthStatus =
         health.status;
 
-      const rawHealth =
-        await health
-          .text()
-          .catch(() => "");
-
-      result.autoLink.healthBody =
-        rawHealth
-          .slice(0, 400);
-
       let data = {};
 
       try {
+        const healthBytes =
+          await readResponseBytesBounded(
+            health,
+            64 * 1024,
+            "AutoLink health"
+          );
+
         data =
-          rawHealth
-            ? JSON.parse(
-                rawHealth
+          JSON.parse(
+            new TextDecoder()
+              .decode(
+                healthBytes
               )
-            : {};
+          );
       } catch {}
 
       result.autoLink.connected =
@@ -4352,10 +4344,24 @@ async function handleNovaStatus(
     result.backend.status =
       upstream.status;
 
-    const data =
-      await upstream
-        .json()
-        .catch(() => ({}));
+    let data = {};
+
+    try {
+      const healthBytes =
+        await readResponseBytesBounded(
+          upstream,
+          128 * 1024,
+          "NovaSparx health"
+        );
+
+      data =
+        JSON.parse(
+          new TextDecoder()
+            .decode(
+              healthBytes
+            )
+        );
+    } catch {}
 
     result.backend.version =
       data?.version ??
