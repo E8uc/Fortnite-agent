@@ -2641,15 +2641,46 @@
               "json",
               "png",
               "nsmesh",
+              "glb",
               "obj"
             ].includes(format)
         );
 
-      if (
-        window.NovaSparxExporter
-          ?.supports?.(
-            classification
+      const exporter =
+        window.NovaSparxExporter;
+
+      const exporterSupported =
+        Boolean(
+          exporter
+            ?.supports?.(
+              classification
+            )
+        );
+
+      for (
+        let index =
+          allowed.length - 1;
+        index >= 0;
+        index--
+      ) {
+        if (
+          [
+            "glb",
+            "obj"
+          ].includes(
+            allowed[index]
           ) &&
+          !exporterSupported
+        ) {
+          allowed.splice(
+            index,
+            1
+          );
+        }
+      }
+
+      if (
+        exporterSupported &&
         [
           "staticmesh",
           "blueprint-visual"
@@ -2660,9 +2691,25 @@
           )
         )
       ) {
-        allowed.unshift(
-          "glb"
-        );
+        if (
+          typeof exporter
+            ?.exportObj ===
+            "function"
+        ) {
+          allowed.unshift(
+            "obj"
+          );
+        }
+
+        if (
+          typeof exporter
+            ?.exportGlb ===
+            "function"
+        ) {
+          allowed.unshift(
+            "glb"
+          );
+        }
       }
 
       const uniqueAllowed =
@@ -2679,6 +2726,8 @@
       const labels = {
         glb:
           "GLB",
+        obj:
+          "OBJ",
         json:
           "JSON",
         png:
@@ -7258,7 +7307,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.6.1",
+      version: "1.6.2",
       open,
       close,
       formatAssetPath,
