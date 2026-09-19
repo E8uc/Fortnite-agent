@@ -10,6 +10,13 @@
   const BOOTSTRAP_TTL_MS =
     5 * 60 * 1000;
 
+  const ALLOWED_RANGE_HOSTS =
+    Object.freeze([
+      "egdownload.fastly-edge.com",
+      "download.epicgames.com",
+      "export-service-new.dillyapis.com"
+    ]);
+
   let bootstrapCache =
     null;
 
@@ -153,6 +160,28 @@
     ) {
       throw new Error(
         "NovaSparx browser transport does not allow URL credentials."
+      );
+    }
+
+    const host =
+      target.hostname
+        .toLowerCase();
+
+    const allowedHost =
+      loopback ||
+      ALLOWED_RANGE_HOSTS
+        .some(
+          (allowed) =>
+            host ===
+              allowed ||
+            host.endsWith(
+              "." + allowed
+            )
+        );
+
+    if (!allowedHost) {
+      throw new Error(
+        "NovaSparx browser transport rejected an untrusted range host."
       );
     }
 
@@ -1170,7 +1199,7 @@
 
         try {
           url =
-            new URL(
+            targetUrl(
               String(raw || "")
             )
               .toString();
@@ -1179,7 +1208,6 @@
         }
 
         if (
-          !/^https:/i.test(url) ||
           seen.has(url)
         ) {
           return;
@@ -1263,7 +1291,7 @@
   function status() {
     return {
       version:
-        "2.4.0",
+        "2.5.0",
       apiConfigured:
         Boolean(
           apiBase()
@@ -1316,7 +1344,7 @@
   globalThis.NovaSparxBrowserTransport =
     Object.freeze({
       version:
-        "2.4.0",
+        "2.5.0",
       maxRangeBytes:
         MAX_RANGE_BYTES,
       fetchRange,
