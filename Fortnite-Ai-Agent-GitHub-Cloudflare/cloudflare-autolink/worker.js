@@ -6,6 +6,122 @@ const BACKEND_TAG = "nova-backend";
 const MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
 const MAX_CONTROL_BYTES = 256 * 1024;
 const MAX_PENDING_REQUESTS = 32;
+const MAX_ASSET_PATH_CHARS = 2048;
+const MAX_CONTENT_TYPE_CHARS = 160;
+
+const NOVA_ROUTE_METHODS =
+  new Map([
+    ["/v1/health", "GET"],
+    ["/v1/resolve", "GET"],
+    ["/v1/preview", "GET"],
+    ["/v1/client-mesh", "GET"],
+    ["/v1/inspect", "GET"],
+    ["/v1/references", "GET"],
+    ["/v1/texture", "GET"],
+    ["/v1/warmup", "POST"],
+    ["/v1/refresh", "POST"]
+  ]);
+
+function routeMethodAllowed(
+  pathname,
+  method
+) {
+  const expected =
+    NOVA_ROUTE_METHODS.get(
+      String(pathname || "")
+    );
+
+  return (
+    expected ===
+    String(method || "")
+      .toUpperCase()
+  );
+}
+
+function cleanProxyQuery(
+  url
+) {
+  const query =
+    Object.create(null);
+
+  for (
+    const [key, value] of
+    url.searchParams
+  ) {
+    if (
+      key !== "path" &&
+      key !== "retry"
+    ) {
+      throw new Error(
+        "Unsupported NovaSparx query parameter."
+      );
+    }
+
+    if (key in query) {
+      continue;
+    }
+
+    const clean =
+      String(value || "")
+        .trim();
+
+    if (
+      key === "path" &&
+      (
+        !clean ||
+        clean.length >
+          MAX_ASSET_PATH_CHARS ||
+        /[\u0000-\u001F\u007F]/.test(
+          clean
+        )
+      )
+    ) {
+      throw new Error(
+        "Invalid NovaSparx asset path."
+      );
+    }
+
+    if (
+      key === "retry" &&
+      !/^(?:0|1)$/.test(
+        clean
+      )
+    ) {
+      throw new Error(
+        "Invalid NovaSparx retry value."
+      );
+    }
+
+    query[key] =
+      clean;
+  }
+
+  return query;
+}
+
+function cleanContentType(
+  value
+) {
+  const clean =
+    String(
+      value ||
+      "application/octet-stream"
+    )
+      .trim();
+
+  if (
+    !clean ||
+    clean.length >
+      MAX_CONTENT_TYPE_CHARS ||
+    /[\r\n]/.test(clean) ||
+    !/^[A-Za-z0-9!#$&^_.+*-]+\/[A-Za-z0-9!#$&^_.+*-]+(?:\s*;\s*[A-Za-z0-9!#$&^_.+*-]+=(?:"[^"\r\n]*"|[A-Za-z0-9!#$&^_.+*%'-]+))*$/
+      .test(clean)
+  ) {
+    return "application/octet-stream";
+  }
+
+  return clean;
+}
 
 function requestTimeoutMs(path) {
   if (
@@ -239,10 +355,32 @@ export default {
     }
 
     if (url.pathname.startsWith("/v1/")) {
-      if (request.method !== "GET" && request.method !== "POST") {
+      if (
+        !routeMethodAllowed(
+          url.pathname,
+          request.method
+        )
+      ) {
         return json(
-          { state: "error", error: "Method not allowed." },
-          405
+          {
+            state: "missing",
+            error:
+              "Unknown NovaSparx operation."
+          },
+          404
+        );
+      }
+
+      try {
+        cleanProxyQuery(url);
+      } catch {
+        return json(
+          {
+            state: "invalid",
+            error:
+              "Invalid NovaSparx request."
+          },
+          400
         );
       }
 
@@ -413,10 +551,32 @@ export class NovaLinkDurableObject extends DurableObject {
       });
     }
 
-    if (!url.pathname.startsWith("/v1/")) {
+    if (
+      !routeMethodAllowed(
+        url.pathname,
+        request.method
+      )
+    ) {
       return json(
-        { state: "missing", error: "Route not found." },
+        {
+          state: "missing",
+          error:
+            "Unknown NovaSparx operation."
+        },
         404
+      );
+    }
+
+    try {
+      cleanProxyQuery(url);
+    } catch {
+      return json(
+        {
+          state: "invalid",
+          error:
+            "Invalid NovaSparx request."
+        },
+        400
       );
     }
 
@@ -477,10 +637,10 @@ export class NovaLinkDurableObject extends DurableObject {
   async proxyToBackend(socket, request, url) {
     const id = crypto.randomUUID();
 
-    const query = {};
-    for (const [key, value] of url.searchParams) {
-      if (!(key in query)) query[key] = value;
-    }
+    const query =
+      cleanProxyQuery(
+        url
+      );
 
     const stream = new TransformStream();
     const writer = stream.writable.getWriter();
@@ -617,14 +777,12 @@ export class NovaLinkDurableObject extends DurableObject {
 
     try {
       header = await headerPromise;
-    } catch (error) {
+    } catch {
       return json(
         {
           state: "error",
-          error: String(
-            error?.message ||
+          error:
             "NovaSparx AutoLink request failed."
-          )
         },
         502
       );
@@ -632,10 +790,15 @@ export class NovaLinkDurableObject extends DurableObject {
 
     const headers = new Headers({
       "content-type":
-        header.contentType ||
-        "application/octet-stream",
-      "cache-control": "no-store",
-      "x-novasparx-autolink": "1"
+        cleanContentType(
+          header.contentType
+        ),
+      "cache-control":
+        "no-store",
+      "x-content-type-options":
+        "nosniff",
+      "x-novasparx-autolink":
+        "1"
     });
 
     if (Number.isFinite(header.length)) {
@@ -881,10 +1044,10 @@ export class NovaLinkDurableObject extends DurableObject {
 
     pending.resolveHeader({
       status,
-      contentType: String(
-        control?.contentType ||
-        "application/octet-stream"
-      ),
+      contentType:
+        cleanContentType(
+          control?.contentType
+        ),
       length,
       chunks
     });
