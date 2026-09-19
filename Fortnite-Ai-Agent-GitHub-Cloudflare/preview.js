@@ -2312,6 +2312,76 @@
     return true;
   }
 
+  async function tryPublicRelatedImage(
+    path,
+    ui,
+    signal = null,
+    label =
+      "Verified related texture • 3D unavailable • no Back4App"
+  ) {
+    if (
+      !window.NovaSparxAssociations
+        ?.publicPreview
+    ) {
+      return {
+        rendered:
+          false,
+        plan:
+          null
+      };
+    }
+
+    const plan =
+      await window
+        .NovaSparxAssociations
+        .publicPreview(
+          path,
+          {
+            signal
+          }
+        );
+
+    throwIfAborted(
+      signal
+    );
+
+    for (
+      const previewPath of
+      plan?.previewImagePaths ||
+      []
+    ) {
+      if (
+        await tryExactTypedImage(
+          previewPath,
+          ui,
+          label
+        )
+      ) {
+        setMeta(
+          ui.meta,
+          label,
+          "partial"
+        );
+
+        return {
+          rendered:
+            true,
+          plan
+        };
+      }
+
+      throwIfAborted(
+        signal
+      );
+    }
+
+    return {
+      rendered:
+        false,
+      plan
+    };
+  }
+
   async function tryUniversalPreview(
     path,
     ui,
@@ -3573,6 +3643,40 @@
             }
           }
 
+          try {
+            const publicFallback =
+              await tryPublicRelatedImage(
+                clean,
+                ui,
+                signal
+              );
+
+            if (
+              publicFallback.rendered
+            ) {
+              return {
+                state:
+                  "ready",
+                kind:
+                  "verified-related-image",
+                association:
+                  fastAssociation,
+                publicPlan:
+                  publicFallback.plan
+              };
+            }
+          } catch (error) {
+            if (
+              signal?.aborted ||
+              error?.name ===
+                "AbortError"
+            ) {
+              throw abortError(
+                signal
+              );
+            }
+          }
+
           return renderEvidenceImage(
             clean,
             null,
@@ -4205,6 +4309,40 @@
           }
 
           if (force3d) {
+            try {
+              const publicFallback =
+                await tryPublicRelatedImage(
+                  clean,
+                  ui,
+                  signal
+                );
+
+              if (
+                publicFallback.rendered
+              ) {
+                return {
+                  state:
+                    "ready",
+                  kind:
+                    "verified-related-image",
+                  inspection:
+                    info,
+                  publicPlan:
+                    publicFallback.plan
+                };
+              }
+            } catch (error) {
+              if (
+                signal?.aborted ||
+                error?.name ===
+                  "AbortError"
+              ) {
+                throw abortError(
+                  signal
+                );
+              }
+            }
+
             return showModelUnavailable(
               ui,
               meshError?.message ||
@@ -4375,7 +4513,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "2.3.2",
+      version: "2.3.3",
       toggle,
       render: renderPreview,
       release,
