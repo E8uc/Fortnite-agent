@@ -482,6 +482,130 @@
     return texture;
   }
 
+  async function readTextureBlobBounded(
+    response,
+    maxBytes,
+    signal = null
+  ) {
+    throwIfAborted(
+      signal
+    );
+
+    const declared =
+      Number(
+        response.headers.get(
+          "content-length"
+        ) || 0
+      );
+
+    if (
+      declared > 0 &&
+      declared > maxBytes
+    ) {
+      try {
+        await response.body
+          ?.cancel();
+      } catch {}
+
+      throw new Error(
+        "Texture exceeded the browser memory guard."
+      );
+    }
+
+    if (
+      !response.body ||
+      typeof response.body
+        .getReader !==
+        "function"
+    ) {
+      const blob =
+        await response.blob();
+
+      throwIfAborted(
+        signal
+      );
+
+      if (
+        blob.size >
+        maxBytes
+      ) {
+        throw new Error(
+          "Texture exceeded the browser memory guard."
+        );
+      }
+
+      return blob;
+    }
+
+    const reader =
+      response.body
+        .getReader();
+
+    const chunks = [];
+    let total = 0;
+
+    try {
+      while (true) {
+        throwIfAborted(
+          signal
+        );
+
+        const {
+          done,
+          value
+        } =
+          await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        if (!value?.byteLength) {
+          continue;
+        }
+
+        total +=
+          value.byteLength;
+
+        if (
+          total >
+          maxBytes
+        ) {
+          try {
+            await reader.cancel();
+          } catch {}
+
+          throw new Error(
+            "Texture exceeded the browser memory guard."
+          );
+        }
+
+        chunks.push(
+          value
+        );
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {}
+    }
+
+    throwIfAborted(
+      signal
+    );
+
+    return new Blob(
+      chunks,
+      {
+        type:
+          response.headers.get(
+            "content-type"
+          ) ||
+          "application/octet-stream"
+      }
+    );
+  }
+
   async function loadTexture(
     gl,
     url,
@@ -530,8 +654,39 @@
         );
       }
 
+      const guard =
+        window.NovaSparxBrowserGuard;
+
+      const budget =
+        guard
+          ?.assertResponseBudget?.(
+            response,
+            "texture"
+          );
+
+      const guardState =
+        guard
+          ?.status?.() || {};
+
+      const maxTextureBytes =
+        Math.min(
+          Number(
+            budget?.limit ||
+            guardState
+              .packageLimitBytes ||
+            16 * 1024 * 1024
+          ),
+          guardState.isMobile
+            ? 6 * 1024 * 1024
+            : 16 * 1024 * 1024
+        );
+
       const blob =
-        await response.blob();
+        await readTextureBlobBounded(
+          response,
+          maxTextureBytes,
+          signal
+        );
 
       throwIfAborted(
         signal
@@ -1264,7 +1419,7 @@
   }
 
   window.NovaSparxRenderer = Object.freeze({
-    version: "1.3.0",
+    version: "1.4.0",
     render
   });
 })();
