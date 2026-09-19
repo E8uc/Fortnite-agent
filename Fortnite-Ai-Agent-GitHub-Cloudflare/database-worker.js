@@ -1,4 +1,6 @@
 let manifestCache = null;
+let manifestCacheAt = 0;
+let manifestCacheSignature = "";
 
 const textCache = new Map();
 const resultCache = new Map();
@@ -27,6 +29,14 @@ const MAX_SAFE_FULL_GZIP_BYTES =
 // For multi-token searches, probe a few filename shards instead of falling
 // straight back to the full database.
 const MAX_QUERY_SHARDS = 4;
+
+const MAX_CANDIDATE_LINES =
+  IS_MOBILE_WORKER
+    ? 90_000
+    : 260_000;
+
+const MANIFEST_TTL_MS =
+  5 * 60 * 1000;
 
 const MAX_QUERY_CHARS =
   512;
@@ -323,8 +333,40 @@ async function search(
   const primaryKey =
     shardKeys[0] || "__";
 
-  const candidateSet = new Set();
-  let source = "shard";
+  const candidateSet =
+    new Set();
+
+  let source =
+    "shard";
+
+  let candidatesCapped =
+    false;
+
+  const addCandidates =
+    (lines) => {
+      for (
+        const line of
+        lines
+      ) {
+        throwIfAborted(
+          signal
+        );
+
+        if (
+          candidateSet.size >=
+          MAX_CANDIDATE_LINES
+        ) {
+          candidatesCapped =
+            true;
+
+          break;
+        }
+
+        candidateSet.add(
+          line
+        );
+      }
+    };
 
   // Probe shards for multiple query tokens. This is much safer than inflating
   // the full 1.78M-line database when the first shard is narrow.
@@ -350,15 +392,25 @@ async function search(
         signal
       );
 
-    for (const line of lines) {
-      candidateSet.add(line);
+    addCandidates(
+      lines
+    );
+
+    if (candidatesCapped) {
+      source =
+        "shard-capped";
+
+      break;
     }
   }
 
   // Full-index fallback is allowed only when the compressed file is small.
   // This keeps SM/material/new searches broad while protecting iPhone/WebKit
   // from the huge "all" index.
-  if (candidateSet.size < 24) {
+  if (
+    !candidatesCapped &&
+    candidateSet.size < 24
+  ) {
     const fallback =
       safeFullFallback(
         cleanScope,
@@ -375,8 +427,13 @@ async function search(
           signal
         );
 
-      for (const line of lines) {
-        candidateSet.add(line);
+      addCandidates(
+        lines
+      );
+
+      if (candidatesCapped) {
+        source =
+          "full-safe-capped";
       }
     } else if (candidateSet.size === 0) {
       source = "shard-only";
@@ -387,7 +444,8 @@ async function search(
     [...candidateSet];
 
   // JSON references are optional evidence only.
-  const jsonCandidates = [];
+  let jsonCandidates =
+    [];
 
   if (
     cleanScope === "all" ||
@@ -435,9 +493,8 @@ async function search(
           signal
         );
 
-        jsonCandidates.push(
-          ...references
-        );
+        jsonCandidates =
+          references;
       } catch (error) {
         if (
           signal?.aborted ||
@@ -978,7 +1035,15 @@ async function loadManifest(
   throwIfAborted(
     signal
   );
-  if (manifestCache) {
+
+  const now =
+    Date.now();
+
+  if (
+    manifestCache &&
+    now - manifestCacheAt <
+      MANIFEST_TTL_MS
+  ) {
     return manifestCache;
   }
 
@@ -993,7 +1058,7 @@ async function loadManifest(
       url,
       {
         cache:
-          "force-cache",
+          "no-cache",
         signal:
           signal ||
           undefined
@@ -1001,16 +1066,81 @@ async function loadManifest(
     );
 
   if (!response.ok) {
-    manifestCache = {};
-    return manifestCache;
+    // Do not pin a transient deployment/network failure for the lifetime of
+    // this Worker. Existing validated metadata can still be used briefly.
+    return (
+      manifestCache ||
+      {}
+    );
   }
 
-  manifestCache =
+  const declared =
+    Number(
+      response.headers.get(
+        "content-length"
+      ) || 0
+    );
+
+  if (
+    declared > 0 &&
+    declared >
+      2 * 1024 * 1024
+  ) {
+    try {
+      await response.body
+        ?.cancel();
+    } catch {}
+
+    throw new Error(
+      "Database manifest is unexpectedly large."
+    );
+  }
+
+  const parsed =
     await response.json();
 
   throwIfAborted(
     signal
   );
+
+  if (
+    !parsed ||
+    parsed.schema !==
+      "fnaa.asset-index.v1" ||
+    !parsed.scopes ||
+    typeof parsed.scopes !==
+      "object"
+  ) {
+    throw new Error(
+      "Database manifest is invalid."
+    );
+  }
+
+  const signature =
+    String(
+      parsed.builtAt ||
+      parsed.fortniteVersion ||
+      ""
+    );
+
+  if (
+    manifestCacheSignature &&
+    signature &&
+    signature !==
+      manifestCacheSignature
+  ) {
+    textCache.clear();
+    resultCache.clear();
+  }
+
+  manifestCache =
+    parsed;
+
+  manifestCacheAt =
+    now;
+
+  manifestCacheSignature =
+    signature;
 
   return manifestCache;
 }
@@ -1129,7 +1259,7 @@ async function loadGzipLines(
       url,
       {
         cache:
-          "force-cache",
+          "default",
         signal:
           signal ||
           undefined
