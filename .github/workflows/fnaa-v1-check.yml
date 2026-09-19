@@ -59,6 +59,10 @@ jobs:
           }
           NODE
 
+      - name: Run NovaSparx asset diagnosis self-test
+        shell: bash
+        run: node Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-associations.selftest.mjs
+
       - name: Run NovaSparx browser memory self-test
         shell: bash
         run: node Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-browser-guard.selftest.mjs
