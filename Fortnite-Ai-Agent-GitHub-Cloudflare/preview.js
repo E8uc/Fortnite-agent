@@ -3188,7 +3188,22 @@
         ""
       ).toLowerCase();
 
+    const browser3dReady =
+      (() => {
+        try {
+          return (
+            window.NovaSparxLocalParser
+              ?.status?.()
+              ?.registered ===
+            true
+          );
+        } catch {
+          return false;
+        }
+      })();
+
     const force3d =
+      browser3dReady &&
       [
         "staticmesh",
         "skeletalmesh",
@@ -4360,7 +4375,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "2.3.1",
+      version: "2.3.2",
       toggle,
       render: renderPreview,
       release,
