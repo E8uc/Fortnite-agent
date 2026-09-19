@@ -2764,21 +2764,92 @@
       );
     }
 
+    const apiBase =
+      new URL(
+        API_ENDPOINT,
+        location.origin
+      );
+
     const url =
       /^https?:\/\//i.test(
         String(route || "")
       )
-        ? String(route)
-        : `${API_ENDPOINT}${String(route || "/").startsWith("/") ? "" : "/"}${route || ""}`;
+        ? new URL(
+            String(route)
+          )
+        : new URL(
+            `${API_ENDPOINT}${String(route || "/").startsWith("/") ? "" : "/"}${route || ""}`
+          );
+
+    if (
+      url.origin !==
+        apiBase.origin ||
+      (
+        url.protocol !==
+          "https:" &&
+        ![
+          "localhost",
+          "127.0.0.1",
+          "::1"
+        ].includes(
+          url.hostname
+        )
+      ) ||
+      url.username ||
+      url.password
+    ) {
+      throw new Error(
+        "FNAA API request target is not allowed."
+      );
+    }
 
     const controller =
       new AbortController();
 
+    const externalSignal =
+      init.signal ||
+      null;
+
+    const abortFromExternal =
+      () => {
+        try {
+          controller.abort(
+            externalSignal?.reason ||
+            "replaced-by-new-request"
+          );
+        } catch {}
+      };
+
+    if (
+      externalSignal?.aborted
+    ) {
+      abortFromExternal();
+    } else {
+      externalSignal
+        ?.addEventListener?.(
+          "abort",
+          abortFromExternal,
+          {
+            once:
+              true
+          }
+        );
+    }
+
     const timeout =
       setTimeout(
-        () =>
-          controller.abort(),
-        timeoutMs
+        () => {
+          try {
+            controller.abort(
+              "request-timeout"
+            );
+          } catch {}
+        },
+        Math.max(
+          1_000,
+          Number(timeoutMs) ||
+          30_000
+        )
       );
 
     const headers =
@@ -2813,12 +2884,18 @@
       );
     }
 
+    const {
+      signal:
+        _externalSignal,
+      ...fetchInit
+    } = init;
+
     try {
       const response =
         await fetch(
-          url,
+          url.toString(),
           {
-            ...init,
+            ...fetchInit,
             headers,
             signal:
               controller.signal
@@ -2828,7 +2905,7 @@
       if (
         accountState.user &&
         response.status ===
-        401
+          401
       ) {
         try {
           await window
@@ -2844,6 +2921,12 @@
       clearTimeout(
         timeout
       );
+
+      externalSignal
+        ?.removeEventListener?.(
+          "abort",
+          abortFromExternal
+        );
     }
   }
 
