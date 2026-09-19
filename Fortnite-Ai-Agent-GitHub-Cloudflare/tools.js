@@ -2057,7 +2057,14 @@
         await window.FortnitePreview
           .toggle(
             host,
-            path
+            path,
+            null,
+            {
+              assetKind:
+                card.dataset
+                  .assetKind ||
+                ""
+            }
           );
 
         if (
@@ -6752,7 +6759,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.3.0",
+      version: "1.3.1",
       open,
       close,
       formatAssetPath,
