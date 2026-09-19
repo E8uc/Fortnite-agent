@@ -729,6 +729,13 @@
     filter: "all"
   };
 
+  let cosmeticSearchController =
+    null;
+
+  let cosmeticSearchGeneration =
+    0;
+
+
   function cosmeticType(item) {
     return String(
       item?.type?.value ||
@@ -785,11 +792,48 @@
     );
   }
 
+  function safeCosmeticImageUrl(
+    raw
+  ) {
+    try {
+      const url =
+        new URL(
+          String(raw || "")
+        );
+
+      const host =
+        url.hostname
+          .toLowerCase();
+
+      if (
+        url.protocol !==
+          "https:" ||
+        url.username ||
+        url.password ||
+        !(
+          host ===
+            "fortnite-api.com" ||
+          host.endsWith(
+            ".fortnite-api.com"
+          )
+        )
+      ) {
+        return "";
+      }
+
+      url.hash = "";
+
+      return url.toString();
+    } catch {
+      return "";
+    }
+  }
+
   function cosmeticImage(item) {
     const images =
       item?.images || {};
 
-    return (
+    return safeCosmeticImageUrl(
       images.icon ||
       images.smallIcon ||
       images.featured ||
@@ -1013,6 +1057,34 @@
       return;
     }
 
+    const generation =
+      ++cosmeticSearchGeneration;
+
+    try {
+      cosmeticSearchController
+        ?.abort(
+          "replaced-by-new-cosmetic-search"
+        );
+    } catch {}
+
+    const controller =
+      new AbortController();
+
+    cosmeticSearchController =
+      controller;
+
+    const timer =
+      setTimeout(
+        () => {
+          try {
+            controller.abort(
+              "cosmetic-search-timeout"
+            );
+          } catch {}
+        },
+        14_000
+      );
+
     if (status) {
       status.hidden = false;
       status.textContent =
@@ -1030,7 +1102,10 @@
       looksLikeId
         ? "id"
         : "name",
-      query
+      query.slice(
+        0,
+        160
+      )
     );
 
     params.set(
@@ -1049,9 +1124,17 @@
           `https://fortnite-api.com/v2/cosmetics/br/search/all?${params.toString()}`,
           {
             cache:
-              "force-cache"
+              "force-cache",
+            signal:
+              controller.signal
           }
         );
+
+      if (!response.ok) {
+        throw new Error(
+          `Cosmetic API returned ${response.status}.`
+        );
+      }
 
       const payload =
         await response
@@ -1060,11 +1143,24 @@
             () => ({})
           );
 
+      if (
+        controller.signal
+          .aborted ||
+        generation !==
+          cosmeticSearchGeneration
+      ) {
+        return;
+      }
+
       const rows =
         Array.isArray(
           payload?.data
         )
           ? payload.data
+              .slice(
+                0,
+                500
+              )
           : [];
 
       cosmeticState.rows =
@@ -1076,12 +1172,33 @@
         true
       );
     } catch (error) {
+      if (
+        controller.signal
+          .aborted ||
+        generation !==
+          cosmeticSearchGeneration
+      ) {
+        return;
+      }
+
       cosmeticState.rows = [];
 
       if (status) {
         status.textContent =
           error?.message ||
           "Cosmetic search failed.";
+      }
+    } finally {
+      clearTimeout(
+        timer
+      );
+
+      if (
+        cosmeticSearchController ===
+          controller
+      ) {
+        cosmeticSearchController =
+          null;
       }
     }
   }
