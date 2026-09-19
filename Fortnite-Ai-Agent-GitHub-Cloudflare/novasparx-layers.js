@@ -18,6 +18,48 @@
   const memory = new Map();
   let lastTrace = [];
 
+  function abortError(
+    signal
+  ) {
+    const error =
+      new Error(
+        "NovaSparx request was cancelled because a newer request replaced it."
+      );
+
+    error.name =
+      "AbortError";
+
+    error.code =
+      "NOVASPARX_REQUEST_REPLACED";
+
+    error.reason =
+      signal?.reason ||
+      "cancelled";
+
+    return error;
+  }
+
+  function throwIfAborted(
+    signal
+  ) {
+    if (signal?.aborted) {
+      throw abortError(
+        signal
+      );
+    }
+  }
+
+  function shouldAbort(
+    error,
+    signal
+  ) {
+    return Boolean(
+      signal?.aborted ||
+      error?.name ===
+        "AbortError"
+    );
+  }
+
   function clean(path) {
     return CORE()?.cleanPath?.(path) || String(path || "").trim();
   }
@@ -90,7 +132,10 @@
     }
   }
 
-  async function readDeviceCache(path) {
+  async function readDeviceCache(
+    path,
+    signal = null
+  ) {
     const core = CORE();
     if (!core?.parseClientMesh) return null;
 
@@ -104,6 +149,10 @@
       if (!response) return null;
 
       const buffer = await response.arrayBuffer();
+
+      throwIfAborted(
+        signal
+      );
 
       if (
         buffer.byteLength < 16 ||
@@ -143,7 +192,15 @@
     }
   }
 
-  async function writeDeviceCache(path, buffer) {
+  async function writeDeviceCache(
+    path,
+    buffer,
+    signal = null
+  ) {
+    throwIfAborted(
+      signal
+    );
+
     if (
       !(buffer instanceof ArrayBuffer) ||
       buffer.byteLength < 16 ||
@@ -163,6 +220,10 @@
     }
 
     try {
+      throwIfAborted(
+        signal
+      );
+
       await cache.put(
         cacheRequest(path),
         new Response(buffer, {
@@ -222,6 +283,10 @@
   }
 
   async function fromLocalParser(path, options) {
+    throwIfAborted(
+      options?.signal
+    );
+
     const parser = localParser();
     if (!parser) return null;
 
@@ -232,13 +297,27 @@
       signal: options?.signal || null
     });
 
+    throwIfAborted(
+      options?.signal
+    );
+
     if (!result) return null;
 
     let manifest;
 
     if (result instanceof ArrayBuffer) {
       manifest = core.parseClientMesh(result, path);
-      await writeDeviceCache(path, result);
+
+      throwIfAborted(
+        options?.signal
+      );
+
+      await writeDeviceCache(
+        path,
+        result,
+        options?.signal ||
+          null
+      );
     } else {
       manifest = core.normalizeManifest(result, path);
     }
@@ -256,11 +335,28 @@
   }
 
   async function fromBackendBinary(path, options) {
+    throwIfAborted(
+      options?.signal
+    );
+
     const core = CORE();
     if (!core?.clientMeshBuffer || !core?.parseClientMesh) return null;
 
     const buffer = await core.clientMeshBuffer(path, options);
-    const manifest = core.parseClientMesh(buffer, path);
+
+    throwIfAborted(
+      options?.signal
+    );
+
+    const manifest =
+      core.parseClientMesh(
+        buffer,
+        path
+      );
+
+    throwIfAborted(
+      options?.signal
+    );
 
     globalThis.NovaSparxBrowserGuard
       ?.assertManifestBudget?.(
@@ -268,7 +364,12 @@
       );
 
     // Store a local copy only after the package passed all validation.
-    await writeDeviceCache(path, buffer);
+    await writeDeviceCache(
+      path,
+      buffer,
+      options?.signal ||
+        null
+    );
 
     return {
       manifest,
@@ -278,10 +379,18 @@
   }
 
   async function fromBackendJson(path, options) {
+    throwIfAborted(
+      options?.signal
+    );
+
     const core = CORE();
     if (!core?.resolve) return null;
 
     const manifest = await core.resolve(path, options);
+
+    throwIfAborted(
+      options?.signal
+    );
 
     globalThis.NovaSparxBrowserGuard
       ?.assertManifestBudget?.(
@@ -306,6 +415,10 @@
   }
 
   async function resolveMesh(path, options = {}) {
+    throwIfAborted(
+      options.signal
+    );
+
     const cleanPath = clean(path);
 
     if (!cleanPath) {
@@ -322,7 +435,20 @@
     }
 
     if (options.deviceCache !== false) {
-      const cachedDevice = await readDeviceCache(cleanPath);
+      throwIfAborted(
+        options.signal
+      );
+
+      const cachedDevice =
+        await readDeviceCache(
+          cleanPath,
+          options.signal ||
+            null
+        );
+
+      throwIfAborted(
+        options.signal
+      );
 
       if (cachedDevice) {
         remember(cleanPath, cachedDevice.manifest, cachedDevice.layer);
@@ -335,6 +461,10 @@
     }
 
     if (options.local !== false) {
+      throwIfAborted(
+        options.signal
+      );
+
       if (localParser()) {
         try {
           const local = await fromLocalParser(cleanPath, options);
@@ -348,7 +478,22 @@
 
           trace.push({ layer: "browser-wasm", state: "miss" });
         } catch (error) {
-          traceError(trace, "browser-wasm", error);
+          if (
+            shouldAbort(
+              error,
+              options.signal
+            )
+          ) {
+            throw abortError(
+              options.signal
+            );
+          }
+
+          traceError(
+            trace,
+            "browser-wasm",
+            error
+          );
         }
       } else {
         trace.push({ layer: "browser-wasm", state: "unavailable" });
@@ -356,6 +501,10 @@
     }
 
     if (options.backend !== false) {
+      throwIfAborted(
+        options.signal
+      );
+
       try {
         const binary = await fromBackendBinary(cleanPath, options);
 
@@ -366,8 +515,27 @@
           return { ...binary, trace };
         }
       } catch (error) {
-        traceError(trace, "backend-binary", error);
+        if (
+          shouldAbort(
+            error,
+            options.signal
+          )
+        ) {
+          throw abortError(
+            options.signal
+          );
+        }
+
+        traceError(
+          trace,
+          "backend-binary",
+          error
+        );
       }
+
+      throwIfAborted(
+        options.signal
+      );
 
       try {
         const json = await fromBackendJson(cleanPath, options);
@@ -379,7 +547,22 @@
           return { ...json, trace };
         }
       } catch (error) {
-        traceError(trace, "backend-json", error);
+        if (
+          shouldAbort(
+            error,
+            options.signal
+          )
+        ) {
+          throw abortError(
+            options.signal
+          );
+        }
+
+        traceError(
+          trace,
+          "backend-json",
+          error
+        );
       }
     }
 
@@ -416,7 +599,7 @@
 
   function capabilities() {
     return {
-      version: "2.1.0",
+      version: "2.2.0",
       layers: [
         {
           id: "device-memory",
@@ -479,7 +662,7 @@
   }
 
   globalThis.NovaSparxLayers = Object.freeze({
-    version: "2.1.0",
+    version: "2.2.0",
     resolveMesh,
     capabilities,
     clearDeviceCache,
