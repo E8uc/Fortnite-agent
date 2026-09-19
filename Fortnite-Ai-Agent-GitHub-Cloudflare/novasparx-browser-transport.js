@@ -121,13 +121,29 @@
         String(raw || "")
       );
 
+    const loopback =
+      (
+        target.hostname ===
+          "localhost" ||
+        target.hostname ===
+          "127.0.0.1" ||
+        target.hostname ===
+          "[::1]" ||
+        target.hostname ===
+          "::1"
+      );
+
     if (
-      !/^https?:$/.test(
-        target.protocol
+      target.protocol !==
+        "https:" &&
+      !(
+        target.protocol ===
+          "http:" &&
+        loopback
       )
     ) {
       throw new Error(
-        "NovaSparx browser transport requires HTTP(S)."
+        "NovaSparx browser transport requires HTTPS outside localhost."
       );
     }
 
@@ -1247,7 +1263,7 @@
   function status() {
     return {
       version:
-        "2.3.0",
+        "2.4.0",
       apiConfigured:
         Boolean(
           apiBase()
@@ -1300,7 +1316,7 @@
   globalThis.NovaSparxBrowserTransport =
     Object.freeze({
       version:
-        "2.3.0",
+        "2.4.0",
       maxRangeBytes:
         MAX_RANGE_BYTES,
       fetchRange,
