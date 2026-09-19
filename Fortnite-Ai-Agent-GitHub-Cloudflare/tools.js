@@ -952,6 +952,19 @@
     );
   }
 
+  function browserMeshParserReady() {
+    try {
+      return (
+        window.NovaSparxLocalParser
+          ?.status?.()
+          ?.registered ===
+        true
+      );
+    } catch {
+      return false;
+    }
+  }
+
   function applyAssetClassification(
     card,
     classification
@@ -997,7 +1010,8 @@
 
     if (previewButton) {
       if (
-        capabilities.canView3D
+        capabilities.canView3D &&
+        browserMeshParserReady()
       ) {
         previewButton.disabled =
           false;
@@ -1087,12 +1101,27 @@
       );
 
     if (exportButton) {
-      const supported =
+      const exporterSupports =
         Boolean(
           window.NovaSparxExporter
             ?.supports?.(
               classification
             )
+        );
+
+      const meshKind =
+        [
+          "staticmesh",
+          "blueprint-visual"
+        ].includes(
+          kind
+        );
+
+      const supported =
+        exporterSupports &&
+        (
+          !meshKind ||
+          browserMeshParserReady()
         );
 
       exportButton.disabled =
@@ -1106,7 +1135,13 @@
         exportButton.title =
           kind === "skeletalmesh"
             ? "Skeletal UEFN export is waiting for bones and skin weights."
-            : "UEFN-ready export is not available for this asset type yet.";
+            : [
+                "staticmesh",
+                "blueprint-visual"
+              ].includes(kind) &&
+              !browserMeshParserReady()
+              ? "3D export is hidden until the browser parser has real geometry. No Back4App-only export is advertised."
+              : "UEFN-ready export is not available for this asset type yet.";
       }
     }
 
@@ -2746,6 +2781,33 @@
       const exporter =
         window.NovaSparxExporter;
 
+      const meshRuntimeReady =
+        browserMeshParserReady();
+
+      if (!meshRuntimeReady) {
+        for (
+          let index =
+            allowed.length - 1;
+          index >= 0;
+          index--
+        ) {
+          if (
+            [
+              "glb",
+              "obj",
+              "nsmesh"
+            ].includes(
+              allowed[index]
+            )
+          ) {
+            allowed.splice(
+              index,
+              1
+            );
+          }
+        }
+      }
+
       const exporterSupported =
         Boolean(
           exporter
@@ -2778,6 +2840,7 @@
 
       if (
         exporterSupported &&
+        meshRuntimeReady &&
         [
           "staticmesh",
           "blueprint-visual"
@@ -7588,7 +7651,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.6.6",
+      version: "1.6.7",
       open,
       close,
       formatAssetPath,
