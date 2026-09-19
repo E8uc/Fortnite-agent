@@ -163,6 +163,7 @@
         : 35_000;
 
   let activeController = null;
+  let activeOperationId = 0;
   let pressureState = "normal";
   let lastReason = "";
   let lastMeasurement = null;
@@ -501,51 +502,71 @@
     };
   }
 
-  function beginOperation(label = "preview") {
-    if (activeController) {
-      try {
-        clearTimeout(
-          activeController
-            .__novaTimeout
-        );
-      } catch {}
+  function beginOperation(
+    label = "request"
+  ) {
+    abortActive(
+      "replaced-by-new-request"
+    );
 
-      activeController.abort(
-        "replaced-by-new-preview"
-      );
-    }
-
-    activeController =
+    const controller =
       new AbortController();
 
-    activeController.label =
-      String(label || "preview");
+    const operationId =
+      ++activeOperationId;
 
-    activeController.__novaTimeout =
+    controller.label =
+      String(
+        label || "request"
+      );
+
+    controller.novaOperationId =
+      operationId;
+
+    controller.__novaTimeout =
       setTimeout(
         () => {
+          if (
+            activeController !==
+            controller
+          ) {
+            return;
+          }
+
           try {
-            activeController
-              ?.abort(
-                "preview-time-budget"
-              );
+            controller.abort(
+              "request-time-budget"
+            );
           } catch {}
+
+          activeController =
+            null;
+
+          storageRemove(
+            ACTIVE_PREVIEW_KEY
+          );
         },
         previewTimeoutMs
       );
+
+    activeController =
+      controller;
 
     storageSet(
       ACTIVE_PREVIEW_KEY,
       Date.now()
     );
 
-    return activeController;
+    return controller;
   }
 
-  function endOperation(controller) {
+  function endOperation(
+    controller
+  ) {
     if (
       controller &&
-      activeController === controller
+      activeController ===
+        controller
     ) {
       try {
         clearTimeout(
@@ -554,31 +575,64 @@
         );
       } catch {}
 
-      activeController = null;
+      activeController =
+        null;
+
       storageRemove(
         ACTIVE_PREVIEW_KEY
       );
     }
   }
 
-  function abortActive(reason = "browser-lifecycle") {
-    if (!activeController) return;
+  function abortActive(
+    reason =
+      "browser-lifecycle"
+  ) {
+    if (!activeController) {
+      return;
+    }
+
+    const controller =
+      activeController;
+
+    activeController =
+      null;
 
     try {
       clearTimeout(
-        activeController
+        controller
           .__novaTimeout
       );
     } catch {}
 
     try {
-      activeController.abort(reason);
+      controller.abort(
+        reason
+      );
     } catch {}
-
-    activeController = null;
 
     storageRemove(
       ACTIVE_PREVIEW_KEY
+    );
+  }
+
+  function activeSignal() {
+    return (
+      activeController
+        ?.signal ||
+      null
+    );
+  }
+
+  function isCurrentOperation(
+    controller
+  ) {
+    return Boolean(
+      controller &&
+      activeController ===
+        controller &&
+      !controller.signal
+        .aborted
     );
   }
 
@@ -592,6 +646,19 @@
       hardwareConcurrency:
         hardwareConcurrency || null,
       previewTimeoutMs,
+      activeOperation:
+        activeController
+          ? {
+              id:
+                activeController
+                  .novaOperationId ||
+                null,
+              label:
+                activeController
+                  .label ||
+                "request"
+            }
+          : null,
       recoveryMode,
       safeModeUntil:
         recoveryMode
@@ -632,7 +699,7 @@
 
   globalThis.NovaSparxBrowserGuard =
     Object.freeze({
-      version: "1.2.0",
+      version: "1.3.0",
       status,
       measureMemory,
       assertResponseBudget,
@@ -642,6 +709,8 @@
       beginOperation,
       endOperation,
       abortActive,
+      activeSignal,
+      isCurrentOperation,
       setPressure
     });
 })();
