@@ -28,35 +28,256 @@ const MAX_SAFE_FULL_GZIP_BYTES =
 // straight back to the full database.
 const MAX_QUERY_SHARDS = 4;
 
-self.addEventListener("message", async (event) => {
-  const msg = event.data || {};
+const MAX_QUERY_CHARS =
+  512;
 
-  if (msg.type !== "search") return;
+const MAX_DECOMPRESSED_BYTES =
+  IS_MOBILE_WORKER
+    ? 16 * 1024 * 1024
+    : 64 * 1024 * 1024;
 
-  try {
-    const data = await search(
-      String(msg.scope || "all"),
-      String(msg.query || ""),
-      msg.config || {}
+const MAX_DECOMPRESSED_LINES =
+  IS_MOBILE_WORKER
+    ? 300_000
+    : 900_000;
+
+const MAX_LINE_CHARS =
+  4096;
+
+const MAX_SAFE_JSON_GZIP_BYTES =
+  IS_MOBILE_WORKER
+    ? 512 * 1024
+    : 2 * 1024 * 1024;
+
+const DATABASE_ROOT_PATH =
+  "/Fortnite-agent/database/";
+
+let activeSearchController =
+  null;
+
+let activeSearchId =
+  null;
+
+function abortError() {
+  const error =
+    new Error(
+      "Database search was replaced by a newer request."
     );
 
-    self.postMessage({
-      id: msg.id,
-      ok: true,
-      data
-    });
-  } catch (error) {
-    self.postMessage({
-      id: msg.id,
-      ok: false,
-      error: String(error?.message || error)
-    });
-  }
-});
+  error.name =
+    "AbortError";
 
-async function search(scope, query, config) {
-  const cleanScope = normalizeScope(scope);
-  const tokens = tokenize(query);
+  error.code =
+    "SEARCH_REPLACED";
+
+  return error;
+}
+
+function throwIfAborted(
+  signal
+) {
+  if (signal?.aborted) {
+    throw abortError();
+  }
+}
+
+function safeDatabaseUrl(
+  raw,
+  fallback = ""
+) {
+  const value =
+    String(
+      raw ||
+      fallback ||
+      ""
+    )
+      .trim();
+
+  if (!value) {
+    throw new Error(
+      "Database path is missing."
+    );
+  }
+
+  const url =
+    new URL(
+      value,
+      self.location
+        .origin +
+      "/Fortnite-agent/"
+    );
+
+  if (
+    url.origin !==
+      self.location.origin ||
+    !url.pathname.startsWith(
+      DATABASE_ROOT_PATH
+    ) ||
+    url.username ||
+    url.password
+  ) {
+    throw new Error(
+      "Database path is outside the allowed asset index."
+    );
+  }
+
+  url.hash = "";
+
+  return url.toString();
+}
+
+self.addEventListener(
+  "message",
+  async (event) => {
+    const msg =
+      event.data || {};
+
+    if (
+      msg.type !==
+      "search"
+    ) {
+      return;
+    }
+
+    const id =
+      Number(
+        msg.id
+      );
+
+    const query =
+      String(
+        msg.query || ""
+      );
+
+    if (
+      !Number.isSafeInteger(id) ||
+      id <= 0 ||
+      query.length >
+        MAX_QUERY_CHARS
+    ) {
+      self.postMessage({
+        id:
+          Number.isSafeInteger(id)
+            ? id
+            : 0,
+        ok:
+          false,
+        error:
+          "Invalid database search request."
+      });
+
+      return;
+    }
+
+    if (
+      activeSearchController
+    ) {
+      try {
+        activeSearchController
+          .abort(
+            "replaced-by-new-search"
+          );
+      } catch {}
+    }
+
+    const controller =
+      new AbortController();
+
+    activeSearchController =
+      controller;
+
+    activeSearchId =
+      id;
+
+    try {
+      const data =
+        await search(
+          String(
+            msg.scope ||
+            "all"
+          ),
+          query,
+          msg.config ||
+            {},
+          controller.signal
+        );
+
+      throwIfAborted(
+        controller.signal
+      );
+
+      if (
+        activeSearchId !==
+        id
+      ) {
+        throw abortError();
+      }
+
+      self.postMessage({
+        id,
+        ok:
+          true,
+        data
+      });
+    } catch (error) {
+      self.postMessage({
+        id,
+        ok:
+          false,
+        code:
+          error?.code ||
+          (
+            error?.name ===
+              "AbortError"
+              ? "SEARCH_REPLACED"
+              : "SEARCH_FAILED"
+          ),
+        error:
+          error?.name ===
+            "AbortError"
+            ? "Database search was replaced by a newer request."
+            : String(
+                error?.message ||
+                "Database search failed."
+              ).slice(
+                0,
+                240
+              )
+      });
+    } finally {
+      if (
+        activeSearchId ===
+        id
+      ) {
+        activeSearchController =
+          null;
+
+        activeSearchId =
+          null;
+      }
+    }
+  }
+);
+
+async function search(
+  scope,
+  query,
+  config,
+  signal = null
+) {
+  throwIfAborted(
+    signal
+  );
+
+  const cleanScope =
+    normalizeScope(
+      scope
+    );
+
+  const tokens =
+    tokenize(
+      query
+    );
 
   if (!tokens.length) {
     return {
@@ -78,7 +299,15 @@ async function search(scope, query, config) {
     return cached;
   }
 
-  const manifest = await loadManifest(config);
+  const manifest =
+    await loadManifest(
+      config,
+      signal
+    );
+
+  throwIfAborted(
+    signal
+  );
 
   const scopeManifest =
     manifest?.scopes?.[cleanScope] || null;
@@ -100,6 +329,10 @@ async function search(scope, query, config) {
   // Probe shards for multiple query tokens. This is much safer than inflating
   // the full 1.78M-line database when the first shard is narrow.
   for (const key of shardKeys) {
+    throwIfAborted(
+      signal
+    );
+
     const relative =
       scopeManifest?.shards?.[key]?.path;
 
@@ -113,7 +346,8 @@ async function search(scope, query, config) {
 
     const lines =
       await loadGzipLines(
-        shardPath
+        shardPath,
+        signal
       );
 
     for (const line of lines) {
@@ -137,7 +371,8 @@ async function search(scope, query, config) {
 
       const lines =
         await loadGzipLines(
-          fallback
+          fallback,
+          signal
         );
 
       for (const line of lines) {
@@ -159,21 +394,61 @@ async function search(scope, query, config) {
     cleanScope === "meshes" ||
     cleanScope === "m"
   ) {
-    const jsonPath =
-      manifest?.jsonReferences?.path
-        ? resolveDatabasePath(
-            config,
-            manifest.jsonReferences.path
-          )
-        : config.json ||
-          "./database/index/json-references.txt.gz";
+    const jsonInfo =
+      manifest?.jsonReferences ||
+      null;
 
-    try {
-      jsonCandidates.push(
-        ...(await loadGzipLines(jsonPath))
+    const compressedBytes =
+      Number(
+        jsonInfo?.bytes ||
+        0
       );
-    } catch {
-      // Optional evidence only.
+
+    const jsonAllowed =
+      !jsonInfo ||
+      (
+        compressedBytes > 0 &&
+        compressedBytes <=
+          MAX_SAFE_JSON_GZIP_BYTES
+      );
+
+    if (jsonAllowed) {
+      const jsonPath =
+        jsonInfo?.path
+          ? resolveDatabasePath(
+              config,
+              jsonInfo.path
+            )
+          : safeDatabaseUrl(
+              config.json,
+              "./database/index/json-references.txt.gz"
+            );
+
+      try {
+        const references =
+          await loadGzipLines(
+            jsonPath,
+            signal
+          );
+
+        throwIfAborted(
+          signal
+        );
+
+        jsonCandidates.push(
+          ...references
+        );
+      } catch (error) {
+        if (
+          signal?.aborted ||
+          error?.name ===
+            "AbortError"
+        ) {
+          throw abortError();
+        }
+
+        // Optional evidence only.
+      }
     }
   }
 
@@ -204,7 +479,14 @@ async function search(scope, query, config) {
     shards: shardKeys
   };
 
-  rememberResult(cacheKey, payload);
+  throwIfAborted(
+    signal
+  );
+
+  rememberResult(
+    cacheKey,
+    payload
+  );
 
   return payload;
 }
@@ -689,19 +971,33 @@ function shardKey(queryToken) {
   return compact.slice(0, 2);
 }
 
-async function loadManifest(config) {
+async function loadManifest(
+  config,
+  signal = null
+) {
+  throwIfAborted(
+    signal
+  );
   if (manifestCache) {
     return manifestCache;
   }
 
   const url =
-    config.manifest ||
-    "./database/index-v1/manifest.json";
+    safeDatabaseUrl(
+      config.manifest,
+      "./database/index-v1/manifest.json"
+    );
 
   const response =
     await fetch(
       url,
-      { cache: "force-cache" }
+      {
+        cache:
+          "force-cache",
+        signal:
+          signal ||
+          undefined
+      }
     );
 
   if (!response.ok) {
@@ -712,6 +1008,10 @@ async function loadManifest(config) {
   manifestCache =
     await response.json();
 
+  throwIfAborted(
+    signal
+  );
+
   return manifestCache;
 }
 
@@ -720,18 +1020,46 @@ function resolveDatabasePath(
   relative
 ) {
   const value =
-    String(relative || "");
+    String(
+      relative ||
+      ""
+    )
+      .trim()
+      .replace(
+        /\\/g,
+        "/"
+      );
 
   if (
-    /^https?:\/\//i.test(value) ||
-    value.startsWith("./") ||
-    value.startsWith("../") ||
-    value.startsWith("/")
+    !value ||
+    value.includes(
+      ".."
+    ) ||
+    /^[a-z][a-z0-9+.-]*:/i
+      .test(value)
   ) {
-    return value;
+    throw new Error(
+      "Invalid database manifest path."
+    );
   }
 
-  return `./database/index-v1/${value}`;
+  if (
+    value.startsWith(
+      "/"
+    )
+  ) {
+    return safeDatabaseUrl(
+      value
+    );
+  }
+
+  return safeDatabaseUrl(
+    "./database/index-v1/" +
+    value.replace(
+      /^\.\//,
+      ""
+    )
+  );
 }
 
 function legacyScopeUrl(
@@ -760,13 +1088,28 @@ function legacyScopeUrl(
       "./database/index/new.txt.gz"
   };
 
-  return map[scope] || map.all;
+  return safeDatabaseUrl(
+    map[scope] ||
+    map.all
+  );
 }
 
-async function loadGzipLines(url) {
+async function loadGzipLines(
+  url,
+  signal = null
+) {
   if (!url) {
     return [];
   }
+
+  throwIfAborted(
+    signal
+  );
+
+  url =
+    safeDatabaseUrl(
+      url
+    );
 
   if (textCache.has(url)) {
     const cached =
@@ -784,8 +1127,18 @@ async function loadGzipLines(url) {
   const response =
     await fetch(
       url,
-      { cache: "force-cache" }
+      {
+        cache:
+          "force-cache",
+        signal:
+          signal ||
+          undefined
+      }
     );
+
+  throwIfAborted(
+    signal
+  );
 
   if (!response.ok) {
     throw new Error(
@@ -795,7 +1148,7 @@ async function loadGzipLines(url) {
 
   if (
     typeof DecompressionStream !==
-    "function"
+      "function"
   ) {
     try {
       await response.body?.cancel();
@@ -812,26 +1165,169 @@ async function loadGzipLines(url) {
     );
   }
 
-  // Stream directly from fetch -> gzip decoder.
-  // Do not create arrayBuffer + Blob copies of the compressed database.
   const stream =
     response.body.pipeThrough(
-      new DecompressionStream("gzip")
+      new DecompressionStream(
+        "gzip"
+      )
     );
 
-  const text =
-    await new Response(stream)
-      .text();
+  const reader =
+    stream.getReader();
 
-  const lines =
-    text
-      .split("\n")
-      .map((x) => x.trim())
-      .filter(Boolean);
+  const decoder =
+    new TextDecoder();
 
-  // Small shards / small scope indexes are safe to retain.
-  // Avoid pinning unusually huge arrays in the worker heap.
-  if (lines.length <= 250_000) {
+  const lines = [];
+
+  let carry = "";
+  let totalBytes = 0;
+
+  const acceptLine =
+    (raw) => {
+      const line =
+        String(raw || "")
+          .trim();
+
+      if (!line) {
+        return;
+      }
+
+      if (
+        line.length >
+        MAX_LINE_CHARS
+      ) {
+        throw new Error(
+          "Database index contains an oversized line."
+        );
+      }
+
+      lines.push(
+        line
+      );
+
+      if (
+        lines.length >
+        MAX_DECOMPRESSED_LINES
+      ) {
+        throw new Error(
+          "Database index contains too many entries for this device."
+        );
+      }
+    };
+
+  try {
+    while (true) {
+      throwIfAborted(
+        signal
+      );
+
+      const {
+        done,
+        value
+      } =
+        await reader.read();
+
+      if (done) {
+        break;
+      }
+
+      if (!value?.byteLength) {
+        continue;
+      }
+
+      totalBytes +=
+        value.byteLength;
+
+      if (
+        totalBytes >
+        MAX_DECOMPRESSED_BYTES
+      ) {
+        try {
+          await reader.cancel();
+        } catch {}
+
+        throw new Error(
+          "Database shard expands beyond this device's safe memory budget."
+        );
+      }
+
+      carry +=
+        decoder.decode(
+          value,
+          {
+            stream:
+              true
+          }
+        );
+
+      if (
+        carry.length >
+          MAX_LINE_CHARS * 2 &&
+        !carry.includes(
+          "\n"
+        )
+      ) {
+        throw new Error(
+          "Database index contains an oversized line."
+        );
+      }
+
+      const parts =
+        carry.split(
+          "\n"
+        );
+
+      carry =
+        parts.pop() ||
+        "";
+
+      for (
+        const part of
+        parts
+      ) {
+        acceptLine(
+          part
+        );
+      }
+    }
+
+    carry +=
+      decoder.decode();
+
+    if (carry) {
+      acceptLine(
+        carry
+      );
+    }
+  } catch (error) {
+    try {
+      await reader.cancel();
+    } catch {}
+
+    if (
+      signal?.aborted ||
+      error?.name ===
+        "AbortError"
+    ) {
+      throw abortError();
+    }
+
+    throw error;
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {}
+  }
+
+  throwIfAborted(
+    signal
+  );
+
+  if (
+    lines.length <=
+    250_000
+  ) {
     textCache.set(
       url,
       lines
@@ -846,7 +1342,9 @@ async function loadGzipLines(url) {
           .next()
           .value;
 
-      textCache.delete(oldest);
+      textCache.delete(
+        oldest
+      );
     }
   }
 
