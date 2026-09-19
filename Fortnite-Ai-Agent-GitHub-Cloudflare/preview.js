@@ -3632,15 +3632,81 @@
         };
       }
 
+      // 3) Public Dilly JSON can expose exact visual references for many
+      // materials, Blueprints and effects without waking Back4App.
+      let publicPlan = null;
+
+      if (
+        !force3d &&
+        pathFamily !==
+          "texture" &&
+        window.NovaSparxAssociations
+          ?.publicPreview
+      ) {
+        try {
+          publicPlan =
+            await window
+              .NovaSparxAssociations
+              .publicPreview(
+                clean,
+                {
+                  signal
+                }
+              );
+
+          throwIfAborted(
+            signal
+          );
+
+          for (
+            const previewPath of
+            publicPlan
+              ?.previewImagePaths ||
+            []
+          ) {
+            if (
+              await tryExactTypedImage(
+                previewPath,
+                ui,
+                "Verified referenced texture • Dilly JSON • no Back4App"
+              )
+            ) {
+              return {
+                state:
+                  "ready",
+                kind:
+                  "public-referenced-image",
+                publicPlan
+              };
+            }
+
+            throwIfAborted(
+              signal
+            );
+          }
+        } catch (error) {
+          if (
+            signal?.aborted ||
+            error?.name ===
+              "AbortError"
+          ) {
+            throw abortError(
+              signal
+            );
+          }
+
+          publicPlan =
+            null;
+        }
+      }
+
+      // 4) The NovaSparx server remains a temporary fallback while the
+      // browser parser is being brought online. It is never the first choice.
       // 3) The NovaSparx server can decode the asset itself when it is a real
       // UTexture and no public still image exists.
       if (
-        ![
-          "mesh",
-          "blueprint"
-        ].includes(
-          pathFamily
-        ) &&
+        pathFamily ===
+          "texture" &&
         window.NovaSparxAssociations
           ?.allowTextureDecode?.(
             clean
@@ -4294,7 +4360,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "2.3.0",
+      version: "2.3.1",
       toggle,
       render: renderPreview,
       release,
