@@ -755,6 +755,13 @@
           ] of entries
         ) {
           if (
+            depth > 0 &&
+            objectIdentity === 0
+          ) {
+            continue;
+          }
+
+          if (
             !typeKeys.test(
               key
             ) ||
