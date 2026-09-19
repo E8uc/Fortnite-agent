@@ -5,6 +5,8 @@
   const SITE_BASE_PATH = String(window.FNAA_CONFIG?.siteBasePath || "/Fortnite-agent/");
   const SESSION_KEY = "fortniteAiAgent.openrouterSession.v3";
   const LOGIN_PENDING_KEY = "fortniteAiAgent.openrouterLoginPending.v3";
+  const LOGIN_PENDING_TTL_MS =
+    15 * 60 * 1000;
   const PROFILE_PREFIX = "fortniteAiAgent.openrouterProfile.v3.";
   const DEFAULT_AVATAR = `${SITE_BASE_PATH}assets/default-user-avatar.jpeg`;
   const MAX_USERNAME_CHARS = 9;
@@ -182,30 +184,119 @@
   }
 
   function consumeLoginRedirect() {
-    const params = new URLSearchParams(location.hash.replace(/^#/, ""));
-    const token = cleanSessionToken(params.get("or_session"));
-    const status = String(params.get("or_login") || "").trim().toLowerCase();
+    const params =
+      new URLSearchParams(
+        location.hash
+          .replace(
+            /^#/,
+            ""
+          )
+      );
 
-    lastLoginStatus = status;
-    lastError = null;
+    const token =
+      cleanSessionToken(
+        params.get(
+          "or_session"
+        )
+      );
+
+    const status =
+      String(
+        params.get(
+          "or_login"
+        ) ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+
+    const pendingAt =
+      Number(
+        storageGet(
+          LOGIN_PENDING_KEY
+        ) ||
+        0
+      );
+
+    const now =
+      Date.now();
+
+    const pendingFresh =
+      Number.isFinite(
+        pendingAt
+      ) &&
+      pendingAt > 0 &&
+      pendingAt <=
+        now + 60_000 &&
+      now - pendingAt <=
+        LOGIN_PENDING_TTL_MS;
+
+    lastLoginStatus =
+      status;
+
+    lastError =
+      null;
 
     if (token) {
-      persistSession(token);
-      storageRemove(LOGIN_PENDING_KEY);
+      if (pendingFresh) {
+        persistSession(
+          token
+        );
+      } else {
+        lastLoginStatus =
+          "failed";
+
+        lastError =
+          new Error(
+            "Login response was not started from this browser."
+          );
+      }
+    } else if (
+      status ===
+      "success"
+    ) {
+      lastLoginStatus =
+        "failed";
+
+      lastError =
+        new Error(
+          "Login response did not contain a valid session."
+        );
     }
 
-    if (status && status !== "success") {
-      storageRemove(LOGIN_PENDING_KEY);
+    if (
+      status &&
+      status !==
+        "success"
+    ) {
       const friendly = {
-        cancelled: "OpenRouter authorization was cancelled.",
-        unavailable: "OpenRouter login is temporarily unavailable. Try again or continue as guest.",
-        expired: "OpenRouter login expired. Try again.",
-        failed: "OpenRouter login couldn't finish. Try again."
+        cancelled:
+          "OpenRouter authorization was cancelled.",
+        unavailable:
+          "OpenRouter login is temporarily unavailable. Try again or continue as guest.",
+        expired:
+          "OpenRouter login expired. Try again.",
+        failed:
+          "OpenRouter login couldn't finish. Try again."
       };
-      lastError = new Error(friendly[status] || friendly.failed);
+
+      lastError =
+        new Error(
+          friendly[status] ||
+          friendly.failed
+        );
     }
 
-    if (token || status) clearLoginFragment();
+    if (
+      token ||
+      status
+    ) {
+      storageRemove(
+        LOGIN_PENDING_KEY
+      );
+
+      clearLoginFragment();
+    }
   }
 
   async function api(path, { method = "GET", body } = {}) {
