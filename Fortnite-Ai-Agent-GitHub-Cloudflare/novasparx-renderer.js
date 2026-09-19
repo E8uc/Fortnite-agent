@@ -3,14 +3,56 @@
 
   const TRANSPARENT = [0, 0, 0, 0];
 
+  function abortError(
+    signal
+  ) {
+    const error =
+      new Error(
+        "NovaSparx render was cancelled because a newer request replaced it."
+      );
+
+    error.name =
+      "AbortError";
+
+    error.code =
+      "NOVASPARX_REQUEST_REPLACED";
+
+    error.reason =
+      signal?.reason ||
+      "cancelled";
+
+    return error;
+  }
+
+  function throwIfAborted(
+    signal
+  ) {
+    if (signal?.aborted) {
+      throw abortError(
+        signal
+      );
+    }
+  }
+
   function asTyped(value, Type) {
     return value instanceof Type ? value : new Type(value);
   }
 
-  function calculateNormals(positions, indices) {
+  function calculateNormals(
+    positions,
+    indices,
+    signal = null
+  ) {
     const normals = new Float32Array(positions.length);
 
     for (let i = 0; i + 2 < indices.length; i += 3) {
+      if (
+        (i & 12287) === 0
+      ) {
+        throwIfAborted(
+          signal
+        );
+      }
       const a = indices[i] * 3;
       const b = indices[i + 1] * 3;
       const c = indices[i + 2] * 3;
@@ -44,11 +86,21 @@
     return normals;
   }
 
-  function getBounds(positions) {
+  function getBounds(
+    positions,
+    signal = null
+  ) {
     let minX = Infinity, minY = Infinity, minZ = Infinity;
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
 
     for (let i = 0; i < positions.length; i += 3) {
+      if (
+        (i & 12287) === 0
+      ) {
+        throwIfAborted(
+          signal
+        );
+      }
       const x = positions[i];
       const y = positions[i + 1];
       const z = positions[i + 2];
@@ -433,13 +485,38 @@
   async function loadTexture(gl, url, fallbackTexture, options = {}) {
     if (!url) return { texture: fallbackTexture, loaded: false };
 
+    const signal =
+      options.signal ||
+      null;
+
+    throwIfAborted(
+      signal
+    );
+
     try {
-      const response = await fetch(url, { cache: "force-cache" });
+      const response = await fetch(
+        url,
+        {
+          cache:
+            "force-cache",
+          signal:
+            signal ||
+            undefined
+        }
+      );
       if (!response.ok) throw new Error(`Texture HTTP ${response.status}`);
 
-      const bitmap = await createImageBitmap(await response.blob(), {
-        premultiplyAlpha: "none"
-      });
+      const bitmap = await createImageBitmap(
+        await response.blob(),
+        {
+          premultiplyAlpha:
+            "none"
+        }
+      );
+
+      throwIfAborted(
+        signal
+      );
 
       const texture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -472,8 +549,23 @@
       bitmap.close?.();
 
       return { texture, loaded: true };
-    } catch {
-      return { texture: fallbackTexture, loaded: false };
+    } catch (error) {
+      if (
+        signal?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        throw abortError(
+          signal
+        );
+      }
+
+      return {
+        texture:
+          fallbackTexture,
+        loaded:
+          false
+      };
     }
   }
 
@@ -484,13 +576,44 @@
     return 0;
   }
 
-  function canvasToBlob(canvas) {
-    return new Promise((resolve, reject) => {
-      canvas.toBlob(
-        (blob) => blob ? resolve(blob) : reject(new Error("PNG encoding failed.")),
-        "image/png"
-      );
-    });
+  function canvasToBlob(
+    canvas,
+    signal = null
+  ) {
+    throwIfAborted(
+      signal
+    );
+
+    return new Promise(
+      (resolve, reject) => {
+        canvas.toBlob(
+          (blob) => {
+            if (
+              signal?.aborted
+            ) {
+              reject(
+                abortError(
+                  signal
+                )
+              );
+              return;
+            }
+
+            if (blob) {
+              resolve(blob);
+              return;
+            }
+
+            reject(
+              new Error(
+                "PNG encoding failed."
+              )
+            );
+          },
+          "image/png"
+        );
+      }
+    );
   }
 
   async function render(manifest, options = {}) {
@@ -498,6 +621,15 @@
 
     const guard =
       window.NovaSparxBrowserGuard;
+
+    const signal =
+      options.signal ||
+      guard?.activeSignal?.() ||
+      null;
+
+    throwIfAborted(
+      signal
+    );
 
     guard
       ?.assertManifestBudget?.(
@@ -519,7 +651,11 @@
 
     const normals = geometry.normals
       ? asTyped(geometry.normals, Float32Array)
-      : calculateNormals(positions, indices32);
+      : calculateNormals(
+          positions,
+          indices32,
+          signal
+        );
 
     const uv0 = geometry.uv0
       ? asTyped(geometry.uv0, Float32Array)
@@ -587,6 +723,10 @@
       { once: true }
     );
 
+    throwIfAborted(
+      signal
+    );
+
     const gl =
       canvas.getContext("webgl2", {
         alpha: true,
@@ -643,7 +783,11 @@
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
 
-    const bounds = getBounds(positions);
+    const bounds =
+      getBounds(
+        positions,
+        signal
+      );
     const model = multiply(
       uniformScale(1 / bounds.radius),
       translation(-bounds.centerX, -bounds.centerY, -bounds.centerZ)
@@ -715,12 +859,17 @@
         fallbackTexture,
         {
           mipmaps:
-            policy.mipmaps !== false
+            policy.mipmaps !== false,
+          signal
         }
       );
     };
 
     for (const material of materials) {
+      throwIfAborted(
+        signal
+      );
+
       const maps = await Promise.all([
         guardedTexture("base", material.baseColorTexture, white),
         guardedTexture("normal", material.normalTexture, flatNormal),
@@ -729,8 +878,16 @@
         guardedTexture("packed", material.packedTexture, white)
       ]);
 
+      throwIfAborted(
+        signal
+      );
+
       loadedMaterials.push({ material, maps });
     }
+
+    throwIfAborted(
+      signal
+    );
 
     gl.viewport(0, 0, renderSize, renderSize);
 
@@ -757,6 +914,10 @@
         }];
 
     for (const section of sections) {
+      throwIfAborted(
+        signal
+      );
+
       const loaded =
         loadedMaterials[Math.min(section.materialIndex || 0, loadedMaterials.length - 1)] ||
         loadedMaterials[0];
@@ -880,7 +1041,15 @@
       }
     }
 
+    throwIfAborted(
+      signal
+    );
+
     gl.finish();
+
+    throwIfAborted(
+      signal
+    );
 
     if (
       webglContextLost ||
@@ -904,7 +1073,15 @@
       context.drawImage(canvas, 0, 0, size, size);
     }
 
-    const blob = await canvasToBlob(outputCanvas);
+    const blob =
+      await canvasToBlob(
+        outputCanvas,
+        signal
+      );
+
+    throwIfAborted(
+      signal
+    );
 
     const textured = loadedMaterials.some((item) => item.maps[0].loaded);
     const normalMapped = loadedMaterials.some((item) => item.maps[1].loaded);
@@ -978,7 +1155,7 @@
   }
 
   window.NovaSparxRenderer = Object.freeze({
-    version: "1.1.1",
+    version: "1.2.0",
     render
   });
 })();
