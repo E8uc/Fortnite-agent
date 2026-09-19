@@ -665,7 +665,7 @@
       ].includes(kind)
     ) {
       kind =
-        /^sk_/i.test(name)
+        /^(?:sk_|skm_)/i.test(name)
           ? "skeletalmesh"
           : "staticmesh";
     } else if (
