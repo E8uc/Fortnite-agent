@@ -1618,8 +1618,156 @@
     return referenceManifestPromise;
   }
 
+  async function readStreamBytesBounded(
+    stream,
+    maxBytes,
+    signal = null
+  ) {
+    if (
+      !stream ||
+      typeof stream.getReader !==
+        "function"
+    ) {
+      throw new Error(
+        "NovaSparx reference stream is unavailable."
+      );
+    }
+
+    const reader =
+      stream.getReader();
+
+    const chunks = [];
+    let total = 0;
+
+    try {
+      while (true) {
+        if (signal?.aborted) {
+          const error =
+            new Error(
+              "NovaSparx reference request was cancelled."
+            );
+
+          error.name =
+            "AbortError";
+
+          throw error;
+        }
+
+        const {
+          done,
+          value
+        } =
+          await reader.read();
+
+        if (done) break;
+
+        if (!value?.byteLength) {
+          continue;
+        }
+
+        total +=
+          value.byteLength;
+
+        if (
+          total >
+          maxBytes
+        ) {
+          try {
+            await reader.cancel(
+              "reference-shard-too-large"
+            );
+          } catch {}
+
+          throw new Error(
+            "NovaSparx reference shard exceeded the browser safety budget."
+          );
+        }
+
+        chunks.push(value);
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {}
+    }
+
+    const bytes =
+      new Uint8Array(total);
+
+    let offset = 0;
+
+    for (const chunk of chunks) {
+      bytes.set(
+        chunk,
+        offset
+      );
+
+      offset +=
+        chunk.byteLength;
+    }
+
+    return bytes;
+  }
+
+  async function readResponseBytesBounded(
+    response,
+    maxBytes,
+    signal = null
+  ) {
+    const declared =
+      Number(
+        response.headers.get(
+          "content-length"
+        ) || 0
+      );
+
+    if (
+      declared > 0 &&
+      declared > maxBytes
+    ) {
+      try {
+        await response.body
+          ?.cancel();
+      } catch {}
+
+      throw new Error(
+        "NovaSparx reference shard exceeded the browser safety budget."
+      );
+    }
+
+    if (
+      response.body &&
+      typeof response.body
+        .getReader ===
+        "function"
+    ) {
+      return readStreamBytesBounded(
+        response.body,
+        maxBytes,
+        signal
+      );
+    }
+
+    const bytes =
+      new Uint8Array(
+        await response.arrayBuffer()
+      );
+
+    if (
+      bytes.byteLength >
+      maxBytes
+    ) {
+      throw new Error(
+        "NovaSparx reference shard exceeded the browser safety budget."
+      );
+    }
+
+    return bytes;
+  }
+
   async function decodeReferenceShard(
-    response
+    response,
+    signal = null
   ) {
     const length =
       Number(
@@ -1651,18 +1799,11 @@
     }
 
     const bytes =
-      new Uint8Array(
-        await response.arrayBuffer()
+      await readResponseBytesBounded(
+        response,
+        maxBytes,
+        signal
       );
-
-    if (
-      bytes.byteLength >
-      maxBytes
-    ) {
-      throw new Error(
-        "NovaSparx reference shard exceeded the browser safety budget."
-      );
-    }
 
     const isGzip =
       bytes.length >= 2 &&
@@ -1690,9 +1831,21 @@
             )
           );
 
-      return new Response(
-        stream
-      ).json();
+      const expandedBytes =
+        await readStreamBytesBounded(
+          stream,
+          guard.isMobile
+            ? 4 * 1024 * 1024
+            : 12 * 1024 * 1024,
+          signal
+        );
+
+      return JSON.parse(
+        new TextDecoder()
+          .decode(
+            expandedBytes
+          )
+      );
     }
 
     return JSON.parse(
@@ -1754,7 +1907,8 @@
 
         payload =
           await decodeReferenceShard(
-            response
+            response,
+            deadline.signal
           );
       } catch (error) {
         if (
@@ -2377,7 +2531,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.6.2",
+        "1.7.0",
       family,
       classify,
       capabilityProfile,
