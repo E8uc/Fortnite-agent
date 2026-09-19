@@ -337,7 +337,6 @@
 
     let scope = routeScope() || "all";
     let latestRun = 0;
-    let searchRunning = false;
 
     for (const button of scopeRoot.querySelectorAll("[data-scope]")) {
       button.classList.toggle(
@@ -356,10 +355,6 @@
     }
 
     const run = async () => {
-      if (searchRunning) {
-        return;
-      }
-
       const query =
         input.value.trim();
 
@@ -376,9 +371,6 @@
           "Type something to search.";
         return;
       }
-
-      searchRunning = true;
-      searchButton.disabled = true;
 
       results.className = "tool-empty";
 
@@ -460,12 +452,7 @@
           error?.message ||
           "Search failed.";
       } finally {
-        if (
-          thisRun === latestRun
-        ) {
-          searchRunning = false;
-          searchButton.disabled = false;
-        }
+        // database-worker.js aborts stale searches. latestRun prevents stale UI.
       }
     };
 
@@ -5695,47 +5682,75 @@
         "#cosmeticBtn"
       );
 
-    let searchRunning = false;
+    let cosmeticSearchController =
+      null;
+
+    let cosmeticSearchRun =
+      0;
 
     const run = async () => {
       const query =
         input.value.trim();
 
-      if (!query || searchRunning) {
-        if (!query) {
-          status.hidden = false;
-          status.textContent =
-            "Type a cosmetic name or ID first.";
-        }
-
+      if (!query) {
+        status.hidden = false;
+        status.textContent =
+          "Type a cosmetic name or ID first.";
         return;
       }
+
+      const runId =
+        ++cosmeticSearchRun;
+
+      try {
+        cosmeticSearchController
+          ?.abort(
+            "replaced-by-new-cosmetic-search"
+          );
+      } catch {}
+
+      const controller =
+        new AbortController();
+
+      cosmeticSearchController =
+        controller;
 
       status.hidden = false;
       status.textContent =
         "Searching...";
 
-      searchRunning = true;
-      searchButton.disabled = true;
-
       try {
         cosmeticResults =
           await searchCosmeticApi(
-            query
+            query,
+            controller.signal
           );
+
+        if (
+          runId !==
+          cosmeticSearchRun
+        ) {
+          return;
+        }
 
         cosmeticShown = 0;
         renderCosmeticApiPage(true);
       } catch (error) {
+        if (
+          controller.signal
+            .aborted ||
+          runId !==
+            cosmeticSearchRun
+        ) {
+          return;
+        }
+
         cosmeticResults = [];
         cosmeticShown = 0;
 
         status.textContent =
-          error?.name ===
-            "AbortError"
-            ? "Cosmetic search timed out. Try again."
-            : error?.message ||
-              "Cosmetic search failed.";
+          error?.message ||
+          "Cosmetic search failed.";
 
         content.querySelector(
           "#cosmeticGrid"
@@ -5745,8 +5760,13 @@
           "#cosmeticMore"
         ).hidden = true;
       } finally {
-        searchRunning = false;
-        searchButton.disabled = false;
+        if (
+          cosmeticSearchController ===
+          controller
+        ) {
+          cosmeticSearchController =
+            null;
+        }
       }
     };
 
@@ -5809,7 +5829,8 @@
   }
 
   async function searchCosmeticApi(
-    query
+    query,
+    signal = null
   ) {
     const params =
       new URLSearchParams();
@@ -5844,7 +5865,11 @@
       await fetchWithTimeout(
         `${FORTNITE_API}/search/all?${params}`,
         {
-          cache: "force-cache"
+          cache:
+            "force-cache",
+          signal:
+            signal ||
+            undefined
         },
         14_000
       );
@@ -6643,7 +6668,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.1.0",
+      version: "1.2.0",
       open,
       close,
       formatAssetPath,
