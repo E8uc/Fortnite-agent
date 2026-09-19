@@ -482,8 +482,20 @@
     return texture;
   }
 
-  async function loadTexture(gl, url, fallbackTexture, options = {}) {
-    if (!url) return { texture: fallbackTexture, loaded: false };
+  async function loadTexture(
+    gl,
+    url,
+    fallbackTexture,
+    options = {}
+  ) {
+    if (!url) {
+      return {
+        texture:
+          fallbackTexture,
+        loaded:
+          false
+      };
+    }
 
     const signal =
       options.signal ||
@@ -493,35 +505,70 @@
       signal
     );
 
-    try {
-      const response = await fetch(
-        url,
-        {
-          cache:
-            "force-cache",
-          signal:
-            signal ||
-            undefined
-        }
-      );
-      if (!response.ok) throw new Error(`Texture HTTP ${response.status}`);
+    let bitmap =
+      null;
 
-      const bitmap = await createImageBitmap(
-        await response.blob(),
-        {
-          premultiplyAlpha:
-            "none"
-        }
-      );
+    let texture =
+      null;
+
+    try {
+      const response =
+        await fetch(
+          url,
+          {
+            cache:
+              "force-cache",
+            signal:
+              signal ||
+              undefined
+          }
+        );
+
+      if (!response.ok) {
+        throw new Error(
+          `Texture HTTP ${response.status}`
+        );
+      }
+
+      const blob =
+        await response.blob();
 
       throwIfAborted(
         signal
       );
 
-      const texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, texture);
+      bitmap =
+        await createImageBitmap(
+          blob,
+          {
+            premultiplyAlpha:
+              "none"
+          }
+        );
 
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+      throwIfAborted(
+        signal
+      );
+
+      texture =
+        gl.createTexture();
+
+      if (!texture) {
+        throw new Error(
+          "WebGL could not allocate a texture."
+        );
+      }
+
+      gl.bindTexture(
+        gl.TEXTURE_2D,
+        texture
+      );
+
+      gl.pixelStorei(
+        gl.UNPACK_FLIP_Y_WEBGL,
+        1
+      );
+
       gl.texImage2D(
         gl.TEXTURE_2D,
         0,
@@ -534,22 +581,62 @@
       gl.texParameteri(
         gl.TEXTURE_2D,
         gl.TEXTURE_MIN_FILTER,
-        options.mipmaps === false
+        options.mipmaps ===
+          false
           ? gl.LINEAR
           : gl.LINEAR_MIPMAP_LINEAR
       );
 
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+      gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_MAG_FILTER,
+        gl.LINEAR
+      );
 
-      if (options.mipmaps !== false) {
-        gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_WRAP_S,
+        gl.REPEAT
+      );
+
+      gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_WRAP_T,
+        gl.REPEAT
+      );
+
+      if (
+        options.mipmaps !==
+        false
+      ) {
+        gl.generateMipmap(
+          gl.TEXTURE_2D
+        );
       }
-      bitmap.close?.();
 
-      return { texture, loaded: true };
+      throwIfAborted(
+        signal
+      );
+
+      return {
+        texture,
+        loaded:
+          true
+      };
     } catch (error) {
+      if (
+        texture
+      ) {
+        try {
+          gl.deleteTexture(
+            texture
+          );
+        } catch {}
+
+        texture =
+          null;
+      }
+
       if (
         signal?.aborted ||
         error?.name ===
@@ -566,6 +653,13 @@
         loaded:
           false
       };
+    } finally {
+      try {
+        bitmap?.close?.();
+      } catch {}
+
+      bitmap =
+        null;
     }
   }
 
@@ -747,6 +841,9 @@
       });
 
     if (!gl) throw new Error("WebGL is unavailable on this device.");
+
+    let outputCanvas =
+      canvas;
 
     try {
 
@@ -1060,7 +1157,8 @@
       );
     }
 
-    let outputCanvas = canvas;
+    outputCanvas =
+      canvas;
 
     if (renderSize !== size) {
       outputCanvas = document.createElement("canvas");
@@ -1150,12 +1248,23 @@
       canvas.width = 1;
       canvas.height = 1;
 
+      if (
+        outputCanvas !==
+        canvas
+      ) {
+        outputCanvas.width =
+          1;
+
+        outputCanvas.height =
+          1;
+      }
+
       throw error;
     }
   }
 
   window.NovaSparxRenderer = Object.freeze({
-    version: "1.2.0",
+    version: "1.3.0",
     render
   });
 })();
