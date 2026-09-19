@@ -167,8 +167,32 @@
     render();
   }
 
+  function releaseAssetPreviews(
+    root = content
+  ) {
+    for (
+      const card of
+      root?.querySelectorAll?.(
+        ".asset-result-card"
+      ) || []
+    ) {
+      const assetPath =
+        card.dataset.assetPath ||
+        "";
+
+      if (assetPath) {
+        window.FortnitePreview
+          ?.release?.(
+            assetPath
+          );
+      }
+    }
+  }
+
   function close() {
     renderGeneration++;
+
+    releaseAssetPreviews();
 
     window.NovaSparxBrowserGuard
       ?.abortActive?.(
@@ -195,6 +219,8 @@
   async function render() {
     const generation =
       ++renderGeneration;
+
+    releaseAssetPreviews();
 
     content.innerHTML =
       '<div class="tool-section"><div class="tool-empty">Loading...</div></div>';
@@ -408,6 +434,10 @@
             "No close results found.";
           return;
         }
+
+        releaseAssetPreviews(
+          results
+        );
 
         results.className = "";
 
@@ -1793,6 +1823,17 @@
       };
     }
 
+    if (
+      current === "preview" &&
+      action !== "preview"
+    ) {
+      window.FortnitePreview
+        ?.release?.(
+          card.dataset.assetPath ||
+          ""
+        );
+    }
+
     card.dataset.openAction =
       action;
 
@@ -1822,6 +1863,17 @@
     card,
     button
   ) {
+    if (
+      card.dataset.openAction ===
+        "preview"
+    ) {
+      window.FortnitePreview
+        ?.release?.(
+          card.dataset.assetPath ||
+          ""
+        );
+    }
+
     window.NovaSparxBrowserGuard
       ?.abortActive?.(
         "asset-panel-cancelled"
@@ -2074,6 +2126,11 @@
             requestId
           )
         ) {
+          window.FortnitePreview
+            ?.release?.(
+              path
+            );
+
           panel.hidden = true;
           panel.replaceChildren();
         }
@@ -6759,7 +6816,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.3.1",
+      version: "1.3.2",
       open,
       close,
       formatAssetPath,
