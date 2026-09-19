@@ -102,6 +102,97 @@
 
   const exportJsonCache = new Map();
 
+  function exportJsonCacheLimit() {
+    const state =
+      window.NovaSparxBrowserGuard
+        ?.status?.() ||
+      {};
+
+    return (
+      state.isIOS ||
+      state.isMobile
+        ? 4
+        : 10
+    );
+  }
+
+  function cachedExportJson(
+    key
+  ) {
+    if (
+      !exportJsonCache.has(
+        key
+      )
+    ) {
+      return undefined;
+    }
+
+    const value =
+      exportJsonCache.get(
+        key
+      );
+
+    // Refresh insertion order so this Map behaves as a tiny LRU cache.
+    exportJsonCache.delete(
+      key
+    );
+
+    exportJsonCache.set(
+      key,
+      value
+    );
+
+    return value;
+  }
+
+  function rememberExportJson(
+    key,
+    value,
+    rawBytes = 0
+  ) {
+    const state =
+      window.NovaSparxBrowserGuard
+        ?.status?.() ||
+      {};
+
+    const maxCacheableBytes =
+      state.isIOS
+        ? 2 * 1024 * 1024
+        : state.isMobile
+          ? 4 * 1024 * 1024
+          : 8 * 1024 * 1024;
+
+    if (
+      Number(rawBytes) >
+      maxCacheableBytes
+    ) {
+      return;
+    }
+
+    exportJsonCache.delete(
+      key
+    );
+
+    exportJsonCache.set(
+      key,
+      value
+    );
+
+    while (
+      exportJsonCache.size >
+      exportJsonCacheLimit()
+    ) {
+      const oldest =
+        exportJsonCache.keys()
+          .next()
+          .value;
+
+      exportJsonCache.delete(
+        oldest
+      );
+    }
+  }
+
   const assetClassificationCache =
     new Map();
 
@@ -4824,11 +4915,16 @@
       return null;
     }
 
+    const cached =
+      cachedExportJson(
+        key
+      );
+
     if (
-      exportJsonCache.has(key)
+      cached !==
+        undefined
     ) {
-      return exportJsonCache
-        .get(key);
+      return cached;
     }
 
     const filePath =
@@ -4865,6 +4961,13 @@
         ?.status?.() ||
       {};
 
+    const declaredBytes =
+      Number(
+        response.headers.get(
+          "content-length"
+        ) || 0
+      );
+
     const payload =
       await readJsonResponseBounded(
         response,
@@ -4882,9 +4985,10 @@
       payload?.jsonOutput ||
       [];
 
-    exportJsonCache.set(
+    rememberExportJson(
       key,
-      output
+      output,
+      declaredBytes
     );
 
     return output;
@@ -6189,8 +6293,6 @@
           ? 8 * 1024 * 1024
           : 16 * 1024 * 1024,
         signal
-      ).catch(
-        () => ({})
       );
 
     if (!response.ok) {
@@ -7156,7 +7258,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.6.0",
+      version: "1.6.1",
       open,
       close,
       formatAssetPath,
