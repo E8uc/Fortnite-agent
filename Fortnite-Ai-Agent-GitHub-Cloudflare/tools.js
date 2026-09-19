@@ -596,6 +596,10 @@
       options.signal ||
       null;
 
+    const verifyKnown =
+      options.verifyKnown !==
+      false;
+
     throwIfActionAborted(
       signal
     );
@@ -610,17 +614,44 @@
       assetClassificationCache
         .has(key)
     ) {
-      return assetClassificationCache
-        .get(key);
+      const cached =
+        assetClassificationCache
+          .get(key);
+
+      const cachedVerified =
+        [
+          "inspection",
+          "export-json"
+        ].includes(
+          String(
+            cached?.source ||
+            ""
+          )
+        );
+
+      if (
+        !verifyKnown ||
+        cachedVerified
+      ) {
+        return cached;
+      }
     }
+
+    const requestKey =
+      key +
+      (
+        verifyKnown
+          ? "|verified"
+          : "|light"
+      );
 
     if (
       !signal &&
       assetClassificationRequests
-        .has(key)
+        .has(requestKey)
     ) {
       return assetClassificationRequests
-        .get(key);
+        .get(requestKey);
     }
 
     const request =
@@ -637,8 +668,7 @@
                 ?.classify?.(
                   path,
                   {
-                    verifyKnown:
-                      true,
+                    verifyKnown,
                     signal:
                       signal ||
                       undefined
@@ -708,18 +738,22 @@
           () => {
             if (
               assetClassificationRequests
-                .get(key) ===
+                .get(
+                  requestKey
+                ) ===
               request
             ) {
               assetClassificationRequests
-                .delete(key);
+                .delete(
+                  requestKey
+                );
             }
           }
         );
 
     if (!signal) {
       assetClassificationRequests.set(
-        key,
+        requestKey,
         request
       );
     }
@@ -975,7 +1009,11 @@
         );
 
         classifyAsset(
-          assetPath
+          assetPath,
+          {
+            verifyKnown:
+              false
+          }
         )
           .then(
             (classification) => {
@@ -6714,7 +6752,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.2.0",
+      version: "1.3.0",
       open,
       close,
       formatAssetPath,
