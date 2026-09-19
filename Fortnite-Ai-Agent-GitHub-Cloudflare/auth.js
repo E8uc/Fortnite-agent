@@ -119,15 +119,96 @@
     return clean;
   }
 
-  async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 6500) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+  async function fetchJsonWithTimeout(
+    url,
+    options = {},
+    timeoutMs = 6500
+  ) {
+    const controller =
+      new AbortController();
+
+    const externalSignal =
+      options.signal ||
+      null;
+
+    const abortFromExternal =
+      () => {
+        try {
+          controller.abort(
+            externalSignal?.reason ||
+            "auth-request-cancelled"
+          );
+        } catch {}
+      };
+
+    if (
+      externalSignal?.aborted
+    ) {
+      abortFromExternal();
+    } else {
+      externalSignal
+        ?.addEventListener?.(
+          "abort",
+          abortFromExternal,
+          {
+            once:
+              true
+          }
+        );
+    }
+
+    const {
+      signal:
+        _externalSignal,
+      ...fetchOptions
+    } = options;
+
+    const timer =
+      setTimeout(
+        () => {
+          try {
+            controller.abort(
+              "auth-request-timeout"
+            );
+          } catch {}
+        },
+        Math.max(
+          1000,
+          Number(timeoutMs) ||
+          6500
+        )
+      );
+
     try {
-      const response = await fetch(url, { ...options, signal: controller.signal });
-      const data = await response.json().catch(() => ({}));
-      return { response, data };
+      const response =
+        await fetch(
+          url,
+          {
+            ...fetchOptions,
+            signal:
+              controller.signal
+          }
+        );
+
+      const data =
+        await response
+          .json()
+          .catch(
+            () => ({})
+          );
+
+      return {
+        response,
+        data
+      };
     } finally {
       clearTimeout(timer);
+
+      externalSignal
+        ?.removeEventListener?.(
+          "abort",
+          abortFromExternal
+        );
     }
   }
 
@@ -358,24 +439,121 @@
     }
   }
 
-  async function api(path, { method = "GET", body } = {}) {
-    if (!API_ENDPOINT) throw new Error("FNAA API endpoint is not configured.");
-    const headers = { "X-FNAA-Client": "web-v6" };
-    if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
-    if (body !== undefined) headers["Content-Type"] = "application/json";
-    const response = await fetch(`${API_ENDPOINT}${path}`, {
-      method,
-      mode: "cors",
-      cache: "no-store",
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body)
-    });
-    const data = await response.json().catch(() => ({}));
+  async function api(
+    path,
+    {
+      method = "GET",
+      body,
+      signal = null,
+      timeoutMs = 10_000
+    } = {}
+  ) {
+    if (!API_ENDPOINT) {
+      throw new Error(
+        "FNAA API endpoint is not configured."
+      );
+    }
+
+    const base =
+      new URL(
+        API_ENDPOINT,
+        location.origin
+      );
+
+    const url =
+      new URL(
+        String(path || "/")
+          .startsWith("/")
+          ? (
+              base.origin +
+              String(path || "/")
+            )
+          : (
+              base.origin +
+              "/" +
+              String(path || "")
+            )
+      );
+
+    if (
+      url.origin !==
+        base.origin ||
+      (
+        url.protocol !==
+          "https:" &&
+        ![
+          "localhost",
+          "127.0.0.1",
+          "::1"
+        ].includes(
+          url.hostname
+        )
+      ) ||
+      url.username ||
+      url.password
+    ) {
+      throw new Error(
+        "FNAA auth request target is not allowed."
+      );
+    }
+
+    const headers = {
+      "X-FNAA-Client":
+        "web-v6"
+    };
+
+    if (sessionToken) {
+      headers.Authorization =
+        `Bearer ${sessionToken}`;
+    }
+
+    if (body !== undefined) {
+      headers[
+        "Content-Type"
+      ] =
+        "application/json";
+    }
+
+    const {
+      response,
+      data
+    } =
+      await fetchJsonWithTimeout(
+        url.toString(),
+        {
+          method,
+          mode:
+            "cors",
+          cache:
+            "no-store",
+          headers,
+          signal:
+            signal ||
+            undefined,
+          body:
+            body ===
+              undefined
+              ? undefined
+              : JSON.stringify(
+                  body
+                )
+        },
+        timeoutMs
+      );
+
     if (!response.ok) {
-      const error = new Error(data.error || `Request failed (${response.status}).`);
-      error.status = response.status;
+      const error =
+        new Error(
+          data.error ||
+          `Request failed (${response.status}).`
+        );
+
+      error.status =
+        response.status;
+
       throw error;
     }
+
     return data;
   }
 
