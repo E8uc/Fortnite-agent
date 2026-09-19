@@ -1053,15 +1053,14 @@
         "material"
       ]);
 
+    // Keep this list aligned with NovaSparxExporter.supports().
+    // Future-capable asset families must not appear as export-ready before
+    // their complete data (for example bones/weights) is actually preserved.
     const uefnKinds =
       new Set([
         "staticmesh",
-        "skeletalmesh",
         "blueprint-visual",
-        "texture",
-        "material",
-        "audio",
-        "animation"
+        "texture"
       ]);
 
     const formatMap = {
@@ -2378,7 +2377,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.6.1",
+        "1.6.2",
       family,
       classify,
       capabilityProfile,
