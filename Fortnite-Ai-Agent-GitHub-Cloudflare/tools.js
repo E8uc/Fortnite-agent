@@ -36,6 +36,48 @@
   const STATIC_DATA_TIMEOUT_MS = 12_000;
   const ACTION_FLASH_MS = 3_000;
 
+  function actionAbortError(
+    signal
+  ) {
+    const error =
+      new Error(
+        "This request was cancelled because a newer request replaced it."
+      );
+
+    error.name =
+      "AbortError";
+
+    error.code =
+      "NOVASPARX_REQUEST_REPLACED";
+
+    error.reason =
+      signal?.reason ||
+      "cancelled";
+
+    return error;
+  }
+
+  function actionAborted(
+    error,
+    signal
+  ) {
+    return Boolean(
+      signal?.aborted ||
+      error?.name ===
+        "AbortError"
+    );
+  }
+
+  function throwIfActionAborted(
+    signal
+  ) {
+    if (signal?.aborted) {
+      throw actionAbortError(
+        signal
+      );
+    }
+  }
+
   const t = (key, fallback = "") =>
     window.FortniteI18n?.t?.(key) ||
     fallback ||
@@ -127,6 +169,11 @@
 
   function close() {
     renderGeneration++;
+
+    window.NovaSparxBrowserGuard
+      ?.abortActive?.(
+        "tools-closed"
+      );
 
     overlay.hidden = true;
     overlay.setAttribute("aria-hidden", "true");
@@ -550,12 +597,21 @@
   }
 
   async function classifyAsset(
-    path
+    path,
+    options = {}
   ) {
     const key =
       String(path || "")
         .trim()
         .toLowerCase();
+
+    const signal =
+      options.signal ||
+      null;
+
+    throwIfActionAborted(
+      signal
+    );
 
     if (!key) {
       return fallbackAssetClassification(
@@ -572,6 +628,7 @@
     }
 
     if (
+      !signal &&
       assetClassificationRequests
         .has(key)
     ) {
@@ -583,6 +640,10 @@
       Promise.resolve()
         .then(
           async () => {
+            throwIfActionAborted(
+              signal
+            );
+
             const result =
               await window
                 .NovaSparxAssociations
@@ -590,9 +651,16 @@
                   path,
                   {
                     verifyKnown:
-                      true
+                      true,
+                    signal:
+                      signal ||
+                      undefined
                   }
                 );
+
+            throwIfActionAborted(
+              signal
+            );
 
             return (
               result ||
@@ -603,13 +671,29 @@
           }
         )
         .catch(
-          () =>
-            fallbackAssetClassification(
+          (error) => {
+            if (
+              actionAborted(
+                error,
+                signal
+              )
+            ) {
+              throw actionAbortError(
+                signal
+              );
+            }
+
+            return fallbackAssetClassification(
               path
-            )
+            );
+          }
         )
         .then(
           (result) => {
+            throwIfActionAborted(
+              signal
+            );
+
             assetClassificationCache.set(
               key,
               result
@@ -635,15 +719,23 @@
         )
         .finally(
           () => {
-            assetClassificationRequests
-              .delete(key);
+            if (
+              assetClassificationRequests
+                .get(key) ===
+              request
+            ) {
+              assetClassificationRequests
+                .delete(key);
+            }
           }
         );
 
-    assetClassificationRequests.set(
-      key,
-      request
-    );
+    if (!signal) {
+      assetClassificationRequests.set(
+        key,
+        request
+      );
+    }
 
     return request;
   }
@@ -1026,7 +1118,8 @@
 
   async function downloadableMeshPath(
     path,
-    classification
+    classification,
+    signal = null
   ) {
     if (
       classification?.kind !==
@@ -1039,8 +1132,16 @@
       await window
         .NovaSparxAssociations
         ?.resolveVisual?.(
-          path
+          path,
+          null,
+          {
+            signal
+          }
         );
+
+    throwIfActionAborted(
+      signal
+    );
 
     return (
       visual?.visualPath ||
@@ -1050,7 +1151,8 @@
 
   async function downloadableTexturePath(
     path,
-    classification
+    classification,
+    signal = null
   ) {
     if (
       classification?.kind ===
@@ -1063,8 +1165,16 @@
       await window
         .NovaSparxAssociations
         ?.resolveVisual?.(
-          path
+          path,
+          null,
+          {
+            signal
+          }
         );
+
+    throwIfActionAborted(
+      signal
+    );
 
     return (
       visual?.previewImagePath ||
@@ -1080,8 +1190,12 @@
   async function downloadAssetFormat(
     path,
     format,
-    classification
+    classification,
+    signal = null
   ) {
+    throwIfActionAborted(
+      signal
+    );
     if (format === "glb") {
       const result =
         await window
@@ -1089,9 +1203,14 @@
           ?.exportGlb?.(
             path,
             {
-              classification
+              classification,
+              signal
             }
           );
+
+      throwIfActionAborted(
+        signal
+      );
 
       if (
         !result?.blob ||
@@ -1112,7 +1231,16 @@
 
     if (format === "json") {
       const payload =
-        await exportJson(path);
+        await exportJson(
+          path,
+          {
+            signal
+          }
+        );
+
+      throwIfActionAborted(
+        signal
+      );
 
       const text =
         JSON.stringify(
@@ -1142,7 +1270,8 @@
       const texturePath =
         await downloadableTexturePath(
           path,
-          classification
+          classification,
+          signal
         );
 
       if (!texturePath) {
@@ -1172,7 +1301,10 @@
             headers: {
               Accept:
                 "image/png,image/*;q=0.8"
-            }
+            },
+            signal:
+              signal ||
+              undefined
           },
           24_000
         );
@@ -1183,8 +1315,15 @@
         );
       }
 
+      const blob =
+        await response.blob();
+
+      throwIfActionAborted(
+        signal
+      );
+
       saveBlob(
-        await response.blob(),
+        blob,
         safeAssetFilename(
           texturePath,
           "png"
@@ -1198,14 +1337,22 @@
       const meshPath =
         await downloadableMeshPath(
           path,
-          classification
+          classification,
+          signal
         );
 
       const buffer =
         await window.NovaSparx
           ?.clientMeshBuffer?.(
-            meshPath
+            meshPath,
+            {
+              signal
+            }
           );
+
+      throwIfActionAborted(
+        signal
+      );
 
       if (
         !(buffer instanceof
@@ -1378,6 +1525,11 @@
         const action =
           button.dataset.assetAction;
 
+        window.NovaSparxBrowserGuard
+          ?.abortActive?.(
+            "replaced-by-new-asset-action"
+          );
+
         if (action === "describe") {
           await describePath(
             path,
@@ -1439,38 +1591,61 @@
           return;
         }
 
-        if (action === "uefn") {
-          await showUefnExport(
-            card,
-            path,
-            panelRequest.id
-          );
-          return;
-        }
+        const guard =
+          window.NovaSparxBrowserGuard;
 
-        if (action === "json") {
-          await showJson(
-            card,
-            path,
-            panelRequest.id
-          );
-          return;
-        }
+        const operation =
+          guard?.beginOperation?.(
+            `asset:${action}:${path}`
+          ) ||
+          null;
 
-        if (action === "references") {
-          await showReferences(
-            card,
-            path,
-            panelRequest.id
-          );
-          return;
-        }
+        const signal =
+          operation?.signal ||
+          null;
 
-        if (action === "download") {
-          await showDownload(
-            card,
-            path,
-            panelRequest.id
+        try {
+          if (action === "uefn") {
+            await showUefnExport(
+              card,
+              path,
+              panelRequest.id,
+              signal
+            );
+            return;
+          }
+
+          if (action === "json") {
+            await showJson(
+              card,
+              path,
+              panelRequest.id,
+              signal
+            );
+            return;
+          }
+
+          if (action === "references") {
+            await showReferences(
+              card,
+              path,
+              panelRequest.id,
+              signal
+            );
+            return;
+          }
+
+          if (action === "download") {
+            await showDownload(
+              card,
+              path,
+              panelRequest.id,
+              signal
+            );
+          }
+        } finally {
+          guard?.endOperation?.(
+            operation
           );
         }
       }
@@ -1567,6 +1742,11 @@
       panel &&
       !panel.hidden
     ) {
+      window.NovaSparxBrowserGuard
+        ?.abortActive?.(
+          "asset-panel-closed"
+        );
+
       panel.hidden = true;
       panel.replaceChildren();
 
@@ -1617,6 +1797,11 @@
     card,
     button
   ) {
+    window.NovaSparxBrowserGuard
+      ?.abortActive?.(
+        "asset-panel-cancelled"
+      );
+
     const panel =
       card.querySelector(
         "[data-asset-panel]"
@@ -1890,7 +2075,8 @@
   async function showUefnExport(
     card,
     path,
-    requestId
+    requestId,
+    signal = null
   ) {
     const panel =
       card.querySelector(
@@ -1904,7 +2090,16 @@
 
     try {
       const classification =
-        await classifyAsset(path);
+        await classifyAsset(
+          path,
+          {
+            signal
+          }
+        );
+
+      throwIfActionAborted(
+        signal
+      );
 
       if (
         !panelRequestIsCurrent(
@@ -1938,8 +2133,15 @@
       const result =
         await exporter.exportUEFN(
           path,
-          classification
+          classification,
+          {
+            signal
+          }
         );
+
+      throwIfActionAborted(
+        signal
+      );
 
       if (
         !panelRequestIsCurrent(
@@ -2012,6 +2214,10 @@
         );
     } catch (error) {
       if (
+        actionAborted(
+          error,
+          signal
+        ) ||
         !panelRequestIsCurrent(
           card,
           "uefn",
@@ -2034,7 +2240,8 @@
   async function showDownload(
     card,
     path,
-    requestId
+    requestId,
+    signal = null
   ) {
     const panel =
       card.querySelector(
@@ -2047,7 +2254,16 @@
 
     try {
       const classification =
-        await classifyAsset(path);
+        await classifyAsset(
+          path,
+          {
+            signal
+          }
+        );
+
+      throwIfActionAborted(
+        signal
+      );
 
       if (
         !panelRequestIsCurrent(
@@ -2180,11 +2396,29 @@
                 `Preparing ${format.toUpperCase()}…`;
             }
 
+            const guard =
+              window.NovaSparxBrowserGuard;
+
+            const operation =
+              guard?.beginOperation?.(
+                `download:${format}:${path}`
+              ) ||
+              null;
+
+            const formatSignal =
+              operation?.signal ||
+              null;
+
             try {
               await downloadAssetFormat(
                 path,
                 format,
-                classification
+                classification,
+                formatSignal
+              );
+
+              throwIfActionAborted(
+                formatSignal
               );
 
               if (status) {
@@ -2192,12 +2426,22 @@
                   "Download ready.";
               }
             } catch (error) {
-              if (status) {
+              if (
+                !actionAborted(
+                  error,
+                  formatSignal
+                ) &&
+                status
+              ) {
                 status.textContent =
                   error?.message ||
                   "Download failed.";
               }
             } finally {
+              guard?.endOperation?.(
+                operation
+              );
+
               button.disabled =
                 false;
             }
@@ -2206,6 +2450,10 @@
       }
     } catch (error) {
       if (
+        actionAborted(
+          error,
+          signal
+        ) ||
         !panelRequestIsCurrent(
           card,
           "download",
@@ -2228,7 +2476,8 @@
   async function showJson(
     card,
     path,
-    requestId
+    requestId,
+    signal = null
   ) {
     const panel =
       card.querySelector(
@@ -2241,7 +2490,16 @@
 
     try {
       const data =
-        await exportJson(path);
+        await exportJson(
+          path,
+          {
+            signal
+          }
+        );
+
+      throwIfActionAborted(
+        signal
+      );
 
       const text =
         JSON.stringify(
@@ -2282,6 +2540,10 @@
         );
     } catch (error) {
       if (
+        actionAborted(
+          error,
+          signal
+        ) ||
         !panelRequestIsCurrent(
           card,
           "json",
@@ -2304,7 +2566,8 @@
   async function showReferences(
     card,
     path,
-    requestId
+    requestId,
+    signal = null
   ) {
     const panel =
       card.querySelector(
@@ -2324,9 +2587,18 @@
       try {
         const references =
           extractJsonReferences(
-            await exportJson(path),
+            await exportJson(
+              path,
+              {
+                signal
+              }
+            ),
             path
           );
+
+        throwIfActionAborted(
+          signal
+        );
 
         if (references.length) {
           payload = {
@@ -2335,7 +2607,18 @@
             references
           };
         }
-      } catch {
+      } catch (error) {
+        if (
+          actionAborted(
+            error,
+            signal
+          )
+        ) {
+          throw actionAbortError(
+            signal
+          );
+        }
+
         // Continue to NovaSparx. Backend errors remain internal fallbacks.
       }
 
@@ -2347,7 +2630,16 @@
         try {
           const inspection =
             await window.NovaSparx
-              .inspect(path);
+              .inspect(
+                path,
+                {
+                  signal
+                }
+              );
+
+          throwIfActionAborted(
+            signal
+          );
 
           if (
             Array.isArray(
@@ -2361,7 +2653,18 @@
                 inspection.references
             };
           }
-        } catch {
+        } catch (error) {
+          if (
+            actionAborted(
+              error,
+              signal
+            )
+          ) {
+            throw actionAbortError(
+              signal
+            );
+          }
+
           // Continue to the edge endpoint and Dilly JSON fallback.
         }
       }
@@ -2371,13 +2674,35 @@
           payload =
             await apiJson(
               "/nova/references",
-              path
+              path,
+              {
+                signal
+              }
             );
-        } catch {
+
+          throwIfActionAborted(
+            signal
+          );
+        } catch (error) {
+          if (
+            actionAborted(
+              error,
+              signal
+            )
+          ) {
+            throw actionAbortError(
+              signal
+            );
+          }
+
           // NovaSparx may be cold/offline. Dilly JSON can still provide
           // deterministic object references for many lightweight assets.
         }
       }
+
+      throwIfActionAborted(
+        signal
+      );
 
       if (
         !payload ||
@@ -2450,6 +2775,10 @@
       bindCopyButtons(panel);
     } catch (error) {
       if (
+        actionAborted(
+          error,
+          signal
+        ) ||
         !panelRequestIsCurrent(
           card,
           "references",
@@ -4217,57 +4546,79 @@
     )?.path || null;
   }
 
-  async function exportJson(path) {
+  async function exportJson(
+    path,
+    options = {}
+  ) {
     const key =
-      String(path || "").trim();
+      String(path || "")
+        .trim();
 
-    if (!key) return null;
+    const signal =
+      options.signal ||
+      null;
+
+    throwIfActionAborted(
+      signal
+    );
+
+    if (!key) {
+      return null;
+    }
 
     if (
       exportJsonCache.has(key)
     ) {
-      return exportJsonCache.get(key);
+      return exportJsonCache
+        .get(key);
     }
 
-    const request = (async () => {
-      const filePath =
-        toFilePath(key);
+    const filePath =
+      toFilePath(key);
 
-      const url =
-        `${EXPORT_BASE}` +
-        `?path=${encodeURIComponent(filePath)}` +
-        "&raw=true";
+    const url =
+      `${EXPORT_BASE}` +
+      `?path=${encodeURIComponent(filePath)}` +
+      "&raw=true";
 
-      const response =
-        await fetchWithTimeout(
-          url,
-          {},
-          24_000
-        );
+    const response =
+      await fetchWithTimeout(
+        url,
+        {
+          signal:
+            signal ||
+            undefined
+        },
+        24_000
+      );
 
-      if (!response.ok) {
-        throw new Error(
-          `Export service returned ${response.status}`
-        );
-      }
+    throwIfActionAborted(
+      signal
+    );
 
-      const payload =
-        await response.json();
+    if (!response.ok) {
+      throw new Error(
+        `Export service returned ${response.status}`
+      );
+    }
 
-      return payload?.jsonOutput || [];
-    })();
+    const payload =
+      await response.json();
+
+    throwIfActionAborted(
+      signal
+    );
+
+    const output =
+      payload?.jsonOutput ||
+      [];
 
     exportJsonCache.set(
       key,
-      request
+      output
     );
 
-    try {
-      return await request;
-    } catch (error) {
-      exportJsonCache.delete(key);
-      throw error;
-    }
+    return output;
   }
 
   async function emoteToAnimation(id) {
@@ -6016,9 +6367,51 @@
     const controller =
       new AbortController();
 
+    const externalSignal =
+      options.signal ||
+      null;
+
+    const abortFromExternal =
+      () => {
+        try {
+          controller.abort(
+            externalSignal?.reason ||
+            "replaced-by-new-request"
+          );
+        } catch {}
+      };
+
+    if (
+      externalSignal?.aborted
+    ) {
+      abortFromExternal();
+    } else {
+      externalSignal
+        ?.addEventListener?.(
+          "abort",
+          abortFromExternal,
+          {
+            once:
+              true
+          }
+        );
+    }
+
+    const {
+      signal:
+        _externalSignal,
+      ...fetchOptions
+    } = options;
+
     const timer =
       setTimeout(
-        () => controller.abort(),
+        () => {
+          try {
+            controller.abort(
+              "request-timeout"
+            );
+          } catch {}
+        },
         Math.max(
           1_000,
           Number(timeoutMs) ||
@@ -6030,13 +6423,19 @@
       return await fetch(
         url,
         {
-          ...options,
+          ...fetchOptions,
           signal:
             controller.signal
         }
       );
     } finally {
       clearTimeout(timer);
+
+      externalSignal
+        ?.removeEventListener?.(
+          "abort",
+          abortFromExternal
+        );
     }
   }
 
@@ -6063,8 +6462,17 @@
 
   async function apiJson(
     route,
-    path
+    path,
+    options = {}
   ) {
+    const signal =
+      options.signal ||
+      null;
+
+    throwIfActionAborted(
+      signal
+    );
+
     if (
       window.FortniteAgent
         ?.apiFetch
@@ -6074,9 +6482,17 @@
           .apiFetch(
             `${route}?path=${encodeURIComponent(path)}`,
             {
-              method: "GET"
+              method:
+                "GET",
+              signal:
+                signal ||
+                undefined
             }
           );
+
+      throwIfActionAborted(
+        signal
+      );
 
       if (!response.ok) {
         throw new Error(
@@ -6098,11 +6514,19 @@
         `${API_ENDPOINT}${route}?path=${encodeURIComponent(path)}`,
         {
           headers: {
-            "X-FNAA-Client": "web-v1"
-          }
+            "X-FNAA-Client":
+              "web-v1"
+          },
+          signal:
+            signal ||
+            undefined
         },
         28_000
       );
+
+    throwIfActionAborted(
+      signal
+    );
 
     if (!response.ok) {
       let message =
@@ -6219,7 +6643,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.0.3",
+      version: "1.1.0",
       open,
       close,
       formatAssetPath,
