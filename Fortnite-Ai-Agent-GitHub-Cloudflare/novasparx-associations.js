@@ -1515,6 +1515,142 @@
     ].slice(0, 6);
   }
 
+  function previewTextureReferences(
+    data
+  ) {
+    const scored =
+      collectReferences(
+        data
+      )
+        .map(
+          (item) => {
+            const key =
+              String(
+                item.key || ""
+              );
+
+            const name =
+              leaf(
+                item.path
+              );
+
+            let score = 0;
+
+            if (
+              /(?:LargeIcon|SmallIcon|Icon|PreviewImage|PreviewTexture|Thumbnail|DisplayImage|GalleryArt|Portrait|KeyArt|FeaturedImage|Brush)/i
+                .test(key)
+            ) {
+              score += 420;
+            }
+
+            if (
+              /(?:BaseColor|Diffuse|Albedo|Emissive|Texture|Sprite|Thumbnail|Preview|Icon|Image)/i
+                .test(key)
+            ) {
+              score += 230;
+            }
+
+            if (
+              /^(?:T_|Tex_|Texture_)/i
+                .test(name)
+            ) {
+              score += 80;
+            }
+
+            if (
+              /(?:icon|thumbnail|preview|display|portrait|keyart|basecolor|diffuse|albedo|emissive)/i
+                .test(name)
+            ) {
+              score += 140;
+            }
+
+            if (
+              /(?:normal|rough|roughness|spec|specular|metal|metallic|orm|mra|mask|opacity|ao|noise|detail|gradient|lut|lightmap)/i
+                .test(name)
+            ) {
+              score -= 500;
+            }
+
+            return {
+              path:
+                item.path,
+              score
+            };
+          }
+        )
+        .filter(
+          (item) =>
+            item.score > 0
+        )
+        .sort(
+          (a, b) =>
+            b.score -
+            a.score
+        );
+
+    return [
+      ...new Set(
+        scored.map(
+          (item) =>
+            item.path
+        )
+      )
+    ].slice(
+      0,
+      8
+    );
+  }
+
+  async function publicPreview(
+    path,
+    options = {}
+  ) {
+    const data =
+      options.data ||
+      await fetchExportJson(
+        path,
+        options.signal
+      );
+
+    if (!data) {
+      return null;
+    }
+
+    const evidence =
+      jsonTypeEvidence(
+        data
+      );
+
+    const type =
+      String(
+        evidence?.value ||
+        ""
+      );
+
+    const kind =
+      kindFromType(
+        type
+      );
+
+    return {
+      state:
+        "ready",
+      source:
+        "dilly-json",
+      type,
+      kind,
+      previewImagePaths:
+        previewTextureReferences(
+          data
+        ),
+      meshPaths:
+        meshReferences(
+          data
+        ),
+      data
+    };
+  }
+
   function meshReferences(
     data
   ) {
@@ -2627,12 +2763,13 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.7.3",
+        "1.7.4",
       family,
       classify,
       capabilityProfile,
       allowDirectImage,
       allowTextureDecode,
+      publicPreview,
       resolveVisual,
       findBlueprintForMesh,
       visualFromBlueprint
