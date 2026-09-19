@@ -187,6 +187,13 @@
           );
       }
     }
+
+    if (
+      root === content
+    ) {
+      window.FortnitePreview
+        ?.releaseAll?.();
+    }
   }
 
   function close() {
@@ -6816,7 +6823,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.3.2",
+      version: "1.3.3",
       open,
       close,
       formatAssetPath,
