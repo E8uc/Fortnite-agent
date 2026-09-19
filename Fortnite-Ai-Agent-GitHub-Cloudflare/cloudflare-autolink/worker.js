@@ -63,10 +63,76 @@ function bearerToken(request) {
   ).trim();
 }
 
-function authorized(request, env) {
-  const supplied = bearerToken(request);
+const MAX_TOKEN_BYTES = 4096;
 
-  if (!supplied) return false;
+async function tokenDigest(
+  value
+) {
+  const bytes =
+    new TextEncoder()
+      .encode(
+        String(value || "")
+      );
+
+  if (
+    bytes.byteLength === 0 ||
+    bytes.byteLength >
+      MAX_TOKEN_BYTES
+  ) {
+    return null;
+  }
+
+  return new Uint8Array(
+    await crypto.subtle.digest(
+      "SHA-256",
+      bytes
+    )
+  );
+}
+
+function fixedTimeDigestEqual(
+  left,
+  right
+) {
+  if (
+    !left ||
+    !right ||
+    left.length !==
+      right.length
+  ) {
+    return false;
+  }
+
+  let difference = 0;
+
+  for (
+    let index = 0;
+    index < left.length;
+    index++
+  ) {
+    difference |=
+      left[index] ^
+      right[index];
+  }
+
+  return difference === 0;
+}
+
+async function authorized(
+  request,
+  env
+) {
+  const supplied =
+    bearerToken(request);
+
+  const suppliedDigest =
+    await tokenDigest(
+      supplied
+    );
+
+  if (!suppliedDigest) {
+    return false;
+  }
 
   const expectedTokens = [
     env.NOVASPARX_SHARED_TOKEN,
@@ -79,11 +145,26 @@ function authorized(request, env) {
     )
     .filter(Boolean);
 
-  return expectedTokens.some(
-    (expected) =>
-      supplied.length === expected.length &&
-      supplied === expected
-  );
+  for (
+    const expected of
+    expectedTokens
+  ) {
+    const expectedDigest =
+      await tokenDigest(
+        expected
+      );
+
+    if (
+      fixedTimeDigestEqual(
+        suppliedDigest,
+        expectedDigest
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function getStub(env) {
@@ -145,7 +226,7 @@ export default {
         );
       }
 
-      if (!authorized(request, env)) {
+      if (!(await authorized(request, env))) {
         return json(
           { state: "error", error: "Unauthorized." },
           401
@@ -164,7 +245,7 @@ export default {
         );
       }
 
-      if (!authorized(request, env)) {
+      if (!(await authorized(request, env))) {
         return json(
           { state: "error", error: "Unauthorized." },
           401
@@ -249,7 +330,7 @@ export class NovaLinkDurableObject extends DurableObject {
     }
 
     if (url.pathname === "/connect") {
-      if (!authorized(request, this.env)) {
+      if (!(await authorized(request, this.env))) {
         return json(
           { state: "error", error: "Unauthorized." },
           401
@@ -338,7 +419,7 @@ export class NovaLinkDurableObject extends DurableObject {
       );
     }
 
-    if (!authorized(request, this.env)) {
+    if (!(await authorized(request, this.env))) {
       return json(
         { state: "error", error: "Unauthorized." },
         401
