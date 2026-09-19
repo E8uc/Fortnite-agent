@@ -82,6 +82,7 @@ jobs:
             'novasparx-core.js'
             'novasparx-browser-transport.js'
             'novasparx-browser-transport.selftest.mjs'
+            'novasparx-random-access.js'
             'novasparx-local-parser.js'
             'novasparx-layers.js'
             'novasparx-associations.js'
