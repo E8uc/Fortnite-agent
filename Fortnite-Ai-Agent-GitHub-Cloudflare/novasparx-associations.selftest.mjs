@@ -94,6 +94,54 @@ assert.equal(
   "blueprint"
 );
 
+assert.equal(
+  associations.diagnosePath(
+    "/LFNTG_Consumable/Drinks/SkeletalMesh/SKM_Gear_Potion_Pony_E.SKM_Gear_Potion_Pony_E"
+  ).kind,
+  "skeletalmesh",
+  "Current Fortnite SKM naming must classify as SkeletalMesh"
+);
+
+assert.equal(
+  associations.diagnosePath(
+    "/CRD_AnimatedMesh/Device_AnimatedMesh.Device_AnimatedMesh_C"
+  ).kind,
+  "blueprint",
+  "Generated class object paths must classify as Blueprint even without BP_"
+);
+
+assert.equal(
+  associations.diagnosePath(
+    "/Game/Misc/S_Ambiguous.S_Ambiguous"
+  ).kind,
+  "other",
+  "S_ alone is ambiguous and must not advertise AUDIO"
+);
+
+assert.equal(
+  associations.diagnosePath(
+    "SoundWave'/Game/Misc/S_Ambiguous.S_Ambiguous'"
+  ).kind,
+  "audio",
+  "Explicit Unreal SoundWave type must override ambiguous naming"
+);
+
+assert.equal(
+  associations.diagnosePath(
+    "StaticMesh'/Game/Audio/SW_NotActuallySound.SW_NotActuallySound'"
+  ).kind,
+  "staticmesh",
+  "Explicit Unreal class must override misleading path prefixes"
+);
+
+assert.equal(
+  associations.diagnosePath(
+    "/BRCosmetics/Animation/Game/MainPlayer/Emotes/JadeTowel_Gloss/CMF/Emote_JadeTowel_Gloss_CMF_M.Emote_JadeTowel_Gloss_CMF_M"
+  ).kind,
+  "animation",
+  "Animation folder evidence should classify real project-style paths"
+);
+
 payload = [
   {
     Type:
