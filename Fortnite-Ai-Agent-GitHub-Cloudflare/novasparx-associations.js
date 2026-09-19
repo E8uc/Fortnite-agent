@@ -1601,6 +1601,124 @@
     );
   }
 
+  function materialReferences(
+    data
+  ) {
+    return collectReferences(
+      data
+    )
+      .filter(
+        (item) => {
+          const key =
+            String(
+              item.key || ""
+            );
+
+          const name =
+            leaf(
+              item.path
+            );
+
+          return (
+            /Material|MaterialInterface|MaterialInstance/i
+              .test(key) ||
+            /^(?:MI_|M_)/i
+              .test(name)
+          );
+        }
+      )
+      .map(
+        (item) =>
+          item.path
+      );
+  }
+
+  async function referencedMaterialTextures(
+    data,
+    signal
+  ) {
+    const materialPaths =
+      [
+        ...new Set(
+          materialReferences(
+            data
+          )
+        )
+      ].slice(
+        0,
+        2
+      );
+
+    if (!materialPaths.length) {
+      return [];
+    }
+
+    const settled =
+      await Promise.allSettled(
+        materialPaths.map(
+          (materialPath) =>
+            fetchExportJson(
+              materialPath,
+              signal
+            )
+        )
+      );
+
+    const textures = [];
+
+    for (
+      const item of
+      settled
+    ) {
+      if (
+        signal?.aborted
+      ) {
+        const error =
+          new Error(
+            "NovaSparx preview request was cancelled."
+          );
+
+        error.name =
+          "AbortError";
+
+        throw error;
+      }
+
+      if (
+        item.status !==
+          "fulfilled" ||
+        !item.value
+      ) {
+        continue;
+      }
+
+      for (
+        const texturePath of
+        previewTextureReferences(
+          item.value
+        )
+      ) {
+        if (
+          !textures.includes(
+            texturePath
+          )
+        ) {
+          textures.push(
+            texturePath
+          );
+        }
+
+        if (
+          textures.length >= 6
+        ) {
+          return textures;
+        }
+      }
+    }
+
+    return textures;
+  }
+
   async function publicPreview(
     path,
     options = {}
@@ -1632,6 +1750,35 @@
         type
       );
 
+    const directImages =
+      previewTextureReferences(
+        data
+      );
+
+    let referencedImages = [];
+
+    if (
+      directImages.length <
+        2
+    ) {
+      try {
+        referencedImages =
+          await referencedMaterialTextures(
+            data,
+            options.signal
+          );
+      } catch (error) {
+        if (
+          options.signal
+            ?.aborted ||
+          error?.name ===
+            "AbortError"
+        ) {
+          throw error;
+        }
+      }
+    }
+
     return {
       state:
         "ready",
@@ -1640,8 +1787,16 @@
       type,
       kind,
       previewImagePaths:
-        previewTextureReferences(
-          data
+        [
+          ...new Set(
+            [
+              ...directImages,
+              ...referencedImages
+            ]
+          )
+        ].slice(
+          0,
+          8
         ),
       meshPaths:
         meshReferences(
@@ -2763,7 +2918,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.7.4",
+        "1.7.5",
       family,
       classify,
       capabilityProfile,
