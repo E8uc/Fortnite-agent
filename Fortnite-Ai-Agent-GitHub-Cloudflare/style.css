@@ -1337,6 +1337,78 @@ html[dir="rtl"] .asset-search-meta{text-align:left}
 .mesh-image-meta[data-level="low"],
 .mesh-image-meta[data-level="geometry-only"]{color:#d8b37e}
 
+
+.novasparx-live-viewer{
+  width:100%;
+  height:min(64vh,620px);
+  min-height:320px;
+  position:relative;
+  overflow:hidden;
+  touch-action:none;
+}
+
+.novasparx-live-viewer[hidden],
+.novasparx-viewer-controls[hidden]{
+  display:none!important;
+}
+
+.novasparx-viewer-canvas{
+  width:100%;
+  height:100%;
+  display:block;
+  outline:none;
+  touch-action:none;
+  user-select:none;
+  -webkit-user-select:none;
+}
+
+.novasparx-viewer-controls{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:6px;
+  padding:7px;
+  border-top:1px solid var(--line);
+  background:var(--panel-2);
+}
+
+.novasparx-viewer-controls .json-view-button{
+  width:100%;
+  min-width:0;
+}
+
+.novasparx-viewer-controls [aria-pressed="true"]{
+  border-color:var(--line-strong);
+  background:var(--panel-3);
+  color:var(--text);
+}
+
+.mesh-image-stage[data-preview-state="live-3d"]{
+  min-height:320px;
+}
+
+.mesh-image-panel:fullscreen,
+.mesh-image-panel:-webkit-full-screen{
+  width:100vw;
+  height:100vh;
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto auto;
+  border:0;
+  border-radius:0;
+  background:var(--panel);
+}
+
+.mesh-image-panel:fullscreen .mesh-image-stage,
+.mesh-image-panel:-webkit-full-screen .mesh-image-stage{
+  min-height:0;
+  height:auto;
+}
+
+.mesh-image-panel:fullscreen .novasparx-live-viewer,
+.mesh-image-panel:-webkit-full-screen .novasparx-live-viewer{
+  height:100%;
+  min-height:0;
+}
+
 /* ==========================================================================
    IDs / devices
    ========================================================================== */
@@ -2043,9 +2115,19 @@ html[dir="rtl"] .user-bubble{text-align:right}
   }
 
   .mesh-image-stage{min-height:190px}
+  .mesh-image-stage[data-preview-state="live-3d"]{
+    min-height:240px;
+  }
   .mesh-preview-image{
     width:100%;
     max-height:52vh;
+  }
+  .novasparx-live-viewer{
+    height:min(56vh,520px);
+    min-height:240px;
+  }
+  .novasparx-viewer-controls{
+    grid-template-columns:repeat(2,minmax(0,1fr));
   }
 
   .reference-row{
