@@ -195,6 +195,20 @@
     }
   }
 
+  function releaseAll() {
+    for (
+      const key of
+      [
+        ...viewerSessions.keys(),
+        ...objectUrls.keys()
+      ]
+    ) {
+      release(
+        key
+      );
+    }
+  }
+
   function endpoint(
     route,
     path,
@@ -1003,6 +1017,60 @@
       },
       1_900
     );
+  }
+
+  function showModelUnavailable(
+    ui,
+    message,
+    inspection = null
+  ) {
+    if (ui?.viewer) {
+      ui.viewer.hidden =
+        true;
+
+      ui.viewer
+        .replaceChildren();
+    }
+
+    if (ui?.controls) {
+      ui.controls.hidden =
+        true;
+    }
+
+    if (ui?.image) {
+      ui.image.hidden =
+        true;
+
+      ui.image.removeAttribute(
+        "src"
+      );
+    }
+
+    if (ui?.stage) {
+      ui.stage.dataset
+        .previewState =
+        "model-error";
+    }
+
+    setStatus(
+      ui.status,
+      message ||
+        "The 3D model could not be rendered.",
+      "error"
+    );
+
+    setMeta(
+      ui.meta,
+      "3D model unavailable • no still-image substitution was used",
+      "partial"
+    );
+
+    return {
+      state: "error",
+      kind:
+        "3d-model-unavailable",
+      inspection
+    };
   }
 
   async function mountNovaManifest(
@@ -3430,6 +3498,14 @@
           };
         }
 
+        if (force3d) {
+          return showModelUnavailable(
+            ui,
+            "This Blueprint is marked as a 3D visual, but its verified mesh could not be rendered.",
+            info
+          );
+        }
+
         const universal =
           await tryUniversalPreview(
             clean,
@@ -3788,6 +3864,15 @@
             );
           }
 
+          if (force3d) {
+            return showModelUnavailable(
+              ui,
+              meshError?.message ||
+                "The 3D mesh could not be rendered.",
+              info
+            );
+          }
+
           const universal =
             await tryUniversalPreview(
               clean,
@@ -3945,37 +4030,16 @@
 
   window.addEventListener(
     "pagehide",
-    () => {
-      for (
-        const key of
-        [
-          ...viewerSessions.keys()
-        ]
-      ) {
-        release(
-          key
-        );
-      }
-
-      for (
-        const url of
-        objectUrls.values()
-      ) {
-        URL.revokeObjectURL(
-          url
-        );
-      }
-
-      objectUrls.clear();
-    }
+    releaseAll
   );
 
   window.FortnitePreview =
     Object.freeze({
-      version: "2.0.2",
+      version: "2.1.0",
       toggle,
       render: renderPreview,
-      release
+      release,
+      releaseAll
     });
 })();
 
