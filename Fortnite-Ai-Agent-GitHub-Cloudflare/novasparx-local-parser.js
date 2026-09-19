@@ -196,6 +196,10 @@
         const context = {
           transport,
           bootstrap,
+          randomAccess:
+            globalThis
+              .NovaSparxRandomAccess ||
+            null,
           signal:
             requestSignal,
           webAssembly:
@@ -223,6 +227,10 @@
           engineState,
           transport,
           bootstrap,
+          randomAccess:
+            globalThis
+              .NovaSparxRandomAccess ||
+            null,
           at:
             Date.now()
         };
@@ -284,6 +292,10 @@
               ),
             bootstrap:
               options.bootstrap ||
+              null,
+            randomAccess:
+              globalThis
+                .NovaSparxRandomAccess ||
               null
           }
         : await prepare(
@@ -303,6 +315,11 @@
           state.transport,
         bootstrap:
           state.bootstrap,
+        randomAccess:
+          state.randomAccess ||
+          globalThis
+            .NovaSparxRandomAccess ||
+          null,
         parserState:
           state.engineState
       }
@@ -322,7 +339,7 @@
 
     return {
       version:
-        "2.1.1",
+        "2.2.0",
       registered:
         Boolean(engine),
       prepared:
@@ -354,14 +371,19 @@
       edgeBootstrap:
         typeof transport
           ?.bootstrap ===
-          "function"
+          "function",
+      randomAccess:
+        typeof globalThis
+          .NovaSparxRandomAccess
+          ?.create ===
+        "function"
     };
   }
 
   globalThis.NovaSparxLocalParser =
     Object.freeze({
       version:
-        "2.1.1",
+        "2.2.0",
       register,
       reset,
       prepare,
