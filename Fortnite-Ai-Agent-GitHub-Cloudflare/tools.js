@@ -636,7 +636,14 @@
     const associations =
       window.NovaSparxAssociations;
 
+    const diagnosis =
+      associations?.diagnosePath?.(
+        path
+      ) ||
+      null;
+
     const family =
+      diagnosis?.family ||
       associations?.family?.(
         path
       ) ||
@@ -647,17 +654,23 @@
         .toLowerCase();
 
     let kind =
+      diagnosis?.kind ||
       family;
 
     if (
-      family === "mesh"
+      family === "mesh" &&
+      ![
+        "staticmesh",
+        "skeletalmesh"
+      ].includes(kind)
     ) {
       kind =
         /^sk_/i.test(name)
           ? "skeletalmesh"
           : "staticmesh";
     } else if (
-      family === "blueprint"
+      family === "blueprint" &&
+      kind === "blueprint"
     ) {
       kind =
         "blueprint";
@@ -706,11 +719,16 @@
         capabilities.kind ||
         kind,
       source:
+        diagnosis?.source ||
         "local-fallback",
       confidence:
-        family === "other"
-          ? 0
-          : 35,
+        Number.isFinite(
+          diagnosis?.confidence
+        )
+          ? diagnosis.confidence
+          : family === "other"
+            ? 0
+            : 35,
       capabilities,
       tags:
         Array.isArray(
@@ -1205,7 +1223,7 @@
           assetPath,
           {
             verifyKnown:
-              false
+              true
           }
         )
           .then(
