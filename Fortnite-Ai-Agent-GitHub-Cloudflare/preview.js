@@ -162,6 +162,16 @@
           .dataset.viewerPath;
       }
 
+      if (
+        session.panel
+          ?.dataset
+          ?.previewAssetPath ===
+        key
+      ) {
+        delete session.panel
+          .dataset.previewAssetPath;
+      }
+
       viewerSessions.delete(
         key
       );
@@ -747,6 +757,9 @@
       );
     }
 
+    delete ui.panel
+      .dataset.previewAssetPath;
+
     ui.panel.hidden = false;
 
     if (ui.stage) {
@@ -976,8 +989,13 @@
     );
 
     const key =
-      String(path || "")
-        .trim();
+      String(
+        options.sessionKey ||
+        ui.panel.dataset
+          .previewAssetPath ||
+        path ||
+        ""
+      ).trim();
 
     release(
       key
@@ -1327,6 +1345,15 @@
         image
       );
 
+    const resourceKey =
+      String(
+        options.sessionKey ||
+        ui?.panel?.dataset
+          ?.previewAssetPath ||
+        path ||
+        ""
+      ).trim();
+
     if (
       ui &&
       window.NovaSparxRenderer
@@ -1338,7 +1365,9 @@
         ui,
         sourceLabel,
         {
-          signal
+          signal,
+          sessionKey:
+            resourceKey
         }
       );
     }
@@ -1370,7 +1399,9 @@
       signal
     );
 
-    release(path);
+    release(
+      resourceKey
+    );
 
     const url =
       URL.createObjectURL(
@@ -1378,13 +1409,13 @@
       );
 
     rememberObjectUrl(
-      path,
+      resourceKey,
       url
     );
 
     image.src = url;
     image.alt =
-      `${assetName(path)} 3D preview`;
+      `${assetName(resourceKey)} 3D preview`;
     image.hidden = false;
 
     status.hidden = true;
@@ -2834,6 +2865,10 @@
 
     resetUi(ui);
 
+    ui.panel.dataset
+      .previewAssetPath =
+      clean;
+
     if (button) {
       button.disabled = true;
       button.textContent =
@@ -3893,7 +3928,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "2.0.0",
+      version: "2.0.1",
       toggle,
       render: renderPreview,
       release
