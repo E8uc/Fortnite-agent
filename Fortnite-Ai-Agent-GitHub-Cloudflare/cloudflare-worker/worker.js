@@ -314,10 +314,51 @@ async function fetchWithTimeout(
   const controller =
     new AbortController();
 
+  const externalSignal =
+    init?.signal ||
+    null;
+
+  const abortFromExternal =
+    () => {
+      try {
+        controller.abort(
+          externalSignal?.reason ||
+          "client-request-cancelled"
+        );
+      } catch {}
+    };
+
+  if (
+    externalSignal?.aborted
+  ) {
+    abortFromExternal();
+  } else {
+    externalSignal
+      ?.addEventListener?.(
+        "abort",
+        abortFromExternal,
+        {
+          once:
+            true
+        }
+      );
+  }
+
+  const {
+    signal:
+      _externalSignal,
+    ...fetchInit
+  } = init || {};
+
   const timer =
     setTimeout(
-      () =>
-        controller.abort(),
+      () => {
+        try {
+          controller.abort(
+            "upstream-timeout"
+          );
+        } catch {}
+      },
       timeoutMs
     );
 
@@ -325,13 +366,19 @@ async function fetchWithTimeout(
     return await fetch(
       url,
       {
-        ...init,
+        ...fetchInit,
         signal:
           controller.signal
       }
     );
   } finally {
     clearTimeout(timer);
+
+    externalSignal
+      ?.removeEventListener?.(
+        "abort",
+        abortFromExternal
+      );
   }
 }
 
@@ -487,7 +534,8 @@ function validateNovaEdgeRange(
 }
 
 async function fetchNovaEdgeJson(
-  url
+  url,
+  signal = null
 ) {
   const response =
     await fetchWithTimeout(
@@ -506,7 +554,11 @@ async function fetchNovaEdgeJson(
             true,
           cacheTtl:
             300
-        }
+        },
+
+        signal:
+          signal ||
+          undefined
       },
       10_000
     );
@@ -980,10 +1032,12 @@ async function handleNovaEdgeBootstrap(
   ] =
     await Promise.allSettled([
       fetchNovaEdgeJson(
-        NOVASPARX_EDGE_AES_URL
+        NOVASPARX_EDGE_AES_URL,
+        request.signal
       ),
       fetchNovaEdgeJson(
-        NOVASPARX_EDGE_MANIFESTS_URL
+        NOVASPARX_EDGE_MANIFESTS_URL,
+        request.signal
       )
     ]);
 
@@ -1173,7 +1227,10 @@ async function handleNovaEdgeRange(
               range.end,
             Accept:
               "application/octet-stream,*/*;q=0.8"
-          }
+          },
+
+          signal:
+            request.signal
         },
         18_000
       );
