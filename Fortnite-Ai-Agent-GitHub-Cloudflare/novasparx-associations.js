@@ -1079,11 +1079,11 @@
       material:
         ["json"],
       staticmesh:
-        ["nsmesh", "json"],
+        ["glb", "obj", "nsmesh", "json"],
       skeletalmesh:
         ["nsmesh", "json"],
       "blueprint-visual":
-        ["nsmesh", "json"],
+        ["glb", "obj", "nsmesh", "json"],
       "blueprint-image":
         ["png", "json"],
       "blueprint-logic":
@@ -2615,7 +2615,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.7.1",
+        "1.7.2",
       family,
       classify,
       capabilityProfile,
