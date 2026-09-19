@@ -9,6 +9,77 @@
 
   const objectUrls = new Map();
 
+  function objectUrlLimit() {
+    const state =
+      window.NovaSparxBrowserGuard
+        ?.status?.() ||
+      {};
+
+    if (state.isIOS) {
+      return 2;
+    }
+
+    if (state.isMobile) {
+      return 3;
+    }
+
+    return 8;
+  }
+
+  function rememberObjectUrl(
+    path,
+    url
+  ) {
+    const key =
+      String(path || "")
+        .trim();
+
+    if (!key || !url) {
+      return;
+    }
+
+    release(key);
+
+    objectUrls.set(
+      key,
+      url
+    );
+
+    const limit =
+      objectUrlLimit();
+
+    while (
+      objectUrls.size >
+      limit
+    ) {
+      const oldestKey =
+        objectUrls.keys()
+          .next()
+          .value;
+
+      if (!oldestKey) {
+        break;
+      }
+
+      const oldestUrl =
+        objectUrls.get(
+          oldestKey
+        );
+
+      try {
+        if (oldestUrl) {
+          URL.revokeObjectURL(
+            oldestUrl
+          );
+        }
+      } catch {}
+
+      objectUrls.delete(
+        oldestKey
+      );
+    }
+  }
+
   function abortError(
     signal
   ) {
@@ -679,7 +750,7 @@
         result.blob
       );
 
-    objectUrls.set(
+    rememberObjectUrl(
       path,
       url
     );
@@ -3159,7 +3230,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "1.8.0",
+      version: "1.9.0",
       toggle,
       render: renderPreview,
       release
