@@ -209,6 +209,82 @@
     }
   }
 
+  function viewerSessionLimit() {
+    const state =
+      window.NovaSparxBrowserGuard
+        ?.status?.() ||
+      {};
+
+    if (
+      state.isIOS ||
+      state.isMobile
+    ) {
+      return 1;
+    }
+
+    return 2;
+  }
+
+  function trimViewerSessions(
+    exceptKey = ""
+  ) {
+    const limit =
+      viewerSessionLimit();
+
+    while (
+      viewerSessions.size >=
+      limit
+    ) {
+      const oldestKey =
+        [
+          ...viewerSessions.keys()
+        ]
+          .find(
+            (value) =>
+              value !==
+              exceptKey
+          );
+
+      if (!oldestKey) {
+        break;
+      }
+
+      const oldSession =
+        viewerSessions.get(
+          oldestKey
+        );
+
+      const oldStatus =
+        oldSession?.panel
+          ?.querySelector?.(
+            ".mesh-image-status"
+          );
+
+      release(
+        oldestKey
+      );
+
+      if (oldStatus) {
+        setStatus(
+          oldStatus,
+          "3D viewer closed to free browser memory.",
+          "idle"
+        );
+      }
+
+      if (oldSession?.panel) {
+        oldSession.panel
+          .querySelector?.(
+            ".mesh-image-stage"
+          )
+          ?.setAttribute(
+            "data-preview-state",
+            "released"
+          );
+      }
+    }
+  }
+
   function endpoint(
     route,
     path,
@@ -1110,6 +1186,10 @@
       ).trim();
 
     release(
+      key
+    );
+
+    trimViewerSessions(
       key
     );
 
@@ -4035,7 +4115,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "2.1.0",
+      version: "2.2.0",
       toggle,
       render: renderPreview,
       release,
