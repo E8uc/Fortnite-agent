@@ -592,6 +592,13 @@ export class NovaLinkDurableObject extends DurableObject {
         return;
       }
 
+      if (type === "cancelled") {
+        this.finishCancelledResponse(
+          control
+        );
+        return;
+      }
+
       if (type === "pong" || type === "hello") {
         return;
       }
@@ -854,6 +861,31 @@ export class NovaLinkDurableObject extends DurableObject {
       // Consumer disconnected after receiving enough data.
     } finally {
       pending.resolveDone?.();
+    }
+  }
+
+  finishCancelledResponse(
+    control
+  ) {
+    const id =
+      String(
+        control?.id ||
+        ""
+      );
+
+    if (!id) {
+      return;
+    }
+
+    this.cancelledResponseIds
+      .delete(id);
+
+    if (
+      this.activeResponseId ===
+      id
+    ) {
+      this.activeResponseId =
+        null;
     }
   }
 
