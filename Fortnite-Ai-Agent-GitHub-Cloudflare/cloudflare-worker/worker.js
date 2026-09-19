@@ -533,6 +533,191 @@ function validateNovaEdgeRange(
   };
 }
 
+async function readResponseBytesBounded(
+  response,
+  maxBytes,
+  label =
+    "Response"
+) {
+  maxBytes =
+    Math.max(
+      1,
+      Number(maxBytes) ||
+      1
+    );
+
+  const declared =
+    Number(
+      response.headers.get(
+        "content-length"
+      ) || 0
+    );
+
+  if (
+    declared > 0 &&
+    declared > maxBytes
+  ) {
+    try {
+      await response.body
+        ?.cancel();
+    } catch {}
+
+    const error =
+      new Error(
+        label +
+        " exceeded the allowed byte limit."
+      );
+
+    error.code =
+      "BODY_TOO_LARGE";
+
+    throw error;
+  }
+
+  if (
+    !response.body ||
+    typeof response.body
+      .getReader !==
+      "function"
+  ) {
+    const bytes =
+      new Uint8Array(
+        await response
+          .arrayBuffer()
+      );
+
+    if (
+      bytes.byteLength >
+      maxBytes
+    ) {
+      const error =
+        new Error(
+          label +
+          " exceeded the allowed byte limit."
+        );
+
+      error.code =
+        "BODY_TOO_LARGE";
+
+      throw error;
+    }
+
+    return bytes;
+  }
+
+  const reader =
+    response.body
+      .getReader();
+
+  const chunks = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const {
+        done,
+        value
+      } =
+        await reader.read();
+
+      if (done) {
+        break;
+      }
+
+      if (!value?.byteLength) {
+        continue;
+      }
+
+      total +=
+        value.byteLength;
+
+      if (
+        total >
+        maxBytes
+      ) {
+        try {
+          await reader.cancel();
+        } catch {}
+
+        const error =
+          new Error(
+            label +
+            " exceeded the allowed byte limit."
+          );
+
+        error.code =
+          "BODY_TOO_LARGE";
+
+        throw error;
+      }
+
+      chunks.push(
+        value
+      );
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {}
+  }
+
+  const output =
+    new Uint8Array(
+      total
+    );
+
+  let offset = 0;
+
+  for (
+    const chunk of
+    chunks
+  ) {
+    output.set(
+      chunk,
+      offset
+    );
+
+    offset +=
+      chunk.byteLength;
+  }
+
+  return output;
+}
+
+async function readJsonRequestBounded(
+  request,
+  maxBytes
+) {
+  const responseLike =
+    new Response(
+      request.body,
+      {
+        headers: {
+          "content-length":
+            request.headers.get(
+              "content-length"
+            ) || ""
+        }
+      }
+    );
+
+  const bytes =
+    await readResponseBytesBounded(
+      responseLike,
+      maxBytes,
+      "Request body"
+    );
+
+  if (!bytes.byteLength) {
+    return null;
+  }
+
+  return JSON.parse(
+    new TextDecoder()
+      .decode(bytes)
+  );
+}
+
 async function fetchNovaEdgeJson(
   url,
   signal = null
@@ -591,18 +776,11 @@ async function fetchNovaEdgeJson(
   }
 
   const bytes =
-    new Uint8Array(
-      await response.arrayBuffer()
+    await readResponseBytesBounded(
+      response,
+      NOVASPARX_EDGE_MAX_METADATA_BYTES,
+      "NovaSparx metadata source"
     );
-
-  if (
-    bytes.byteLength >
-    NOVASPARX_EDGE_MAX_METADATA_BYTES
-  ) {
-    throw new Error(
-      "metadata source exceeded the NovaSparx edge limit"
-    );
-  }
 
   return JSON.parse(
     new TextDecoder()
@@ -1345,6 +1523,28 @@ async function handleNovaEdgeRange(
   if (
     upstream.status ===
       206 &&
+    !contentRange
+  ) {
+    try {
+      await upstream.body?.cancel();
+    } catch {}
+
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Range source omitted Content-Range."
+      },
+      502
+    );
+  }
+
+  if (
+    upstream.status ===
+      206 &&
     contentRange
   ) {
     const match =
@@ -1383,11 +1583,12 @@ async function handleNovaEdgeRange(
 
   try {
     payload =
-      new Uint8Array(
-        await upstream
-          .arrayBuffer()
+      await readResponseBytesBounded(
+        upstream,
+        range.length,
+        "Range source"
       );
-  } catch {
+  } catch (error) {
     return json(
       request,
       env,
@@ -1395,7 +1596,10 @@ async function handleNovaEdgeRange(
         state:
           "error",
         error:
-          "Range source body could not be read."
+          error?.code ===
+            "BODY_TOO_LARGE"
+            ? "Range source exceeded the bounded relay window."
+            : "Range source body could not be read."
       },
       502
     );
@@ -6197,34 +6401,38 @@ async function handleChat(
     );
   }
 
-  const length =
-    Number(
-      request.headers.get(
-        "Content-Length"
-      ) || 0
-    );
+  let body;
 
-  if (
-    length >
-    140_000
-  ) {
+  try {
+    body =
+      await readJsonRequestBounded(
+        request,
+        140_000
+      );
+  } catch (error) {
     return json(
       request,
       env,
       {
         error:
-          "Request is too large."
+          error?.code ===
+            "BODY_TOO_LARGE"
+            ? "Request is too large."
+            : "Invalid request."
       },
-      413
+      error?.code ===
+        "BODY_TOO_LARGE"
+        ? 413
+        : 400
     );
   }
 
-  let body;
-
-  try {
-    body =
-      await request.json();
-  } catch {
+  if (
+    !body ||
+    typeof body !==
+      "object" ||
+    Array.isArray(body)
+  ) {
     return json(
       request,
       env,
@@ -6821,7 +7029,7 @@ export default {
           ok: true,
           service: "FNAA",
           version:
-            "1.0.3",
+            "1.0.4",
           fortnite:
             CURRENT_FORTNITE_VERSION,
           authProvider:
