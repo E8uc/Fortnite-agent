@@ -533,36 +533,68 @@
         );
       }
 
-      throwIfAborted(
-        options.signal
-      );
+      if (
+        options.backendJson !==
+          false
+      ) {
+        throwIfAborted(
+          options.signal
+        );
 
-      try {
-        const json = await fromBackendJson(cleanPath, options);
+        try {
+          const json =
+            await fromBackendJson(
+              cleanPath,
+              options
+            );
 
-        if (json?.manifest) {
-          remember(cleanPath, json.manifest, json.layer);
-          trace.push({ layer: json.layer, state: "ready" });
-          lastTrace = trace;
-          return { ...json, trace };
-        }
-      } catch (error) {
-        if (
-          shouldAbort(
-            error,
-            options.signal
-          )
-        ) {
-          throw abortError(
-            options.signal
+          if (json?.manifest) {
+            remember(
+              cleanPath,
+              json.manifest,
+              json.layer
+            );
+
+            trace.push({
+              layer:
+                json.layer,
+              state:
+                "ready"
+            });
+
+            lastTrace =
+              trace;
+
+            return {
+              ...json,
+              trace
+            };
+          }
+        } catch (error) {
+          if (
+            shouldAbort(
+              error,
+              options.signal
+            )
+          ) {
+            throw abortError(
+              options.signal
+            );
+          }
+
+          traceError(
+            trace,
+            "backend-json",
+            error
           );
         }
-
-        traceError(
-          trace,
-          "backend-json",
-          error
-        );
+      } else {
+        trace.push({
+          layer:
+            "backend-json",
+          state:
+            "skipped"
+        });
       }
     }
 
@@ -599,7 +631,7 @@
 
   function capabilities() {
     return {
-      version: "2.2.0",
+      version: "2.3.0",
       layers: [
         {
           id: "device-memory",
@@ -662,7 +694,7 @@
   }
 
   globalThis.NovaSparxLayers = Object.freeze({
-    version: "2.2.0",
+    version: "2.3.0",
     resolveMesh,
     capabilities,
     clearDeviceCache,
