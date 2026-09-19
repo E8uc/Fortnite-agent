@@ -11,6 +11,14 @@
     "https://raw.githubusercontent.com/E8uc/NovaSparx/main/web/reference-index";
 
   let referenceManifestPromise = null;
+  let referenceManifestFailureAt = 0;
+
+  const REFERENCE_MANIFEST_RETRY_MS =
+    15_000;
+
+  const REFERENCE_MANIFEST_MAX_BYTES =
+    256 * 1024;
+
   const referenceShardCache = new Map();
   const REFERENCE_SHARD_CACHE_LIMIT = 6;
 
@@ -1577,45 +1585,121 @@
     signal
   ) {
     if (
-      !referenceManifestPromise
+      referenceManifestPromise
     ) {
-      const deadline =
-        deadlineSignal(
-          signal,
-          1_500
-        );
-
-      referenceManifestPromise =
-        fetch(
-          `${REFERENCE_INDEX_BASE}/manifest.json`,
-          {
-            cache:
-              "force-cache",
-            signal:
-              deadline.signal
-          }
-        )
-          .then(
-            async (response) => {
-              if (!response.ok) {
-                throw new Error(
-                  `NovaSparx reference manifest returned HTTP ${response.status}.`
-                );
-              }
-
-              return response.json();
-            }
-          )
-          .catch(
-            () => null
-          )
-          .finally(
-            () =>
-              deadline.cleanup()
-          );
+      return referenceManifestPromise;
     }
 
-    return referenceManifestPromise;
+    if (
+      referenceManifestFailureAt &&
+      Date.now() -
+        referenceManifestFailureAt <
+        REFERENCE_MANIFEST_RETRY_MS
+    ) {
+      return null;
+    }
+
+    const deadline =
+      deadlineSignal(
+        signal,
+        1_500
+      );
+
+    const request =
+      (async () => {
+        try {
+          const response =
+            await fetch(
+              `${REFERENCE_INDEX_BASE}/manifest.json`,
+              {
+                cache:
+                  "force-cache",
+                signal:
+                  deadline.signal
+              }
+            );
+
+          if (!response.ok) {
+            try {
+              await response.body
+                ?.cancel();
+            } catch {}
+
+            throw new Error(
+              `NovaSparx reference manifest returned HTTP ${response.status}.`
+            );
+          }
+
+          const bytes =
+            await readResponseBytesBounded(
+              response,
+              REFERENCE_MANIFEST_MAX_BYTES,
+              deadline.signal
+            );
+
+          const parsed =
+            JSON.parse(
+              new TextDecoder()
+                .decode(bytes)
+            );
+
+          if (
+            !parsed ||
+            typeof parsed !==
+              "object" ||
+            Array.isArray(parsed)
+          ) {
+            throw new Error(
+              "NovaSparx reference manifest is invalid."
+            );
+          }
+
+          referenceManifestFailureAt =
+            0;
+
+          return parsed;
+        } catch (error) {
+          if (signal?.aborted) {
+            throw error;
+          }
+
+          referenceManifestFailureAt =
+            Date.now();
+
+          return null;
+        } finally {
+          deadline.cleanup();
+        }
+      })();
+
+    referenceManifestPromise =
+      request;
+
+    try {
+      const result =
+        await request;
+
+      if (
+        !result &&
+        referenceManifestPromise ===
+          request
+      ) {
+        referenceManifestPromise =
+          null;
+      }
+
+      return result;
+    } catch (error) {
+      if (
+        referenceManifestPromise ===
+          request
+      ) {
+        referenceManifestPromise =
+          null;
+      }
+
+      throw error;
+    }
   }
 
   async function readStreamBytesBounded(
@@ -2531,7 +2615,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.7.0",
+        "1.7.1",
       family,
       classify,
       capabilityProfile,
