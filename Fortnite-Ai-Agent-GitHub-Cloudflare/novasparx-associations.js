@@ -1129,17 +1129,29 @@
         ["ASSET"]
     };
 
+    const canViewImage =
+      imageKinds.has(
+        resolvedKind
+      );
+
+    const canView3D =
+      view3dKinds.has(
+        resolvedKind
+      );
+
     return {
       kind:
         resolvedKind,
-      canViewImage:
-        imageKinds.has(
-          resolvedKind
-        ),
-      canView3D:
-        view3dKinds.has(
-          resolvedKind
-        ),
+      canPreview:
+        true,
+      previewMode:
+        canView3D
+          ? "3d"
+          : canViewImage
+            ? "image"
+            : "universal",
+      canViewImage,
+      canView3D,
       canDownload:
         true,
       canExportUEFN:
@@ -2615,7 +2627,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.7.2",
+        "1.7.3",
       family,
       classify,
       capabilityProfile,
