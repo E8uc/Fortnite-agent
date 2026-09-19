@@ -1387,9 +1387,11 @@ html[dir="rtl"] .asset-search-meta{text-align:left}
 }
 
 .mesh-image-panel:fullscreen,
-.mesh-image-panel:-webkit-full-screen{
+.mesh-image-panel:-webkit-full-screen,
+.mesh-image-panel.novasparx-viewer-expanded{
   width:100vw;
   height:100vh;
+  height:100dvh;
   display:grid;
   grid-template-rows:auto minmax(0,1fr) auto auto;
   border:0;
@@ -1397,14 +1399,24 @@ html[dir="rtl"] .asset-search-meta{text-align:left}
   background:var(--panel);
 }
 
+.mesh-image-panel.novasparx-viewer-expanded{
+  position:fixed;
+  inset:0;
+  z-index:2600;
+  max-width:none;
+  margin:0;
+}
+
 .mesh-image-panel:fullscreen .mesh-image-stage,
-.mesh-image-panel:-webkit-full-screen .mesh-image-stage{
+.mesh-image-panel:-webkit-full-screen .mesh-image-stage,
+.mesh-image-panel.novasparx-viewer-expanded .mesh-image-stage{
   min-height:0;
   height:auto;
 }
 
 .mesh-image-panel:fullscreen .novasparx-live-viewer,
-.mesh-image-panel:-webkit-full-screen .novasparx-live-viewer{
+.mesh-image-panel:-webkit-full-screen .novasparx-live-viewer,
+.mesh-image-panel.novasparx-viewer-expanded .novasparx-live-viewer{
   height:100%;
   min-height:0;
 }
