@@ -2066,8 +2066,8 @@
   function panelLabels(action) {
     const labels = {
       preview: [
-        t("viewImage", "View Image"),
-        t("hideImage", "Hide Image")
+        t("viewPreview", "View Preview"),
+        t("hidePreview", "Hide Preview")
       ],
 
       uefn: [
@@ -7588,7 +7588,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.6.5",
+      version: "1.6.6",
       open,
       close,
       formatAssetPath,
