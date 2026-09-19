@@ -44,6 +44,7 @@ ASSET_REF_RE = re.compile(
 COMMON_PREFIXES = (
     "sm_",
     "sk_",
+    "skm_",
     "mi_",
     "m_",
     "t_",
@@ -53,7 +54,8 @@ COMMON_PREFIXES = (
     "fx_",
     "bp_",
     "w_",
-    "s_",
+    "sw_",
+    "usw_",
 )
 
 SCOPE_ORDER = ("all", "sm", "m", "meshes", "new")
@@ -175,6 +177,7 @@ def is_mesh(path: str) -> bool:
     return (
         name.startswith("sm_")
         or name.startswith("sk_")
+        or name.startswith("skm_")
         or "/meshes/" in lower
         or "/mesh/" in lower
         or "/staticmeshes/" in lower
