@@ -889,22 +889,127 @@
     );
   }
 
+  function typedPathKind(
+    path
+  ) {
+    const raw =
+      String(path || "")
+        .trim();
+
+    const match =
+      raw.match(
+        /^([A-Za-z0-9_]+)\s*['"]/
+      );
+
+    if (!match?.[1]) {
+      return "other";
+    }
+
+    return kindFromType(
+      match[1]
+    );
+  }
+
+  function diagnosticPathText(
+    path
+  ) {
+    const raw =
+      clean(path);
+
+    const wrapped =
+      String(raw || "")
+        .match(
+          /^[A-Za-z0-9_]+\s*['"]((?:\/|FortniteGame\/)[^'"]+)['"]?$/i
+        );
+
+    return wrapped?.[1] ||
+      raw;
+  }
+
+  function objectPathLooksGeneratedClass(
+    path
+  ) {
+    const value =
+      diagnosticPathText(
+        path
+      );
+
+    const tail =
+      String(value || "")
+        .split("/")
+        .pop() ||
+      "";
+
+    const dot =
+      tail.indexOf(".");
+
+    if (dot <= 0) {
+      return false;
+    }
+
+    const packageName =
+      tail.slice(
+        0,
+        dot
+      );
+
+    const objectName =
+      tail.slice(
+        dot + 1
+      );
+
+    return (
+      packageName.length > 0 &&
+      objectName.toLowerCase() ===
+        `${packageName.toLowerCase()}_c`
+    );
+  }
+
   function pathKind(
     path
   ) {
+    const typedKind =
+      typedPathKind(
+        path
+      );
+
+    if (typedKind !== "other") {
+      return typedKind;
+    }
+
+    const normalizedPath =
+      diagnosticPathText(
+        path
+      );
+
     const name =
-      leaf(path)
+      leaf(
+        normalizedPath
+      )
         .toLowerCase();
 
     const full =
-      clean(path)
+      String(
+        normalizedPath ||
+        ""
+      )
         .toLowerCase();
 
-    if (/^sk_/.test(name)) {
+    if (
+      /^(?:sk_|skm_)/
+        .test(name) ||
+      /\/skeletalmesh(?:es)?\//
+        .test(full)
+    ) {
       return "skeletalmesh";
     }
 
-    if (/^sm_/.test(name)) {
+    if (
+      /^sm_/
+        .test(name) ||
+      /\/staticmesh(?:es)?\//
+        .test(full)
+    ) {
       return "staticmesh";
     }
 
@@ -923,14 +1028,20 @@
     }
 
     if (
+      objectPathLooksGeneratedClass(
+        normalizedPath
+      ) ||
       /^(?:bp_|bpc_|abp_|wbp_)/
         .test(name)
     ) {
       return "blueprint";
     }
 
+    // S_ is intentionally not treated as sound. It is ambiguous in Fortnite.
+    // Strong sound prefixes, folders, or explicit Unreal class metadata are
+    // required before we advertise AUDIO.
     if (
-      /^(?:sw_|soundwave_|sc_|soundcue_|s_|ms_|metasound_|audio_|sfx_|music_)/
+      /^(?:sw_|usw_|soundwave_|sc_|soundcue_|ms_|metasound_|audio_|sfx_|music_)/
         .test(name) ||
       /\/(?:sounds?|audio|music)\//
         .test(full)
@@ -966,20 +1077,6 @@
         .test(name)
     ) {
       return "data";
-    }
-
-    if (
-      /\/skeletalmeshes?\//
-        .test(full)
-    ) {
-      return "skeletalmesh";
-    }
-
-    if (
-      /\/staticmeshes?\//
-        .test(full)
-    ) {
-      return "staticmesh";
     }
 
     return "other";
@@ -3060,7 +3157,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.8.0",
+        "1.8.1",
       family,
       diagnosePath,
       classify,
