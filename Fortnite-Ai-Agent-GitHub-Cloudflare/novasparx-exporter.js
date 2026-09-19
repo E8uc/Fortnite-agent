@@ -659,6 +659,50 @@
     return output;
   }
 
+  function publicImageUrl(
+    path
+  ) {
+    const base =
+      String(
+        globalThis.FNAA_CONFIG
+          ?.apiEndpoint ||
+        globalThis
+          .FORTNITE_AI_API_ENDPOINT ||
+        ""
+      )
+        .trim()
+        .replace(/\/+$/, "");
+
+    const clean =
+      String(path || "")
+        .trim();
+
+    if (!base || !clean) {
+      return "";
+    }
+
+    try {
+      const url =
+        new URL(
+          base + "/image"
+        );
+
+      url.searchParams.set(
+        "path",
+        clean
+      );
+
+      url.searchParams.set(
+        "direct",
+        "1"
+      );
+
+      return url.toString();
+    } catch {
+      return "";
+    }
+  }
+
   function textureFetchUrl(
     value
   ) {
@@ -2430,46 +2474,86 @@
       signal
     );
 
-    const url =
-      globalThis.NovaSparx
-        ?.textureUrl?.(
-          path
+    const candidates =
+      [
+        publicImageUrl(path),
+        globalThis.NovaSparx
+          ?.textureUrl?.(
+            path
+          ) || ""
+      ]
+        .map(
+          textureFetchUrl
+        )
+        .filter(
+          (value, index, values) =>
+            value &&
+            values.indexOf(value) ===
+              index
         );
 
-    if (!url) {
+    if (!candidates.length) {
       throw new Error(
-        "NovaSparx texture export is unavailable."
+        "Texture export URL is unavailable."
       );
     }
 
-    const requestUrl =
-      textureFetchUrl(
-        url
+    let response = null;
+
+    for (
+      const requestUrl of
+      candidates
+    ) {
+      throwIfAborted(
+        signal
       );
 
-    if (!requestUrl) {
-      throw new Error(
-        "NovaSparx texture export URL is invalid."
-      );
-    }
-
-    const response =
-      await fetch(
-        requestUrl,
-        {
-          cache:
-            "force-cache",
-          credentials:
-            "omit",
-          signal:
-            signal ||
-            undefined,
-          headers: {
-            Accept:
-              "image/png,image/*;q=0.8"
+      const candidate =
+        await fetch(
+          requestUrl,
+          {
+            cache:
+              "force-cache",
+            credentials:
+              "omit",
+            signal:
+              signal ||
+              undefined,
+            headers: {
+              Accept:
+                "image/png,image/*;q=0.8"
+            }
           }
-        }
+        );
+
+      if (
+        candidate.ok &&
+        String(
+          candidate.headers.get(
+            "content-type"
+          ) || ""
+        )
+          .toLowerCase()
+          .startsWith(
+            "image/"
+          )
+      ) {
+        response =
+          candidate;
+        break;
+      }
+
+      try {
+        await candidate.body
+          ?.cancel();
+      } catch {}
+    }
+
+    if (!response) {
+      throw new Error(
+        "No verified texture image could be exported."
       );
+    }
 
     throwIfAborted(
       signal
@@ -2582,7 +2666,7 @@
   globalThis.NovaSparxExporter =
     Object.freeze({
       version:
-        "1.3.0",
+        "1.3.1",
       supports,
       buildGlb,
       buildObj,
