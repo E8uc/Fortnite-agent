@@ -132,6 +132,22 @@
       );
 
     if (session) {
+      for (
+        const cleanup of
+        Array.isArray(
+          session.cleanup
+        )
+          ? session.cleanup
+          : []
+      ) {
+        try {
+          cleanup?.();
+        } catch {}
+      }
+
+      session.cleanup =
+        [];
+
       try {
         session.controller
           ?.dispose?.();
@@ -408,8 +424,24 @@
 
         timer =
           setTimeout(
-            () =>
-              done(false),
+            () => {
+              if (finished) {
+                return;
+              }
+
+              finished =
+                true;
+
+              cleanup();
+
+              try {
+                image.removeAttribute(
+                  "src"
+                );
+              } catch {}
+
+              resolve(false);
+            },
             timeoutMs
           );
 
@@ -1263,17 +1295,21 @@
       throw error;
     }
 
+    const sessionRecord = {
+      controller,
+      host:
+        ui.viewer,
+      controls:
+        ui.controls,
+      panel:
+        ui.panel,
+      cleanup:
+        []
+    };
+
     viewerSessions.set(
       key,
-      {
-        controller,
-        host:
-          ui.viewer,
-        controls:
-          ui.controls,
-        panel:
-          ui.panel
-      }
+      sessionRecord
     );
 
     ui.panel.dataset
@@ -1535,6 +1571,36 @@
           .setAttribute(
             "aria-pressed",
             "false"
+          );
+
+        const onFullscreenChange =
+          () => {
+            syncFullscreenButton();
+          };
+
+        document.addEventListener(
+          "fullscreenchange",
+          onFullscreenChange
+        );
+
+        document.addEventListener(
+          "webkitfullscreenchange",
+          onFullscreenChange
+        );
+
+        sessionRecord.cleanup
+          .push(
+            () => {
+              document.removeEventListener(
+                "fullscreenchange",
+                onFullscreenChange
+              );
+
+              document.removeEventListener(
+                "webkitfullscreenchange",
+                onFullscreenChange
+              );
+            }
           );
 
         syncFullscreenButton();
@@ -4228,7 +4294,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "2.2.1",
+      version: "2.3.0",
       toggle,
       render: renderPreview,
       release,
