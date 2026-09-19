@@ -807,6 +807,155 @@
     return normalizeManifest(data, path);
   }
 
+  async function readResponseArrayBufferBounded(
+    response,
+    maxBytes,
+    signal = null
+  ) {
+    if (signal?.aborted) {
+      const error =
+        new Error(
+          "NovaSparx client mesh request was cancelled."
+        );
+
+      error.name =
+        "AbortError";
+
+      throw error;
+    }
+
+    const declared =
+      Number(
+        response.headers.get(
+          "content-length"
+        ) || 0
+      );
+
+    if (
+      declared > 0 &&
+      declared > maxBytes
+    ) {
+      try {
+        await response.body
+          ?.cancel();
+      } catch {}
+
+      throw new Error(
+        "NovaSparx client mesh exceeded the browser safety limit."
+      );
+    }
+
+    if (
+      !response.body ||
+      typeof response.body
+        .getReader !==
+        "function"
+    ) {
+      const buffer =
+        await response
+          .arrayBuffer();
+
+      if (signal?.aborted) {
+        const error =
+          new Error(
+            "NovaSparx client mesh request was cancelled."
+          );
+
+        error.name =
+          "AbortError";
+
+        throw error;
+      }
+
+      if (
+        buffer.byteLength >
+        maxBytes
+      ) {
+        throw new Error(
+          "NovaSparx client mesh exceeded the browser safety limit."
+        );
+      }
+
+      return buffer;
+    }
+
+    const reader =
+      response.body
+        .getReader();
+
+    const chunks = [];
+    let total = 0;
+
+    try {
+      while (true) {
+        if (signal?.aborted) {
+          const error =
+            new Error(
+              "NovaSparx client mesh request was cancelled."
+            );
+
+          error.name =
+            "AbortError";
+
+          throw error;
+        }
+
+        const {
+          done,
+          value
+        } =
+          await reader.read();
+
+        if (done) break;
+
+        if (!value?.byteLength) {
+          continue;
+        }
+
+        total +=
+          value.byteLength;
+
+        if (
+          total >
+          maxBytes
+        ) {
+          try {
+            await reader.cancel(
+              "mesh-too-large"
+            );
+          } catch {}
+
+          throw new Error(
+            "NovaSparx client mesh exceeded the browser safety limit."
+          );
+        }
+
+        chunks.push(value);
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {}
+    }
+
+    const output =
+      new Uint8Array(total);
+
+    let offset = 0;
+
+    for (const chunk of chunks) {
+      output.set(
+        chunk,
+        offset
+      );
+
+      offset +=
+        chunk.byteLength;
+    }
+
+    return output.buffer;
+  }
+
   async function clientMeshBuffer(path, options = {}) {
     const url =
       apiUrl(
@@ -872,45 +1021,23 @@
       throw error;
     }
 
-    const contentLength =
-      Number(
-        response.headers.get(
-          "content-length"
-        ) || 0
+    const maxBytes =
+      Math.min(
+        64 * 1024 * 1024,
+        Number(
+          window.NovaSparxBrowserGuard
+            ?.status?.()
+            ?.packageLimitBytes ||
+          64 * 1024 * 1024
+        )
       );
 
-    if (
-      Number.isFinite(contentLength) &&
-      contentLength >
-        64 * 1024 * 1024
-    ) {
-      try {
-        await response.body?.cancel();
-      } catch {}
-
-      throw new Error(
-        "NovaSparx client mesh exceeded the browser safety limit."
-      );
-    }
-
-    const buffer =
-      await response.arrayBuffer();
-
-    if (
-      buffer.byteLength >
-      (
-        window.NovaSparxBrowserGuard
-          ?.status?.()
-          ?.packageLimitBytes ||
-        64 * 1024 * 1024
-      )
-    ) {
-      throw new Error(
-        "NovaSparx mesh exceeded the browser safety budget after download."
-      );
-    }
-
-    return buffer;
+    return readResponseArrayBufferBounded(
+      response,
+      maxBytes,
+      options.signal ||
+        null
+    );
   }
 
   async function clientMesh(path, options = {}) {
@@ -994,7 +1121,7 @@
   }
 
   window.NovaSparx = Object.freeze({
-    version: "1.4.0",
+    version: "1.5.0",
     resolve,
     clientMesh,
     clientMeshBuffer,
