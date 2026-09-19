@@ -759,6 +759,9 @@
                 null,
               backend:
                 options.backend !==
+                false,
+              backendJson:
+                options.backendJson !==
                 false
             }
           );
@@ -851,6 +854,85 @@
           null
       }
     );
+  }
+
+  function previewDeadline(
+    parentSignal,
+    timeoutMs,
+    reason =
+      "novasparx-fast-preview-timeout"
+  ) {
+    const controller =
+      new AbortController();
+
+    let timedOut =
+      false;
+
+    const relayAbort =
+      () => {
+        try {
+          controller.abort(
+            parentSignal?.reason ||
+            "parent-preview-aborted"
+          );
+        } catch {}
+      };
+
+    if (
+      parentSignal?.aborted
+    ) {
+      relayAbort();
+    } else {
+      parentSignal
+        ?.addEventListener?.(
+          "abort",
+          relayAbort,
+          {
+            once:
+              true
+          }
+        );
+    }
+
+    const timer =
+      setTimeout(
+        () => {
+          timedOut =
+            true;
+
+          try {
+            controller.abort(
+              reason
+            );
+          } catch {}
+        },
+        Math.max(
+          1_500,
+          Number(timeoutMs) ||
+          6_500
+        )
+      );
+
+    return {
+      signal:
+        controller.signal,
+
+      timedOut:
+        () =>
+          timedOut,
+
+      cleanup() {
+        clearTimeout(
+          timer
+        );
+
+        parentSignal
+          ?.removeEventListener?.(
+            "abort",
+            relayAbort
+          );
+      }
+    };
   }
 
   function fastImageTimeout(
@@ -2188,20 +2270,22 @@
           browserState.isMobile ||
           browserState.recoveryMode
         ) {
-          // Device cache / local WASM are cheap. Hosted mesh extraction is
-          // deliberately disabled here because mobile users asked for fast,
-          // crash-resistant previews.
-          try {
-            const localPath =
-              fastAssociation
-                ?.visualPath ||
-              (
-                pathFamily ===
-                  "mesh"
-                  ? clean
-                  : ""
-              );
+          const localPath =
+            fastAssociation
+              ?.visualPath ||
+            (
+              pathFamily ===
+                "mesh"
+                ? clean
+                : ""
+            );
 
+          let hostedError =
+            "";
+
+          // Layer 1: memory / device cache / local parser only.
+          // This stays nearly instant and never wakes the hosted backend.
+          try {
             if (localPath) {
               await renderNovaMesh(
                 localPath,
@@ -2210,7 +2294,10 @@
                 ui.meta,
                 {
                   signal,
-                  backend: false,
+                  backend:
+                    false,
+                  backendJson:
+                    false,
                   sourceLabel:
                     fastAssociation
                       ?.blueprintPath
@@ -2220,7 +2307,8 @@
               );
 
               return {
-                state: "ready",
+                state:
+                  "ready",
                 kind:
                   "device-local-mesh",
                 association:
@@ -2229,13 +2317,119 @@
             }
           } catch (error) {
             if (
-              signal?.aborted ||
-              error?.name ===
-                "AbortError"
+              signal?.aborted
             ) {
               throw abortError(
                 signal
               );
+            }
+
+            if (
+              error?.name !==
+                "AbortError"
+            ) {
+              hostedError =
+                String(
+                  error?.message ||
+                  error ||
+                  ""
+                ).slice(
+                  0,
+                  180
+                );
+            }
+          }
+
+          // Layer 2: one short streamed NSMESH attempt.
+          // The request has its own deadline and the new request-cancellation
+          // protocol kills the backend parser too, so mobile no longer needs
+          // to skip hosted extraction completely.
+          if (localPath) {
+            const hostedBudgetMs =
+              browserState
+                .recoveryMode
+                ? 4_500
+                : browserState
+                    .isIOS
+                  ? 6_500
+                  : 8_500;
+
+            const hosted =
+              previewDeadline(
+                signal,
+                hostedBudgetMs,
+                "novasparx-fast-mobile-mesh-timeout"
+              );
+
+            try {
+              setStatus(
+                ui.status,
+                "NovaSparx: streaming a fast mesh preview…"
+              );
+
+              await renderNovaMesh(
+                localPath,
+                ui.image,
+                ui.status,
+                ui.meta,
+                {
+                  signal:
+                    hosted.signal,
+                  backend:
+                    true,
+                  backendJson:
+                    false,
+                  sourceLabel:
+                    fastAssociation
+                      ?.blueprintPath
+                      ? "NovaSparx • fast Blueprint-verified streamed mesh"
+                      : "NovaSparx • fast streamed mesh"
+                }
+              );
+
+              throwIfAborted(
+                signal
+              );
+
+              return {
+                state:
+                  "ready",
+                kind:
+                  "fast-streamed-mesh",
+                association:
+                  fastAssociation
+              };
+            } catch (error) {
+              if (
+                signal?.aborted
+              ) {
+                throw abortError(
+                  signal
+                );
+              }
+
+              hostedError =
+                hosted.timedOut()
+                  ? (
+                      "Fast streamed mesh exceeded " +
+                      (
+                        hostedBudgetMs /
+                        1000
+                      ).toFixed(
+                        1
+                      ) +
+                      "s and was cancelled."
+                    )
+                  : String(
+                      error?.message ||
+                      error ||
+                      "Fast streamed mesh was unavailable."
+                    ).slice(
+                      0,
+                      220
+                    );
+            } finally {
+              hosted.cleanup();
             }
           }
 
@@ -2261,9 +2455,10 @@
               evidence:
                 fastAssociation
                   ?.evidence ||
-                "No lightweight verified preview completed inside the mobile time budget.",
+                "No verified visual completed inside the mobile preview budget.",
               error:
-                "Fast preview stopped before hosted mesh extraction to avoid long waits and browser instability."
+                hostedError ||
+                "No verified mesh source was available for this asset."
             }
           );
         }
@@ -2964,7 +3159,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "1.7.0",
+      version: "1.8.0",
       toggle,
       render: renderPreview,
       release
