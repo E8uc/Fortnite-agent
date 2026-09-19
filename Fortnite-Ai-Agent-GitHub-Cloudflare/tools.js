@@ -1291,6 +1291,39 @@
       return;
     }
 
+    if (format === "obj") {
+      const result =
+        await window
+          .NovaSparxExporter
+          ?.exportObj?.(
+            path,
+            {
+              classification,
+              signal
+            }
+          );
+
+      throwIfActionAborted(
+        signal
+      );
+
+      if (
+        !result?.blob ||
+        !result?.filename
+      ) {
+        throw new Error(
+          "OBJ export is unavailable for this asset."
+        );
+      }
+
+      saveBlob(
+        result.blob,
+        result.filename
+      );
+
+      return;
+    }
+
     if (format === "json") {
       const payload =
         await exportJson(
@@ -2388,7 +2421,8 @@
             [
               "json",
               "png",
-              "nsmesh"
+              "nsmesh",
+              "obj"
             ].includes(format)
         );
 
@@ -6823,7 +6857,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.3.3",
+      version: "1.4.0",
       open,
       close,
       formatAssetPath,
