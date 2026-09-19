@@ -2708,7 +2708,10 @@ async function s256Challenge(
   );
 }
 
-function validReturnTo(raw) {
+function validReturnTo(
+  raw,
+  env = null
+) {
   try {
     const url =
       new URL(
@@ -2723,7 +2726,9 @@ function validReturnTo(raw) {
         SITE_ORIGIN &&
       url.pathname.startsWith(
         SITE_PATH_PREFIX
-      )
+      ) &&
+      !url.username &&
+      !url.password
     ) {
       return (
         url.origin +
@@ -2732,16 +2737,33 @@ function validReturnTo(raw) {
       );
     }
 
+    const localReturnEnabled =
+      String(
+        env
+          ?.FNAA_ALLOW_LOCAL_RETURN ||
+        ""
+      )
+        .trim()
+        .toLowerCase() ===
+      "true";
+
     if (
+      localReturnEnabled &&
       (
         url.hostname ===
           "localhost" ||
         url.hostname ===
-          "127.0.0.1"
+          "127.0.0.1" ||
+        url.hostname ===
+          "[::1]" ||
+        url.hostname ===
+          "::1"
       ) &&
       /^https?:$/.test(
         url.protocol
-      )
+      ) &&
+      !url.username &&
+      !url.password
     ) {
       return (
         url.origin +
@@ -6047,7 +6069,8 @@ async function handleOpenRouterStart(
   const returnTo =
     validReturnTo(
       url.searchParams
-        .get("return_to")
+        .get("return_to"),
+      env
     );
 
   try {
@@ -6195,7 +6218,8 @@ async function handleOpenRouterCallback(
 
     returnTo =
       validReturnTo(
-        pending.returnTo
+        pending.returnTo,
+        env
       );
 
     if (
