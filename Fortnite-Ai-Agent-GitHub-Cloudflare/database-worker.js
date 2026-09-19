@@ -246,13 +246,7 @@ self.addEventListener(
           error?.name ===
             "AbortError"
             ? "Database search was replaced by a newer request."
-            : String(
-                error?.message ||
-                "Database search failed."
-              ).slice(
-                0,
-                240
-              )
+            : "Database search failed."
       });
     } finally {
       if (
