@@ -1894,6 +1894,455 @@
     );
   }
 
+  function buildObj(
+    manifest,
+    options = {}
+  ) {
+    const signal =
+      options.signal ||
+      null;
+
+    throwIfAborted(
+      signal
+    );
+
+    if (!manifest?.geometry) {
+      throw new Error(
+        "NovaSparx OBJ export requires mesh geometry."
+      );
+    }
+
+    const positions =
+      transformPositions(
+        manifest.geometry
+          .positions,
+        signal
+      );
+
+    const normals =
+      transformNormals(
+        manifest.geometry
+          .normals,
+        signal
+      );
+
+    const uv0 =
+      manifest.geometry.uv0
+        ? (
+            manifest.geometry
+              .uv0 instanceof
+              Float32Array
+              ? manifest.geometry
+                  .uv0
+              : new Float32Array(
+                  manifest.geometry
+                    .uv0
+                )
+          )
+        : null;
+
+    const indices =
+      transformIndices(
+        manifest.geometry
+          .indices,
+        signal
+      );
+
+    if (
+      positions.length < 9 ||
+      indices.length < 3 ||
+      indices.length % 3 !==
+        0
+    ) {
+      throw new Error(
+        "NovaSparx mesh geometry is incomplete."
+      );
+    }
+
+    const vertexCount =
+      positions.length / 3;
+
+    if (
+      normals &&
+      normals.length !==
+        positions.length
+    ) {
+      throw new Error(
+        "NovaSparx mesh normals do not match the vertex count."
+      );
+    }
+
+    if (
+      uv0 &&
+      uv0.length !==
+        vertexCount * 2
+    ) {
+      throw new Error(
+        "NovaSparx mesh UVs do not match the vertex count."
+      );
+    }
+
+    const type =
+      String(
+        manifest.assetType ||
+        ""
+      ).toLowerCase();
+
+    if (
+      type.includes(
+        "skeletalmesh"
+      )
+    ) {
+      throw new Error(
+        "OBJ download is disabled for SkeletalMesh because OBJ cannot preserve its skinning."
+      );
+    }
+
+    const lines = [
+      "# NovaSparx OBJ export",
+      `# Original path: ${String(
+        manifest.path ||
+        options.path ||
+        ""
+      )}`,
+      `# Source layer: ${String(
+        options.sourceLayer ||
+        ""
+      )}`,
+      "# Coordinates: glTF/UEFN-friendly meters",
+      `o ${cleanName(
+        manifest.path ||
+        options.path,
+        "NovaSparx_Asset"
+      )}`
+    ];
+
+    for (
+      let index = 0;
+      index < positions.length;
+      index += 3
+    ) {
+      if (
+        (index & 12287) === 0
+      ) {
+        throwIfAborted(
+          signal
+        );
+      }
+
+      lines.push(
+        `v ${positions[index]} ${positions[index + 1]} ${positions[index + 2]}`
+      );
+    }
+
+    if (uv0) {
+      for (
+        let index = 0;
+        index < uv0.length;
+        index += 2
+      ) {
+        if (
+          (index & 8191) === 0
+        ) {
+          throwIfAborted(
+            signal
+          );
+        }
+
+        lines.push(
+          `vt ${uv0[index]} ${uv0[index + 1]}`
+        );
+      }
+    }
+
+    if (normals) {
+      for (
+        let index = 0;
+        index < normals.length;
+        index += 3
+      ) {
+        if (
+          (index & 12287) === 0
+        ) {
+          throwIfAborted(
+            signal
+          );
+        }
+
+        lines.push(
+          `vn ${normals[index]} ${normals[index + 1]} ${normals[index + 2]}`
+        );
+      }
+    }
+
+    const materials =
+      Array.isArray(
+        manifest.materials
+      )
+        ? manifest.materials
+        : [];
+
+    const sections =
+      Array.isArray(
+        manifest.sections
+      ) &&
+      manifest.sections.length
+        ? manifest.sections
+        : [
+            {
+              firstIndex: 0,
+              indexCount:
+                indices.length,
+              materialIndex: 0
+            }
+          ];
+
+    const faceToken =
+      (rawIndex) => {
+        const value =
+          Number(rawIndex) +
+          1;
+
+        if (
+          uv0 &&
+          normals
+        ) {
+          return (
+            value +
+            "/" +
+            value +
+            "/" +
+            value
+          );
+        }
+
+        if (uv0) {
+          return (
+            value +
+            "/" +
+            value
+          );
+        }
+
+        if (normals) {
+          return (
+            value +
+            "//" +
+            value
+          );
+        }
+
+        return String(
+          value
+        );
+      };
+
+    for (
+      let sectionIndex = 0;
+      sectionIndex <
+        sections.length;
+      sectionIndex++
+    ) {
+      throwIfAborted(
+        signal
+      );
+
+      const section =
+        sections[sectionIndex] ||
+        {};
+
+      const firstIndex =
+        Math.max(
+          0,
+          Number(
+            section.firstIndex ||
+            0
+          ) || 0
+        );
+
+      let indexCount =
+        Math.max(
+          0,
+          Number(
+            section.indexCount ||
+            0
+          ) || 0
+        );
+
+      indexCount =
+        Math.min(
+          indexCount,
+          indices.length -
+            firstIndex
+        );
+
+      indexCount -=
+        indexCount % 3;
+
+      if (
+        indexCount <= 0
+      ) {
+        continue;
+      }
+
+      const materialIndex =
+        Math.min(
+          Math.max(
+            0,
+            Number(
+              section.materialIndex ||
+              0
+            ) || 0
+          ),
+          Math.max(
+            0,
+            materials.length -
+              1
+          )
+        );
+
+      const materialName =
+        cleanName(
+          materials[
+            materialIndex
+          ]?.name ||
+          materials[
+            materialIndex
+          ]?.path ||
+          `Material_${materialIndex}`,
+          `Material_${materialIndex}`
+        );
+
+      lines.push(
+        `g Section_${sectionIndex}`,
+        `usemtl ${materialName}`
+      );
+
+      const end =
+        firstIndex +
+        indexCount;
+
+      for (
+        let index = firstIndex;
+        index + 2 < end;
+        index += 3
+      ) {
+        if (
+          (index & 8191) === 0
+        ) {
+          throwIfAborted(
+            signal
+          );
+        }
+
+        lines.push(
+          `f ${faceToken(indices[index])} ${faceToken(indices[index + 1])} ${faceToken(indices[index + 2])}`
+        );
+      }
+    }
+
+    throwIfAborted(
+      signal
+    );
+
+    const text =
+      lines.join("\n") +
+      "\n";
+
+    const bytes =
+      new TextEncoder()
+        .encode(text);
+
+    if (
+      bytes.byteLength >
+      exportBudget()
+        .maxBinaryBytes
+    ) {
+      throw new Error(
+        "The OBJ exceeded this device's safe export budget."
+      );
+    }
+
+    return {
+      text,
+      blob:
+        new Blob(
+          [bytes],
+          {
+            type:
+              "text/plain;charset=utf-8"
+          }
+        ),
+      filename:
+        cleanName(
+          manifest.path ||
+          options.path
+        ) +
+        ".obj",
+      mimeType:
+        "text/plain",
+      warnings: [
+        "OBJ preserves geometry, normals, UV0 and material slot names, but does not embed textures."
+      ]
+    };
+  }
+
+  async function exportObj(
+    path,
+    options = {}
+  ) {
+    const target =
+      await meshTarget(
+        path,
+        options.classification,
+        options.signal ||
+          null
+      );
+
+    throwIfAborted(
+      options.signal
+    );
+
+    const resolved =
+      await globalThis
+        .NovaSparxLayers
+        ?.resolveMesh?.(
+          target,
+          {
+            preferHQ:
+              true,
+            signal:
+              options.signal
+          }
+        );
+
+    throwIfAborted(
+      options.signal
+    );
+
+    if (
+      !resolved?.manifest
+    ) {
+      throw new Error(
+        "NovaSparx could not resolve this mesh for OBJ export."
+      );
+    }
+
+    return buildObj(
+      resolved.manifest,
+      {
+        path:
+          target,
+        sourceLayer:
+          resolved.layer ||
+          "",
+        signal:
+          options.signal ||
+          null
+      }
+    );
+  }
+
   async function exportGlb(
     path,
     options = {}
@@ -2133,10 +2582,12 @@
   globalThis.NovaSparxExporter =
     Object.freeze({
       version:
-        "1.2.0",
+        "1.3.0",
       supports,
       buildGlb,
+      buildObj,
       exportGlb,
+      exportObj,
       exportTexture,
       exportUEFN
     });
