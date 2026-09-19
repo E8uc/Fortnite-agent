@@ -154,6 +154,7 @@
     throwIfAborted(
       signal
     );
+
     const declared =
       Number(
         response.headers.get(
@@ -176,25 +177,112 @@
       );
     }
 
-    const buffer =
-      await response
-        .arrayBuffer();
+    if (
+      !response.body ||
+      typeof response.body
+        .getReader !==
+        "function"
+    ) {
+      const buffer =
+        await response
+          .arrayBuffer();
+
+      throwIfAborted(
+        signal
+      );
+
+      if (
+        buffer.byteLength >
+        maxBytes
+      ) {
+        throw new Error(
+          label +
+          " exceeded the browser memory guard."
+        );
+      }
+
+      return buffer;
+    }
+
+    const reader =
+      response.body
+        .getReader();
+
+    const chunks = [];
+    let total = 0;
+
+    try {
+      while (true) {
+        throwIfAborted(
+          signal
+        );
+
+        const {
+          done,
+          value
+        } =
+          await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        if (!value?.byteLength) {
+          continue;
+        }
+
+        total +=
+          value.byteLength;
+
+        if (
+          total >
+          maxBytes
+        ) {
+          try {
+            await reader.cancel();
+          } catch {}
+
+          throw new Error(
+            label +
+            " exceeded the browser memory guard."
+          );
+        }
+
+        chunks.push(
+          value
+        );
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {}
+    }
 
     throwIfAborted(
       signal
     );
 
-    if (
-      buffer.byteLength >
-      maxBytes
-    ) {
-      throw new Error(
-        label +
-        " exceeded the browser memory guard."
+    const output =
+      new Uint8Array(
+        total
       );
+
+    let offset = 0;
+
+    for (
+      const chunk of
+      chunks
+    ) {
+      output.set(
+        chunk,
+        offset
+      );
+
+      offset +=
+        chunk.byteLength;
     }
 
-    return buffer;
+    return output.buffer;
   }
 
   function rangeResult(
@@ -1159,7 +1247,7 @@
   function status() {
     return {
       version:
-        "2.2.0",
+        "2.3.0",
       apiConfigured:
         Boolean(
           apiBase()
@@ -1212,7 +1300,7 @@
   globalThis.NovaSparxBrowserTransport =
     Object.freeze({
       version:
-        "2.2.0",
+        "2.3.0",
       maxRangeBytes:
         MAX_RANGE_BYTES,
       fetchRange,
