@@ -43,6 +43,7 @@ const OAUTH_TTL_MS = 10 * 60 * 1000;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_NOVA_BINARY_BYTES = 16 * 1024 * 1024;
 const MAX_NOVA_JSON_BYTES = 2 * 1024 * 1024;
+const MAX_AI_RESPONSE_BYTES = 1024 * 1024;
 const MAX_ASSET_PATH = 2400;
 
 const ABUSE_WINDOW_MS = 60_000;
@@ -717,6 +718,32 @@ async function readJsonRequestBounded(
     new TextDecoder()
       .decode(bytes)
   );
+}
+
+async function readJsonResponseBounded(
+  response,
+  maxBytes,
+  label = "JSON response"
+) {
+  const bytes =
+    await readResponseBytesBounded(
+      response,
+      maxBytes,
+      label
+    );
+
+  if (!bytes.byteLength) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(
+      new TextDecoder()
+        .decode(bytes)
+    );
+  } catch {
+    return {};
+  }
 }
 
 async function fetchNovaEdgeJson(
@@ -6755,11 +6782,11 @@ async function handleChat(
           );
 
     let data =
-      await response
-        .json()
-        .catch(
-          () => ({})
-        );
+      await readJsonResponseBounded(
+        response,
+        MAX_AI_RESPONSE_BYTES,
+        "AI provider response"
+      );
 
     // Compound can reject a provider-specific field on rare model changes.
     // If so, fall back to the normal account/guest chat instead of failing.
@@ -6792,11 +6819,11 @@ async function handleChat(
         provider;
 
       data =
-        await response
-          .json()
-          .catch(
-            () => ({})
-          );
+        await readJsonResponseBounded(
+          response,
+          MAX_AI_RESPONSE_BYTES,
+          "AI provider fallback response"
+        );
     }
 
     if (!response.ok) {
@@ -7067,7 +7094,7 @@ export default {
           ok: true,
           service: "FNAA",
           version:
-            "1.0.4",
+            "1.0.5",
           fortnite:
             CURRENT_FORTNITE_VERSION,
           authProvider:
