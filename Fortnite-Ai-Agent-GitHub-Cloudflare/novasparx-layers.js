@@ -2,7 +2,8 @@
   "use strict";
 
   const CORE = () => globalThis.NovaSparx;
-  const CACHE_NAME = "novasparx-device-mesh-v1";
+  const CACHE_NAME =
+    "novasparx-device-mesh-v2";
   const IS_MOBILE =
     /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || "");
   const MAX_DEVICE_BYTES =
@@ -80,12 +81,29 @@
   }
 
   function cacheRequest(path) {
-    return new Request(
+    const cacheKey =
+      key(path);
+
+    const url =
       new URL(
-        `__novasparx_cache__/${hash(key(path))}.mesh`,
+        `__novasparx_cache__/v2/${hash(cacheKey)}.mesh`,
         document.baseURI
-      ).toString(),
-      { method: "GET" }
+      );
+
+    // Keep the canonical path in the CacheStorage key as well as the short
+    // hash. A 32-bit hash alone can collide and must never return a different
+    // asset's geometry.
+    url.searchParams.set(
+      "path",
+      cacheKey
+    );
+
+    return new Request(
+      url.toString(),
+      {
+        method:
+          "GET"
+      }
     );
   }
 
@@ -174,7 +192,23 @@
         layer: "device-cache",
         sourceLabel: "NovaSparx • device cache"
       };
-    } catch {
+    } catch (error) {
+      if (
+        signal?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        throw abortError(
+          signal
+        );
+      }
+
+      try {
+        await cache.delete(
+          cacheRequest(path)
+        );
+      } catch {}
+
       return null;
     }
   }
@@ -236,7 +270,17 @@
       );
 
       await pruneDeviceCache(cache);
-    } catch {
+    } catch (error) {
+      if (
+        signal?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        throw abortError(
+          signal
+        );
+      }
+
       // Storage quota/private browsing must never break previews.
     }
   }
@@ -631,7 +675,7 @@
 
   function capabilities() {
     return {
-      version: "2.3.0",
+      version: "2.4.0",
       layers: [
         {
           id: "device-memory",
@@ -694,7 +738,7 @@
   }
 
   globalThis.NovaSparxLayers = Object.freeze({
-    version: "2.3.0",
+    version: "2.4.0",
     resolveMesh,
     capabilities,
     clearDeviceCache,
