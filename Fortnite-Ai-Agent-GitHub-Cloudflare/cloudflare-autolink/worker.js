@@ -193,6 +193,12 @@ export class NovaLinkDurableObject extends DurableObject {
     // for data, so they do not need Durable Object storage.
     this.pending = new Map();
 
+    // If a browser replaces a request after AutoLink already forwarded it,
+    // keep the id briefly so any late response frames can be discarded
+    // without tearing down the reverse socket.
+    this.cancelledResponseIds =
+      new Set();
+
     // Binary frames intentionally contain only body bytes. NovaSparx sends one
     // response at a time over the reverse socket, so this identifies which
     // pending request owns incoming binary frames.
@@ -403,17 +409,89 @@ export class NovaLinkDurableObject extends DurableObject {
       expectedChunks: null,
       receivedBytes: 0,
       receivedChunks: 0,
-      timeout: null
+      timeout: null,
+      requestSignal:
+        request.signal ||
+        null,
+      abortHandler:
+        null
     };
 
-    pending.timeout = setTimeout(() => {
-      this.failPending(
-        id,
-        new Error("NovaSparx AutoLink request timed out.")
-      );
-    }, requestTimeoutMs(url.pathname));
+    const cancelBackend =
+      (reason) => {
+        this.rememberCancelledResponse(
+          id
+        );
 
-    this.pending.set(id, pending);
+        try {
+          socket.send(
+            JSON.stringify({
+              type:
+                "cancel",
+              id,
+              reason:
+                String(
+                  reason ||
+                  "client-cancelled"
+                ).slice(
+                  0,
+                  120
+                )
+            })
+          );
+        } catch {}
+
+        this.failPending(
+          id,
+          new Error(
+            "NovaSparx AutoLink request was cancelled."
+          ),
+          {
+            discardLateResponse:
+              true
+          }
+        );
+      };
+
+    pending.abortHandler =
+      () =>
+        cancelBackend(
+          request.signal
+            ?.reason ||
+          "client-request-aborted"
+        );
+
+    pending.timeout = setTimeout(
+      () =>
+        cancelBackend(
+          "autolink-timeout"
+        ),
+      requestTimeoutMs(
+        url.pathname
+      )
+    );
+
+    this.pending.set(
+      id,
+      pending
+    );
+
+    if (
+      request.signal
+        ?.aborted
+    ) {
+      pending.abortHandler();
+    } else {
+      request.signal
+        ?.addEventListener?.(
+          "abort",
+          pending.abortHandler,
+          {
+            once:
+              true
+          }
+        );
+    }
 
     // Keep this Durable Object event alive until the complete response body
     // arrives. Without this, the WebSocket can survive hibernation while the
@@ -551,6 +629,13 @@ export class NovaLinkDurableObject extends DurableObject {
     const pending = this.pending.get(id);
 
     if (!pending) {
+      if (
+        this.cancelledResponseIds
+          .has(id)
+      ) {
+        return;
+      }
+
       ws.close(
         1002,
         "Unknown response id"
@@ -604,7 +689,33 @@ export class NovaLinkDurableObject extends DurableObject {
     if (!id) return;
 
     const pending = this.pending.get(id);
-    if (!pending) return;
+
+    if (!pending) {
+      if (
+        this.cancelledResponseIds
+          .has(id)
+      ) {
+        if (
+          this.activeResponseId &&
+          this.activeResponseId !==
+            id
+        ) {
+          this.failAllPending(
+            new Error(
+              "NovaLink received overlapping binary responses."
+            )
+          );
+          return;
+        }
+
+        this.activeResponseId =
+          id;
+
+        return;
+      }
+
+      return;
+    }
 
     if (this.activeResponseId) {
       this.failAllPending(
@@ -678,7 +789,26 @@ export class NovaLinkDurableObject extends DurableObject {
     if (!id) return;
 
     const pending = this.pending.get(id);
-    if (!pending) return;
+
+    if (!pending) {
+      if (
+        this.cancelledResponseIds
+          .has(id)
+      ) {
+        this.cancelledResponseIds
+          .delete(id);
+
+        if (
+          this.activeResponseId ===
+          id
+        ) {
+          this.activeResponseId =
+            null;
+        }
+      }
+
+      return;
+    }
 
     if (this.activeResponseId !== id) {
       this.failPending(
@@ -705,7 +835,16 @@ export class NovaLinkDurableObject extends DurableObject {
       return;
     }
 
-    clearTimeout(pending.timeout);
+    clearTimeout(
+      pending.timeout
+    );
+
+    pending.requestSignal
+      ?.removeEventListener?.(
+        "abort",
+        pending.abortHandler
+      );
+
     this.pending.delete(id);
     this.activeResponseId = null;
 
@@ -751,12 +890,62 @@ export class NovaLinkDurableObject extends DurableObject {
     );
   }
 
-  failPending(id, error) {
+  rememberCancelledResponse(
+    id
+  ) {
+    if (!id) {
+      return;
+    }
+
+    this.cancelledResponseIds
+      .add(id);
+
+    while (
+      this.cancelledResponseIds
+        .size > 128
+    ) {
+      const oldest =
+        this.cancelledResponseIds
+          .values()
+          .next()
+          .value;
+
+      if (!oldest) {
+        break;
+      }
+
+      this.cancelledResponseIds
+        .delete(oldest);
+    }
+  }
+
+  failPending(
+    id,
+    error,
+    options = {}
+  ) {
     const pending = this.pending.get(id);
     if (!pending) return;
 
-    clearTimeout(pending.timeout);
+    clearTimeout(
+      pending.timeout
+    );
+
+    pending.requestSignal
+      ?.removeEventListener?.(
+        "abort",
+        pending.abortHandler
+      );
+
     this.pending.delete(id);
+
+    if (
+      options.discardLateResponse
+    ) {
+      this.rememberCancelledResponse(
+        id
+      );
+    }
 
     if (!pending.headerResolved) {
       try {
@@ -774,8 +963,14 @@ export class NovaLinkDurableObject extends DurableObject {
       pending.resolveDone?.();
     }
 
-    if (this.activeResponseId === id) {
-      this.activeResponseId = null;
+    if (
+      this.activeResponseId ===
+        id &&
+      !options
+        .discardLateResponse
+    ) {
+      this.activeResponseId =
+        null;
     }
   }
 
@@ -787,5 +982,8 @@ export class NovaLinkDurableObject extends DurableObject {
     }
 
     this.activeResponseId = null;
+
+    this.cancelledResponseIds
+      .clear();
   }
 }
