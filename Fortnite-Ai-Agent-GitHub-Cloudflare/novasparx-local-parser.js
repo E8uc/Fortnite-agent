@@ -7,8 +7,42 @@
   let prepared =
     null;
 
-  let preparePromise =
+  let prepareTask =
     null;
+
+  let prepareGeneration =
+    0;
+
+  function abortError(
+    signal
+  ) {
+    const error =
+      new Error(
+        "NovaSparx parser request was replaced by a newer request."
+      );
+
+    error.name =
+      "AbortError";
+
+    error.code =
+      "NOVASPARX_REQUEST_REPLACED";
+
+    error.reason =
+      signal?.reason ||
+      "cancelled";
+
+    return error;
+  }
+
+  function throwIfAborted(
+    signal
+  ) {
+    if (signal?.aborted) {
+      throw abortError(
+        signal
+      );
+    }
+  }
 
   function unavailableError() {
     const error =
@@ -41,8 +75,10 @@
     prepared =
       null;
 
-    preparePromise =
+    prepareTask =
       null;
+
+    prepareGeneration++;
 
     return true;
   }
@@ -73,6 +109,10 @@
   async function prepare(
     options = {}
   ) {
+    throwIfAborted(
+      options.signal
+    );
+
     if (!engine) {
       throw unavailableError();
     }
@@ -85,15 +125,28 @@
       return prepared;
     }
 
+    const requestSignal =
+      options.signal ||
+      null;
+
     if (
       !options.refresh &&
-      preparePromise
+      prepareTask &&
+      prepareTask.signal ===
+        requestSignal
     ) {
-      return preparePromise;
+      return prepareTask
+        .promise;
     }
+
+    const generation =
+      ++prepareGeneration;
 
     const request =
       (async () => {
+        throwIfAborted(
+          requestSignal
+        );
         const transport =
           transportFor(
             options
@@ -128,21 +181,23 @@
             await transport
               .bootstrap({
                 signal:
-                  options.signal ||
-                  null,
+                  requestSignal,
                 refresh:
                   Boolean(
                     options.refresh
                   )
               });
+
+          throwIfAborted(
+            requestSignal
+          );
         }
 
         const context = {
           transport,
           bootstrap,
           signal:
-            options.signal ||
-            null,
+            requestSignal,
           webAssembly:
             typeof WebAssembly ===
               "object",
@@ -159,7 +214,11 @@
               )
             : null;
 
-        prepared = {
+        throwIfAborted(
+          requestSignal
+        );
+
+        const nextPrepared = {
           engine,
           engineState,
           transport,
@@ -168,20 +227,33 @@
             Date.now()
         };
 
-        return prepared;
+        if (
+          generation ===
+          prepareGeneration
+        ) {
+          prepared =
+            nextPrepared;
+        }
+
+        return nextPrepared;
       })();
 
-    preparePromise =
-      request;
+    prepareTask = {
+      promise:
+        request,
+      signal:
+        requestSignal,
+      generation
+    };
 
     try {
       return await request;
     } finally {
       if (
-        preparePromise ===
+        prepareTask?.promise ===
         request
       ) {
-        preparePromise =
+        prepareTask =
           null;
       }
     }
@@ -191,6 +263,10 @@
     path,
     options = {}
   ) {
+    throwIfAborted(
+      options.signal
+    );
+
     if (!engine) {
       throw unavailableError();
     }
@@ -214,9 +290,14 @@
             options
           );
 
-    return engine.resolveMesh(
-      path,
-      {
+    throwIfAborted(
+      options.signal
+    );
+
+    const result =
+      await engine.resolveMesh(
+        path,
+        {
         ...options,
         transport:
           state.transport,
@@ -226,6 +307,12 @@
           state.engineState
       }
     );
+
+    throwIfAborted(
+      options.signal
+    );
+
+    return result;
   }
 
   function status() {
@@ -235,7 +322,7 @@
 
     return {
       version:
-        "2.0.0",
+        "2.1.0",
       registered:
         Boolean(engine),
       prepared:
@@ -274,7 +361,7 @@
   globalThis.NovaSparxLocalParser =
     Object.freeze({
       version:
-        "2.0.0",
+        "2.1.0",
       register,
       reset,
       prepare,
