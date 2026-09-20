@@ -32,8 +32,8 @@ Tests: `novasparx-associations.selftest.mjs`, `diagnosis-corpus.json`, `diagnosi
 - Diagnosis: existing regressions plus 99 database paths, 22 cross-layer cases, root-identity/unknown-class/capability regressions, production canonicalization, actual Worker routing parity, and 8 captured Dilly responses pass.
 - Browser memory and transport/security self-tests pass in both repositories; NovaSparx format self-test passes.
 - `git diff --check`: pass.
-- Local real-browser execution is blocked: Chromium download failed (timeouts/502). The browser test is committed for CI; it exercises real DOM/search/classification handlers with captured service responses, not a live deployment.
-- Local .NET build is blocked: the SDK download host is disallowed. Companion PR CI must build the backend/reference-index tool before merge.
+- Local Chromium installation failed, but real Chromium integration passed in GitHub Actions on 20 September: 11 search cards, actual DOM tags and capability buttons. Run: https://github.com/E8uc/Fortnite-agent/actions/runs/35496127661 . This exercises production handlers with captured service responses, not a live deployment.
+- Local SDK installation was blocked, but companion GitHub Actions successfully built the backend and reference-index tool, then passed format/memory/transport checks. Run: https://github.com/E8uc/NovaSparx/actions/runs/35496139793 .
 
 ## Limits and next-stage notes
 
@@ -41,7 +41,7 @@ Naming-only diagnoses remain heuristic; custom classes, redirectors, conflicting
 
 `fortnite_assets.gz`, generated index artifacts and `FNAA_FORTNITE_VERSION: "42.00"` are unchanged. The existing database workflow can rebuild the changed scope rules after merge; this is not an automatic Fortnite-version updater.
 
-The stage is not certified as live end-to-end complete until CI/browser integration and the deployed inspection-to-card path are verified. Do not start Layer 8, 3D, Audio or UEFN implementation based solely on these tests.
+The stage is not certified as live end-to-end complete until the deployed inspection-to-card path is verified; CI and browser integration have passed. Do not start Layer 8, 3D, Audio or UEFN implementation based solely on these tests.
 
 ## Current upstream references inspected
 
@@ -49,3 +49,5 @@ The stage is not certified as live end-to-end complete until CI/browser integrat
 - FModel `dev` `1adf4055f07a93543ea445f5e34b0de0b3bed5df`; latest reported release `aug-2026`. Current Dilly integration: https://github.com/4sval/FModel/blob/1adf4055f07a93543ea445f5e34b0de0b3bed5df/FModel/ViewModels/ApiEndpoints/DillyApiEndpoints.cs
 - FortnitePorting current `main` `cabc462df93de62a10affe48b643ea08abf935a5`: `src/FortnitePorting/Services/ExportService.cs` uses actual UObject types and `ExportType`. Its export categories are not copied as root asset classifications (e.g. a Blueprint exporter can produce a mesh without changing the Blueprint's class).
 - Supplied browser-only architecture report: used for the separation between metadata/ranges and device parsing; no next-stage implementation was started.
+
+Review branches: https://github.com/E8uc/Fortnite-agent/pull/1 and https://github.com/E8uc/NovaSparx/pull/2 . No changes have been merged to main.
