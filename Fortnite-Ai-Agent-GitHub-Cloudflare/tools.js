@@ -684,7 +684,7 @@
       {
         kind,
         canPreview:
-          true,
+          false,
         previewMode:
           family === "mesh"
             ? "3d"
@@ -692,9 +692,9 @@
               ? "image"
               : "universal",
         canViewImage:
-          family === "texture",
+          false,
         canView3D:
-          family === "mesh",
+          false,
         canDownload:
           true,
         canExportUEFN:
@@ -739,6 +739,11 @@
     };
   }
 
+  function evidenceRank(source) {
+    return ({ inspection: 5, "export-json": 4, "typed-path": 3,
+      "generated-class-path": 2, "path-fallback": 1 })[source] || 0;
+  }
+
   async function classifyAsset(
     path,
     options = {}
@@ -767,6 +772,7 @@
     }
 
     if (
+      !options.inspection && !options.data &&
       assetClassificationCache
         .has(key)
     ) {
@@ -777,7 +783,8 @@
       const cachedVerified =
         [
           "inspection",
-          "export-json"
+          "export-json",
+          "typed-path"
         ].includes(
           String(
             cached?.source ||
@@ -802,7 +809,7 @@
       );
 
     if (
-      !signal &&
+      !signal && !options.inspection && !options.data &&
       assetClassificationRequests
         .has(requestKey)
     ) {
@@ -825,6 +832,8 @@
                   path,
                   {
                     verifyKnown,
+                    inspection: options.inspection,
+                    data: options.data,
                     signal:
                       signal ||
                       undefined
@@ -867,6 +876,11 @@
               signal
             );
 
+            const previous = assetClassificationCache.get(key);
+            if (previous && evidenceRank(previous.source) > evidenceRank(result.source)) {
+              return previous;
+            }
+
             assetClassificationCache.set(
               key,
               result
@@ -907,7 +921,7 @@
           }
         );
 
-    if (!signal) {
+    if (!signal && !options.inspection && !options.data) {
       assetClassificationRequests.set(
         requestKey,
         request
@@ -994,6 +1008,9 @@
       return;
     }
 
+    if (evidenceRank(card.dataset.assetEvidence) > evidenceRank(classification.source)) {
+      return;
+    }
     const capabilities =
       classification.capabilities ||
       {};
@@ -1016,10 +1033,16 @@
         )
       );
 
-    setAssetTags(
-      card,
-      classification
-    );
+    card.dataset.assetEvidence = classification.source || "unknown";
+    setAssetTags(card, classification);
+    const tagRoot = card.querySelector("[data-asset-tags]");
+    if (tagRoot) {
+      tagRoot.title = classification.source === "path-fallback"
+        ? "Inferred from path naming; Unreal class is not verified."
+        : classification.assetType
+          ? `Unreal class: ${classification.assetType}`
+          : "Asset type evidence unavailable.";
+    }
 
     const previewButton =
       card.querySelector(
@@ -1067,8 +1090,8 @@
             "Hide Image"
           );
       } else if (
-        capabilities.canPreview !==
-          false
+        capabilities.canPreview === true &&
+        !capabilities.canView3D
       ) {
         previewButton.disabled =
           false;
@@ -1136,6 +1159,7 @@
         );
 
       const supported =
+        capabilities.canExportUEFN === true &&
         exporterSupports &&
         (
           !meshKind ||
@@ -1918,6 +1942,7 @@
             class="json-view-button"
             type="button"
             data-asset-action="preview"
+            disabled
           >${escapeHtml(t("viewPreview", "View Preview"))}</button>
 
           <button
@@ -3216,6 +3241,9 @@
           throwIfActionAborted(
             signal
           );
+
+          const verified = await classifyAsset(path, { inspection, signal });
+          applyAssetClassification(card, verified);
 
           if (
             Array.isArray(
@@ -5918,59 +5946,7 @@
   }
 
   function isClassCompatibleAsset(path) {
-    const clean =
-      unwrapAssetPath(path)
-        .replace(/\\/g, "/");
-
-    if (!clean) return false;
-
-    const lower =
-      clean.toLowerCase();
-
-    if (
-      /\.(uasset)?$/i.test(lower)
-    ) {
-      // Extension by itself is not enough to identify a generated class.
-    }
-
-    const name =
-      clean
-        .split("/")
-        .pop()
-        ?.split(".")[0]
-        ?.toLowerCase() ||
-      "";
-
-    if (
-      /^(sm_|sk_|m_|mi_|t_|tex_|ns_|ps_|fx_|s_|sw_|soundwave_|anim_|a_)/i.test(
-        name
-      )
-    ) {
-      return false;
-    }
-
-    if (
-      lower.includes("/materials/") ||
-      lower.includes("/materialinstances/") ||
-      lower.includes("/textures/") ||
-      lower.includes("/meshes/") ||
-      lower.includes("/staticmesh") ||
-      lower.includes("/skeletalmesh") ||
-      lower.includes("/niagara/") ||
-      lower.includes("/sounds/") ||
-      lower.includes("/audio/")
-    ) {
-      return false;
-    }
-
-    return (
-      /^(bp_|b_|ab_|ga_|gc_|w_|wid_|athena_|creative_|device_)/i.test(name) ||
-      lower.includes("/blueprints/") ||
-      lower.includes("/blueprint/") ||
-      lower.includes("/abilities/") ||
-      lower.includes("/gameplayabilities/") ||
-      lower.endsWith("_c")
-    );
+    return window.FNAAAssetDiagnosis?.diagnosePath(path).kind === "blueprint";
   }
 
   function addClassSuffix(path) {

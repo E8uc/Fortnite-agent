@@ -161,43 +161,76 @@ def shard_key(path_or_query: str) -> str:
     return compact[:SHARD_KEY_LENGTH]
 
 
+def diagnosis_scope(path: str) -> str:
+    """Index eligibility only; never use a broad /Meshes/ folder as type proof.
+
+    Kept in parity with asset-diagnosis.js by the diagnosis corpus self-test.
+    Unknown explicit classes block misleading filename/folder fallbacks.
+    """
+    value = str(path or "").strip().replace("\\", "/")
+    typed = re.fullmatch(r"((?:/Script/[^.'\"\s]+\.)?[A-Za-z0-9_]+)\s*['\"]([^'\"]+)['\"]", value)
+    if typed:
+        cls = typed[1].rsplit(".", 1)[-1].casefold()
+        if cls.startswith("u"):
+            cls = cls[1:]
+        if cls == "staticmesh":
+            return "staticmesh"
+        if cls == "skeletalmesh":
+            return "skeletalmesh"
+        if cls in {"material", "materialinterface", "materialinstance", "materialinstanceconstant", "materialinstancedynamic", "materialfunction", "materialfunctioninterface", "materialfunctioninstance", "materialfunctionmateriallayer", "materialfunctionmateriallayerblend", "materialparametercollection"}:
+            return "material"
+        if cls not in {"object", "softobjectpath"}:
+            return "other"
+        value = typed[2]
+    name = basename(value).casefold()
+    if "." in name:
+        left, right = name.split(".", 1)
+        if right == "uasset":
+            name = left
+        elif right == left + "_c":
+            return "other"
+        elif right == left:
+            name = left
+        else:
+            return "other"
+    if name.startswith(("sk_", "skm_")):
+        return "skeletalmesh"
+    if name.startswith("sm_"):
+        return "staticmesh"
+    if name.startswith(("mi_", "m_", "mf_", "mpc_")):
+        return "material"
+    if re.match(r"^(?:bp_|bpc_|abp_|wbp_|t_|tex_|texture_|sw_|usw_|soundwave_|sc_|soundcue_|mss_|metasound_|anim_|am_|montage_|ns_|ne_|ps_|cid_|bid_|eid_|pickaxe_|da_|dt_|data_)", name):
+        return "other"
+    if re.search(r"/skeletalmeshes?/", value, re.I):
+        return "skeletalmesh"
+    if re.search(r"/staticmeshes?/", value, re.I):
+        return "staticmesh"
+    return "other"
+
+
 def is_sm(path: str) -> bool:
-    return basename(path).casefold().startswith("sm_")
+    return diagnosis_scope(path) == "staticmesh"
 
 
 def is_material(path: str) -> bool:
-    name = basename(path).casefold()
-    return name.startswith("m_") or name.startswith("mi_")
+    return diagnosis_scope(path) == "material"
 
 
 def is_mesh(path: str) -> bool:
-    name = basename(path).casefold()
-    lower = str(path).casefold().replace("\\", "/")
-
-    return (
-        name.startswith("sm_")
-        or name.startswith("sk_")
-        or name.startswith("skm_")
-        or "/meshes/" in lower
-        or "/mesh/" in lower
-        or "/staticmeshes/" in lower
-        or "/skeletalmeshes/" in lower
-        or "/staticmesh/" in lower
-        or "/skeletalmesh/" in lower
-    )
+    return diagnosis_scope(path) in {"staticmesh", "skeletalmesh"}
 
 
-def scope_assets(
-    all_assets: list[str],
-    new_assets: list[str],
-) -> dict[str, list[str]]:
-    return {
-        "all": all_assets,
-        "sm": [item for item in all_assets if is_sm(item)],
-        "m": [item for item in all_assets if is_material(item)],
-        "meshes": [item for item in all_assets if is_mesh(item)],
-        "new": new_assets,
-    }
+def scope_assets(all_assets: list[str], new_assets: list[str]) -> dict[str, list[str]]:
+    scopes = {"all": all_assets, "sm": [], "m": [], "meshes": [], "new": new_assets}
+    for item in all_assets:
+        kind = diagnosis_scope(item)
+        if kind == "staticmesh":
+            scopes["sm"].append(item)
+        if kind in {"staticmesh", "skeletalmesh"}:
+            scopes["meshes"].append(item)
+        if kind == "material":
+            scopes["m"].append(item)
+    return scopes
 
 
 def clean_reference(value: str) -> str:

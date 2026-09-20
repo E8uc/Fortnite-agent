@@ -3174,7 +3174,7 @@
 
   dbWorker =
     new Worker(
-      "/Fortnite-agent/database-worker.js?v=8"
+      "/Fortnite-agent/database-worker.js?v=9"
     );
     dbWorker.addEventListener(
       "message",

@@ -499,68 +499,8 @@
     }
   }
 
-  function assetType(
-    info,
-    path
-  ) {
-    const explicit =
-      String(
-        info?.assetType ||
-        info?.type ||
-        info?.objectType ||
-        info?.className ||
-        ""
-      ).toLowerCase();
-
-    if (explicit) {
-      return explicit;
-    }
-
-    const name =
-      String(path || "")
-        .split("/")
-        .pop()
-        ?.split(".")[0]
-        ?.toLowerCase() ||
-      "";
-
-    if (
-      /^(t_|tex_|icon_|ui_)/.test(
-        name
-      )
-    ) {
-      return "texture2d";
-    }
-
-    if (
-      /^(mi_|m_)/.test(
-        name
-      )
-    ) {
-      return "material";
-    }
-
-    if (
-      /^(ns_|ps_|vfx_|fx_)/.test(
-        name
-      )
-    ) {
-      return "niagara";
-    }
-
-    if (
-      /^sm_/.test(name)
-    ) {
-      return "staticmesh";
-    }
-
-    if (
-      /^sk_/.test(name)
-    ) {
-      return "skeletalmesh";
-    }
-
-    return "";
+  function assetType(info, path) {
+    return window.FNAAAssetDiagnosis?.diagnosePath(path, info).kind || "other";
   }
 
   function firstMaterial(
@@ -3148,72 +3088,12 @@
     return false;
   }
 
-  function readableAssetKind(
-    info,
-    path
-  ) {
-    const type =
-      assetType(
-        info,
-        path
-      );
-
-    const lower =
-      `${type} ${path}`
-        .toLowerCase();
-
-    const choices = [
-      [
-        /skeletalmesh|\/characters\/|\bcid_/,
-        "character / skeletal asset"
-      ],
-      [
-        /staticmesh|\/meshes\/|\bsm_/,
-        "static mesh asset"
-      ],
-      [
-        /materialinstance|material|\bmi_|\bm_/,
-        "material asset"
-      ],
-      [
-        /texture2d|texture|\btex_|\bt_/,
-        "texture asset"
-      ],
-      [
-        /niagara|particle|effect|vfx|\bns_|\bps_|\bfx_/,
-        "VFX asset"
-      ],
-      [
-        /danc|emote|\beid_/,
-        "emote asset"
-      ],
-      [
-        /backpack|backbling|back_bling|\bbid_/,
-        "back bling asset"
-      ],
-      [
-        /playset|playground|island|\bpid_/,
-        "Creative island / playset asset"
-      ],
-      [
-        /device|\/crd_|creative_device/,
-        "Creative device asset"
-      ],
-      [
-        /sound|audio|music|\busw_|\bsw_/,
-        "audio asset"
-      ]
-    ];
-
-    for (const [pattern, label] of choices) {
-      if (pattern.test(lower)) {
-        return label;
-      }
-    }
-
-    return type
-      ? type.replace(/[_-]+/g, " ")
-      : "Fortnite asset";
+  function readableAssetKind(info, path) {
+    const kind = assetType(info, path);
+    return ({ staticmesh: "static mesh asset", skeletalmesh: "skeletal mesh asset",
+      blueprint: "Blueprint asset", texture: "texture asset", material: "material asset",
+      audio: "audio asset", animation: "animation asset", vfx: "VFX asset",
+      data: "data asset", cosmetic: "cosmetic asset" })[kind] || "Fortnite asset";
   }
 
   function assetName(path) {
@@ -3867,16 +3747,6 @@
       if (
         resolvedFamily ===
           "other" &&
-        pathFamily !==
-          "other"
-      ) {
-        resolvedFamily =
-          pathFamily;
-      }
-
-      if (
-        resolvedFamily ===
-          "other" &&
         window.NovaSparxAssociations
           ?.classify
       ) {
@@ -3886,7 +3756,8 @@
               .classify(
                 clean,
                 {
-                  signal
+                  signal,
+                  inspection: info
                 }
               );
 

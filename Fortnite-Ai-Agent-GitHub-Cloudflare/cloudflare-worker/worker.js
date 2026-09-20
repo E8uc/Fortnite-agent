@@ -1,3 +1,5 @@
+import "../asset-diagnosis.js";
+
 const CHAT_MODEL = "openai/gpt-oss-120b";
 const ACCOUNT_MODEL = "openai/gpt-oss-120b";
 const FAST_RESEARCH_MODEL = "groq/compound-mini";
@@ -5087,42 +5089,8 @@ function normalizeRefString(
   );
 }
 
-function visualAssetFamily(
-  path
-) {
-  const name =
-    assetName(path)
-      .toLowerCase();
-
-  if (
-    /^(?:t_|tex_|texture_)/i
-      .test(name)
-  ) {
-    return "texture";
-  }
-
-  if (
-    /^(?:sm_|sk_)/i
-      .test(name)
-  ) {
-    return "mesh";
-  }
-
-  if (
-    /^(?:bp_|bpc_)/i
-      .test(name)
-  ) {
-    return "blueprint";
-  }
-
-  if (
-    /^(?:mi_|m_)/i
-      .test(name)
-  ) {
-    return "material";
-  }
-
-  return "other";
+function visualAssetFamily(path) {
+  return globalThis.FNAAAssetDiagnosis.diagnosePath(path).family;
 }
 
 function likelySurfaceTexture(
@@ -5582,11 +5550,12 @@ async function tryDillyImageCandidates(
 
 async function resolveDillyImage(
   rawPath,
-  directOnly = false
+  directOnly = false,
+  diagnosisPath = rawPath
 ) {
   const family =
     visualAssetFamily(
-      rawPath
+      diagnosisPath
     );
 
   // A generic image resolver must never silently turn a mesh/Blueprint into
@@ -5823,7 +5792,8 @@ async function handleImageRequest(
         rawPath,
         url.searchParams.get(
           "direct"
-        ) === "1"
+        ) === "1",
+        url.searchParams.get("path")
       );
 
     if (statusOnly) {

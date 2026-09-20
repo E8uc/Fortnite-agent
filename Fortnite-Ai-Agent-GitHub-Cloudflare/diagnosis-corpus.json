@@ -1,0 +1,501 @@
+{
+  "source": "database/fortnite_assets.gz",
+  "sha256": "8fe2b5b8542eb81baf86c9b357a21916e363e078455038a454cf7141a9858e5d",
+  "cases": [
+    {
+      "path": "Engine/Content/ArtTools/RenderToTexture/MaterialFunctions/MF_UnwwrapUVs.uasset",
+      "expectedKind": "material",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/ArtTools/RenderToTexture/Materials/Debug/M_2sidedLit.uasset",
+      "expectedKind": "material",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/ArtTools/RenderToTexture/Materials/Debug/M_50percent_BaseColor.uasset",
+      "expectedKind": "material",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/ArtTools/RenderToTexture/Materials/Debug/M_50percent_BaseInst.uasset",
+      "expectedKind": "material",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/ArtTools/RenderToTexture/Meshes/S_1_Unit_Plane.uasset",
+      "expectedKind": "other",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/ArtTools/RenderToTexture/Meshes/S_1_Unit_Sphere.uasset",
+      "expectedKind": "other",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/ArtTools/RenderToTexture/Meshes/S_1_Unit_Sphere_HI.uasset",
+      "expectedKind": "other",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/ArtTools/RenderToTexture/Textures/T_EV_BlankWhite_01.uasset",
+      "expectedKind": "texture",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/EditorLandscapeResources/MF_ThicknessOutline.uasset",
+      "expectedKind": "material",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/EditorMaterials/AssetViewer/T_ClearSky.uasset",
+      "expectedKind": "texture",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/EditorMaterials/AssetViewer/T_GreyAmbient.uasset",
+      "expectedKind": "texture",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/EditorMaterials/Camera/MI_CineMat_CameraBody.uasset",
+      "expectedKind": "material",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/EditorMaterials/Camera/MI_CineMat_CamViewFinder.uasset",
+      "expectedKind": "material",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/EditorMaterials/Camera/MI_CineMat_Rig.uasset",
+      "expectedKind": "material",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/EditorMeshes/Camera/SM_CineCam.uasset",
+      "expectedKind": "staticmesh",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/EditorMeshes/Camera/SM_CraneRig_Arm.uasset",
+      "expectedKind": "staticmesh",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/EditorMeshes/Camera/SM_CraneRig_Base.uasset",
+      "expectedKind": "staticmesh",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/EngineMaterials/MF_ObjectAlignedTexture.uasset",
+      "expectedKind": "material",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/EngineSky/BP_Sky_Shere.uasset",
+      "expectedKind": "blueprint",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/EngineSky/BP_Sky_Sphere.uasset",
+      "expectedKind": "blueprint",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/Functions/Engine_MaterialFunctions02/MAXScripts/MS_CanopyCreatorMeshExpansion.uasset",
+      "expectedKind": "other",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/Functions/Engine_MaterialFunctions02/MAXScripts/MS_MultiNormal_UVnormals.uasset",
+      "expectedKind": "other",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/Functions/Engine_MaterialFunctions02/MAXScripts/MS_MultiNormal_VertexColorNormals.uasset",
+      "expectedKind": "other",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/am_ET.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/curr/ms_BN.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/curr/ms_ID.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/curr/ms_SG.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/curr/ps_PK.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/curr/sw_CD.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/curr/sw_KE.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/curr/sw_UG.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/da_DK.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/da_GL.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/lang/ps_PK.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/mi_NZ.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/ne_IN.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/ne_NP.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/ps_AF.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/sc_IT.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/sk_SK.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Internationalization/icudt78l/zone/ne_IN.res",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Slate/Icons/Edit/icon_Edit_Copy_16x.png",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Slate/Icons/Edit/icon_Edit_Cut_16x.png",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Slate/Icons/Edit/icon_Edit_Delete_16x.png",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Content/Tutorial/Basics/TutorialAssets/icon_tab_Levels_40x.uasset",
+      "expectedKind": "other",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/Tutorial/SubEditors/TutorialAssets/icon_Editor_Preferences_General_40x.uasset",
+      "expectedKind": "other",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/Tutorial/SubEditors/TutorialAssets/icon_ShowSkeletalMeshes_40x.uasset",
+      "expectedKind": "other",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Content/WorldPartition/UnitTests/BP_ActorRefs.uasset",
+      "expectedKind": "blueprint",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Animation/AnimatorKit/Content/Meshes/SKM_EmptyMesh.uasset",
+      "expectedKind": "skeletalmesh",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Animation/AnimatorKit/Content/Meshes/SKM_PhysCube.uasset",
+      "expectedKind": "skeletalmesh",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Animation/AnimatorKit/Content/Meshes/SKM_PhysEmpty.uasset",
+      "expectedKind": "skeletalmesh",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Animation/AnimatorKit/Content/Meshes/SK_EmptyMesh.uasset",
+      "expectedKind": "skeletalmesh",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Animation/AnimatorKit/Content/Meshes/SK_PhysCube.uasset",
+      "expectedKind": "skeletalmesh",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Animation/ControlRig/Content/Modules/Meshes/SK_Root_Template.uasset",
+      "expectedKind": "skeletalmesh",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Animation/ControlRig/Content/T_Traj.png",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Plugins/Animation/DeformerGraph/Content/DeformerCollections/DA_DeformerCollection_RecomputeNormals.uasset",
+      "expectedKind": "data",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Experimental/AnimToTexture/Content/Characters/Mannequin/Data/DA_BoneAnimation.uasset",
+      "expectedKind": "data",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Experimental/AnimToTexture/Content/Characters/Mannequin/Data/DA_VertexAnimation.uasset",
+      "expectedKind": "data",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Experimental/Toolsets/NiagaraToolsets/Content/Templates/NS_Fire.uasset",
+      "expectedKind": "vfx",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Experimental/Toolsets/NiagaraToolsets/Content/Templates/NS_Smoke_Plume.uasset",
+      "expectedKind": "vfx",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Experimental/UIFramework/Content/Widgets/WBP_UIF_Button.uasset",
+      "expectedKind": "blueprint",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Experimental/WaterAdvanced/Content/Niagara/Emitters/SW_River_Secondary_Emitter.uasset",
+      "expectedKind": "audio",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Experimental/WaterAdvanced/Content/Niagara/Materials/SW_Water_Material.uasset",
+      "expectedKind": "audio",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Experimental/WaterAdvanced/Content/Niagara/Materials/SW_Water_Material_Lake.uasset",
+      "expectedKind": "audio",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/LoreSourceControl/Content/ConflictResolution/Thumbnails/Mine/T_Asteria_DirtGravel_01_D.png",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Plugins/LoreSourceControl/Content/ConflictResolution/Thumbnails/Mine/T_Asteria_RockBase_02_D.png",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Plugins/MetasoundPolyphonyInternal/Content/Examples/EffectsChain/MSS_EffectsChain.uasset",
+      "expectedKind": "audio",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/MetasoundPolyphonyInternal/Content/Examples/WavePlayer/MSS_PolyphonyWavePlayer.uasset",
+      "expectedKind": "audio",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/MetaSoundWizard/Content/MetaSounds/Loops/Array/MSS_Loop_Array_5dot1.uasset",
+      "expectedKind": "audio",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/MovieScene/MovieRenderPipeline/Content/Blueprints/Graph/UI_MovieGraphImagePreview.uasset",
+      "expectedKind": "other",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/MovieScene/MovieRenderPipeline/Content/Blueprints/Graph/UI_MovieGraph_PreviewWindowBannerMessage.uasset",
+      "expectedKind": "other",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/MovieScene/MovieRenderPipeline/Content/Blueprints/UI_MovieGraphPipelineScreenOverlay.uasset",
+      "expectedKind": "other",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Redwood/Core/ElevenLabs/Content/Voices/DT_Default_Voices.uasset",
+      "expectedKind": "data",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Runtime/Atom/AtomFramework/Content/Materials/Tools/DT_BrickCols.uasset",
+      "expectedKind": "data",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Runtime/Atom/AtomFramework/Content/Materials/Tools/DT_MaterialColors.uasset",
+      "expectedKind": "data",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Runtime/CommonUI/Content/WBP_VirtualPointer.uasset",
+      "expectedKind": "blueprint",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "Engine/Plugins/Runtime/HairStrands/Content/Icons/S_GroomBinding_16.png",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Plugins/Runtime/HairStrands/Content/Icons/S_GroomBinding_64.png",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Plugins/Runtime/HairStrands/Content/Icons/S_GroomCache_64.png",
+      "expectedKind": "other",
+      "evidence": "non-Unreal file"
+    },
+    {
+      "path": "Engine/Plugins/Runtime/Harmonix/Content/Tests/HarmonixMetasound/StepSequenceNode/WBP_Test_StepSequence.uasset",
+      "expectedKind": "blueprint",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Content/Abilities/Player/Generic/Gadgets/DiscoGrenade/NS_DiscoBall.uasset",
+      "expectedKind": "vfx",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Content/Accessories/FORT_Backpacks/Backpack_F_MED_Jail_Bird_Bumble/Animation/Anim_Backpack_Jail_Bird_Bumble_Base.uasset",
+      "expectedKind": "animation",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Content/Animation/Game/Enemies/StormKing/Montages/AM_DADBRO_Spawn.uasset",
+      "expectedKind": "animation",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Content/Athena/Dadbro/Animation/Montages/AM_DADBRO_FullBodyHit.uasset",
+      "expectedKind": "animation",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Content/Athena/Items/QuestInteractables/ItemCollection/VFX/NE_GlowDecal.uasset",
+      "expectedKind": "vfx",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Content/Athena/Sounds/Ambient/HVAC/SC_HVAC_Launch_Activate_Large.uasset",
+      "expectedKind": "audio",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Content/Athena/Sounds/Ambient/SkyTube/SC_Skytube_Amb_S9.uasset",
+      "expectedKind": "audio",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Content/Athena/Sounds/Ambient/Skytube/SC_Skytube_Disable_S9.uasset",
+      "expectedKind": "audio",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Content/Characters/Player/Male/Medium/Bodies/M_MED_Corny/CornyFXs/NE_Corny_PopcornPop.uasset",
+      "expectedKind": "vfx",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Content/Characters/Player/Male/Medium/Bodies/M_MED_MegaToof_Valve/FX/NE_SuperLevel_Glitch_01.uasset",
+      "expectedKind": "vfx",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Content/Creative/Devices/Common/CreativePowerups/Particles/PS_Powerup_Glow.uasset",
+      "expectedKind": "vfx",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Content/Creative/Devices/Common/CreativePowerups/Particles/PS_Powerup_Pickup.uasset",
+      "expectedKind": "vfx",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Plugins/GameFeatures/AnimPresets/Content/ABP_AnimPreset_BasicLocomotion.uasset",
+      "expectedKind": "blueprint",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Plugins/GameFeatures/AnimPresets/Content/ABP_AnimPreset_BipedLocomotion.uasset",
+      "expectedKind": "blueprint",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Plugins/GameFeatures/AnimPresets/Content/Preset_Locomotion_Data/AM_AnimPresets_MoveData_Speed.uasset",
+      "expectedKind": "animation",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Plugins/GameFeatures/Area51Gun/Content/Assets/AnimBP/ABP_Area51_Player.uasset",
+      "expectedKind": "blueprint",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Plugins/GameFeatures/BRCosmetics/Content/Accessories/FORT_Backpacks/Backpack_F_MED_Chaos/Animation/Anim_BackPack_Chaos.uasset",
+      "expectedKind": "animation",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Plugins/GameFeatures/BRCosmetics/Content/Accessories/FORT_Backpacks/Backpack_F_MED_Frankie/Animation/Anim_Backpack_Frankie_Air_Base.uasset",
+      "expectedKind": "animation",
+      "evidence": "filename heuristic only; class unverified"
+    },
+    {
+      "path": "FortniteGame/Plugins/GameFeatures/BRCosmetics/Content/Characters/Player/Male/Medium/Bodies/M_MED_FloralMane_Sand/Skins/Superlevels/ParentMaterials/PS_WP_Texture_ScalePan_XY_T3.uasset",
+      "expectedKind": "vfx",
+      "evidence": "filename heuristic only; class unverified"
+    }
+  ]
+}

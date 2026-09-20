@@ -127,7 +127,7 @@
     let value = String(raw || "").trim().replace(/\\/g, "/");
 
     const wrapped = value.match(
-      /^(?:StaticMesh|SkeletalMesh|Texture2D|Texture|Material|MaterialInstanceConstant|MaterialInstance|Object|BlueprintGeneratedClass|Blueprint|NiagaraSystem|NiagaraEmitter|SoundCue|SoundWave)?'(.+)'$/i
+      /^(?:(?:\/Script\/[^.'"\s]+\.)?[A-Za-z0-9_]+)?['"]([^'"]+)['"]$/
     );
     if (wrapped) value = wrapped[1];
 

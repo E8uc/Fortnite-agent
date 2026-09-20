@@ -1,3 +1,5 @@
+importScripts("asset-diagnosis.js?v=125");
+
 let manifestCache = null;
 let manifestCacheAt = 0;
 let manifestCacheSignature = "";
@@ -855,61 +857,11 @@ function scorePath(
   };
 }
 
-function scopeBonus(
-  file,
-  path,
-  scope
-) {
-  if (scope === "sm") {
-    if (file.startsWith("sm_")) {
-      return 1200;
-    }
-
-    if (
-      path.includes("/staticmesh/") ||
-      path.includes("/staticmeshes/")
-    ) {
-      return 450;
-    }
-
-    return -250;
-  }
-
-  if (scope === "m") {
-    if (file.startsWith("mi_")) {
-      return 1200;
-    }
-
-    if (file.startsWith("m_")) {
-      return 1150;
-    }
-
-    if (path.includes("/material")) {
-      return 400;
-    }
-
-    return -250;
-  }
-
-  if (scope === "meshes") {
-    if (file.startsWith("sm_")) {
-      return 1200;
-    }
-
-    if (file.startsWith("sk_")) {
-      return 1150;
-    }
-
-    if (
-      path.includes("/mesh/") ||
-      path.includes("/meshes/") ||
-      path.includes("/staticmesh") ||
-      path.includes("/skeletalmesh")
-    ) {
-      return 500;
-    }
-  }
-
+function scopeBonus(file, path, scope) {
+  const kind = self.FNAAAssetDiagnosis.diagnosePath(path).kind;
+  if (scope === "sm") return kind === "staticmesh" ? 1200 : -250;
+  if (scope === "m") return kind === "material" ? 1200 : -250;
+  if (scope === "meshes") return ["staticmesh", "skeletalmesh"].includes(kind) ? 1200 : -250;
   return 0;
 }
 
