@@ -297,7 +297,10 @@ const cases = [
   ["/Game/Meshes/Unknown.Unknown", "other"],
   ["/Game/SkeletalMesh/T_Test.T_Test", "texture"],
   ["/Game/SKM_Test.SKM_Test_C", "blueprint"],
-  ["/CRD_AnimatedMesh/Device_AnimatedMesh.Device_AnimatedMesh_C", "blueprint"]
+  ["/CRD_AnimatedMesh/Device_AnimatedMesh.Device_AnimatedMesh_C", "blueprint"],
+  ["FortniteGame/Content/Props/SM_Physical.SM_Physical", "staticmesh"],
+  ["FortniteGame/Content/Audio/SW_Physical.SW_Physical", "audio"],
+  ["Engine/Content/Internationalization/icudt78l/curr/sw_KE.res", "other"]
 ];
 for (const [path, kind] of cases) {
   const local = associations.diagnosePath(path);
@@ -400,3 +403,16 @@ for (const fixture of liveFixtures.filter(x => x.file)) {
   fixturesTested++;
 }
 console.log(`Captured live Dilly export fixtures passed: ${fixturesTested}.`);
+
+payload = [
+  {
+    Type: "Texture2D",
+    Name: "T_PublicPreview"
+  }
+];
+const publicPreview = await associations.publicPreview(
+  "/Game/UI/T_PublicPreview.T_PublicPreview",
+  { data: payload }
+);
+assert.equal(publicPreview?.kind, "texture", "publicPreview must use the shared classifier without a runtime ReferenceError");
+console.log("Public preview shared-diagnosis regression passed.");
