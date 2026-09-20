@@ -38,8 +38,20 @@
     // Physical files are not object paths. Do not diagnose locale .res, PNG,
     // shader or bulk sidecar files from a familiar-looking basename.
     const physical = /^(?:FortniteGame|Engine)\//i.test(path) || /\/Content\//i.test(path);
-    const extension = tail.includes(".") ? tail.split(".").pop().toLowerCase() : "";
-    const nonAssetFile = extension && (physical || /^(?:res|png|jpg|jpeg|json|ini|bin|usmap|uexp|ubulk|uptnl|locres|ush|usf|wav|ogg)$/i.test(extension)) && extension !== "uasset";
+    const tailDot = tail.lastIndexOf(".");
+    const tailLeft = tailDot > 0 ? tail.slice(0, tailDot) : "";
+    const tailRight = tailDot > 0 ? tail.slice(tailDot + 1) : "";
+    const objectPathTail = tailDot > 0 && (
+      tailRight.toLowerCase() === tailLeft.toLowerCase() ||
+      tailRight.toLowerCase() === `${tailLeft.toLowerCase()}_c`
+    );
+    const extension = tailDot > 0 ? tailRight.toLowerCase() : "";
+    const knownNonAssetFile = /^(?:res|png|jpg|jpeg|json|ini|bin|usmap|uexp|ubulk|uptnl|locres|ush|usf|wav|ogg)$/i.test(extension);
+    const nonAssetFile = Boolean(
+      extension &&
+      extension !== "uasset" &&
+      (knownNonAssetFile || (physical && !objectPathTail))
+    );
     path = path.replace(/\.uasset$/i, "");
     if (/^FortniteGame\/Content\//i.test(path)) path = path.replace(/^FortniteGame\/Content\//i, "/Game/");
     else if (/^Engine\/Content\//i.test(path)) path = path.replace(/^Engine\/Content\//i, "/Engine/");
