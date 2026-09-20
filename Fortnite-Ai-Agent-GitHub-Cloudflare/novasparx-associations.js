@@ -471,7 +471,7 @@
     return null;
   }
 
-  const { jsonTypeEvidence, diagnosePath } = window.FNAAAssetDiagnosis;
+  const { jsonTypeEvidence, diagnosePath, kindFromType } = window.FNAAAssetDiagnosis;
 
   function capabilityProfile(kind, data = null, inspection = null) {
     const resolvedKind = String(kind || "other").split("-")[0];
@@ -819,7 +819,8 @@
 
     const evidence =
       jsonTypeEvidence(
-        data
+        data,
+        path
       );
 
     const type =
@@ -2001,7 +2002,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.8.2",
+        "1.8.3",
       family,
       diagnosePath,
       classify,
