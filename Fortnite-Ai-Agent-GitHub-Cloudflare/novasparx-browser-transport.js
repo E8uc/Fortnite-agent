@@ -14,7 +14,9 @@
     Object.freeze([
       "egdownload.fastly-edge.com",
       "download.epicgames.com",
-      "export-service-new.dillyapis.com"
+      "export-service-new.dillyapis.com",
+      "fortnite-direct.dillycdn.com",
+      "stormforge.dillycdn.com"
     ]);
 
   let bootstrapCache =
