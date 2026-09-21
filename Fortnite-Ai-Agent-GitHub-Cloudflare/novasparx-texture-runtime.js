@@ -22,6 +22,12 @@
   const AES_API =
     "https://export-service-new.dillyapis.com/v1/aes";
 
+  const MANIFEST_API =
+    "https://export-service-new.dillyapis.com/v1/manifests";
+
+  const MAX_MANIFEST_METADATA_BYTES =
+    2 * 1024 * 1024;
+
   const MAX_SHARD_BYTES =
     3 * 1024 * 1024;
 
@@ -734,14 +740,627 @@
     return true;
   }
 
+  function collectManifestCandidates(
+    root
+  ) {
+    const urls =
+      new Map();
+
+    const ids =
+      new Map();
+
+    const addUrl =
+      (
+        value,
+        score
+      ) => {
+        let url;
+
+        try {
+          url =
+            new URL(
+              String(
+                value ||
+                ""
+              )
+            );
+        } catch {
+          return;
+        }
+
+        if (
+          url.protocol !==
+          "https:"
+        ) {
+          return;
+        }
+
+        const key =
+          url.toString();
+
+        urls.set(
+          key,
+          Math.max(
+            urls.get(
+              key
+            ) ??
+            -Infinity,
+            score
+          )
+        );
+      };
+
+    const addId =
+      (
+        value,
+        score
+      ) => {
+        const id =
+          String(
+            value ??
+            ""
+          )
+            .trim();
+
+        if (
+          !id ||
+          id.length >
+            240
+        ) {
+          return;
+        }
+
+        ids.set(
+          id,
+          Math.max(
+            ids.get(
+              id
+            ) ??
+            -Infinity,
+            score
+          )
+        );
+      };
+
+    const walk =
+      (node) => {
+        if (
+          Array.isArray(
+            node
+          )
+        ) {
+          for (
+            const item of
+            node
+          ) {
+            walk(item);
+          }
+
+          return;
+        }
+
+        if (
+          !node ||
+          typeof node !==
+            "object"
+        ) {
+          return;
+        }
+
+        let objectText =
+          "";
+
+        try {
+          objectText =
+            JSON.stringify(
+              node
+            )
+              .toLowerCase();
+        } catch {}
+
+        let baseScore =
+          0;
+
+        if (
+          objectText.includes(
+            "windows"
+          )
+        ) {
+          baseScore +=
+            40;
+        }
+
+        if (
+          objectText.includes(
+            "fortnite"
+          )
+        ) {
+          baseScore +=
+            25;
+        }
+
+        if (
+          objectText.includes(
+            "live"
+          ) ||
+          objectText.includes(
+            "latest"
+          )
+        ) {
+          baseScore +=
+            10;
+        }
+
+        if (
+          objectText.includes(
+            "android"
+          ) ||
+          objectText.includes(
+            "ios"
+          ) ||
+          objectText.includes(
+            "mac"
+          )
+        ) {
+          baseScore -=
+            40;
+        }
+
+        if (
+          objectText.includes(
+            "studio"
+          ) ||
+          objectText.includes(
+            "uefn"
+          )
+        ) {
+          baseScore -=
+            15;
+        }
+
+        for (
+          const [
+            rawKey,
+            value
+          ] of
+          Object.entries(
+            node
+          )
+        ) {
+          const key =
+            rawKey
+              .toLowerCase();
+
+          if (
+            typeof value ===
+            "string"
+          ) {
+            const lower =
+              value
+                .toLowerCase();
+
+            if (
+              lower.includes(
+                ".manifest"
+              ) ||
+              key.includes(
+                "manifest"
+              ) ||
+              key.includes(
+                "download"
+              )
+            ) {
+              addUrl(
+                value,
+                baseScore +
+                (
+                  lower.includes(
+                    ".manifest"
+                  )
+                    ? 80
+                    : 0
+                )
+              );
+            }
+
+            if (
+              key ===
+                "manifestid" ||
+              key ===
+                "manifest_id" ||
+              key ===
+                "id"
+            ) {
+              addId(
+                value,
+                baseScore
+              );
+            }
+          } else if (
+            typeof value ===
+              "number" &&
+            (
+              key ===
+                "manifestid" ||
+              key ===
+                "manifest_id" ||
+              key ===
+                "id"
+            )
+          ) {
+            addId(
+              value,
+              baseScore
+            );
+          }
+
+          walk(
+            value
+          );
+        }
+      };
+
+    walk(
+      root
+    );
+
+    return {
+      urls:
+        [
+          ...urls.entries()
+        ]
+          .map(
+            ([
+              url,
+              score
+            ]) => ({
+              url,
+              score
+            })
+          )
+          .sort(
+            (
+              a,
+              b
+            ) =>
+              b.score -
+              a.score
+          )
+          .slice(
+            0,
+            24
+          ),
+
+      ids:
+        [
+          ...ids.entries()
+        ]
+          .map(
+            ([
+              id,
+              score
+            ]) => ({
+              id,
+              score
+            })
+          )
+          .sort(
+            (
+              a,
+              b
+            ) =>
+              b.score -
+              a.score
+          )
+          .slice(
+            0,
+            24
+          )
+    };
+  }
+
+  async function probeRawManifest(
+    url,
+    transport,
+    signal = null
+  ) {
+    throwIfAborted(
+      signal
+    );
+
+    try {
+      const probe =
+        await transport
+          .fetchRange(
+            url,
+            0,
+            63,
+            {
+              signal,
+              cache:
+                "no-store"
+            }
+          );
+
+      throwIfAborted(
+        signal
+      );
+
+      if (
+        probe?.buffer instanceof
+          ArrayBuffer &&
+        probe.buffer
+          .byteLength >=
+          16 &&
+        !looksLikeJson(
+          probe.buffer
+        )
+      ) {
+        return true;
+      }
+    } catch (error) {
+      if (
+        signal?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        throw abortError(
+          signal?.reason ||
+          "cancelled"
+        );
+      }
+    }
+
+    return false;
+  }
+
+  async function fetchManifestMetadata(
+    url,
+    signal = null
+  ) {
+    throwIfAborted(
+      signal
+    );
+
+    const response =
+      await fetch(
+        url,
+        {
+          method:
+            "GET",
+
+          mode:
+            "cors",
+
+          credentials:
+            "omit",
+
+          cache:
+            "no-store",
+
+          headers: {
+            Accept:
+              "application/json,*/*;q=0.8"
+          },
+
+          signal:
+            signal ||
+            undefined
+        }
+      );
+
+    const buffer =
+      await readBounded(
+        response,
+        MAX_MANIFEST_METADATA_BYTES,
+        "Fortnite manifest metadata",
+        signal
+      );
+
+    if (
+      !looksLikeJson(
+        buffer
+      )
+    ) {
+      return null;
+    }
+
+    return JSON.parse(
+      new TextDecoder()
+        .decode(
+          buffer
+        )
+    );
+  }
+
+  async function resolveManifestNode(
+    url,
+    transport,
+    signal,
+    visited,
+    depth
+  ) {
+    throwIfAborted(
+      signal
+    );
+
+    if (
+      depth >
+      5
+    ) {
+      return "";
+    }
+
+    let normalized;
+
+    try {
+      normalized =
+        new URL(
+          String(
+            url ||
+            ""
+          )
+        )
+          .toString();
+    } catch {
+      return "";
+    }
+
+    if (
+      !normalized.startsWith(
+        "https://"
+      ) ||
+      visited.has(
+        normalized
+      )
+    ) {
+      return "";
+    }
+
+    visited.add(
+      normalized
+    );
+
+    const likelyBinary =
+      normalized
+        .toLowerCase()
+        .includes(
+          ".manifest"
+        );
+
+    if (
+      likelyBinary &&
+      await probeRawManifest(
+        normalized,
+        transport,
+        signal
+      )
+    ) {
+      return normalized;
+    }
+
+    let metadata =
+      null;
+
+    try {
+      metadata =
+        await fetchManifestMetadata(
+          normalized,
+          signal
+        );
+    } catch (error) {
+      if (
+        signal?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        throw abortError(
+          signal?.reason ||
+          "cancelled"
+        );
+      }
+    }
+
+    if (!metadata) {
+      if (
+        !likelyBinary &&
+        await probeRawManifest(
+          normalized,
+          transport,
+          signal
+        )
+      ) {
+        return normalized;
+      }
+
+      return "";
+    }
+
+    const candidates =
+      collectManifestCandidates(
+        metadata
+      );
+
+    for (
+      const candidate of
+      candidates.urls
+    ) {
+      throwIfAborted(
+        signal
+      );
+
+      if (
+        candidate.url ===
+        normalized
+      ) {
+        continue;
+      }
+
+      const resolved =
+        await resolveManifestNode(
+          candidate.url,
+          transport,
+          signal,
+          visited,
+          depth +
+            1
+        );
+
+      if (resolved) {
+        return resolved;
+      }
+    }
+
+    if (
+      !normalized
+        .toLowerCase()
+        .endsWith(
+          ".manifest"
+        )
+    ) {
+      const base =
+        normalized
+          .replace(
+            /\/+$/,
+            ""
+          );
+
+      for (
+        const candidate of
+        candidates.ids
+      ) {
+        throwIfAborted(
+          signal
+        );
+
+        const resolved =
+          await resolveManifestNode(
+            base +
+            "/" +
+            encodeURIComponent(
+              candidate.id
+            ),
+            transport,
+            signal,
+            visited,
+            depth +
+              1
+          );
+
+        if (resolved) {
+          return resolved;
+        }
+      }
+    }
+
+    return "";
+  }
+
   async function resolveManifestUrl(
     transport,
     signal = null
   ) {
     if (
-      typeof transport
-        ?.manifestSources !==
-      "function" ||
       typeof transport
         ?.fetchRange !==
       "function"
@@ -752,11 +1371,44 @@
       );
     }
 
+    const visited =
+      new Set();
+
+    try {
+      const resolved =
+        await resolveManifestNode(
+          MANIFEST_API,
+          transport,
+          signal,
+          visited,
+          0
+        );
+
+      if (resolved) {
+        return resolved;
+      }
+    } catch (error) {
+      if (
+        signal?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        throw abortError(
+          signal?.reason ||
+          "cancelled"
+        );
+      }
+    }
+
     const sources =
-      await transport
-        .manifestSources({
-          signal
-        });
+      typeof transport
+        ?.manifestSources ===
+        "function"
+        ? await transport
+            .manifestSources({
+              signal
+            })
+        : [];
 
     throwIfAborted(
       signal
@@ -775,77 +1427,38 @@
             .map(
               value =>
                 String(
-                  value || ""
-                ).trim()
+                  value ||
+                  ""
+                )
+                  .trim()
             )
-            .filter(Boolean)
+            .filter(
+              Boolean
+            )
         )
-      ].slice(
-        0,
-        16
-      );
-
-    let lastError =
-      null;
+      ]
+        .slice(
+          0,
+          16
+        );
 
     for (
       const source of
       unique
     ) {
-      throwIfAborted(
-        signal
-      );
-
-      try {
-        const probe =
-          await transport
-            .fetchRange(
-              source,
-              0,
-              63,
-              {
-                signal,
-                cache:
-                  "no-store"
-              }
-            );
-
-        if (
-          probe?.buffer instanceof
-            ArrayBuffer &&
-          probe.buffer.byteLength >=
-            16 &&
-          !looksLikeJson(
-            probe.buffer
-          )
-        ) {
-          return source;
-        }
-      } catch (error) {
-        if (
-          signal?.aborted ||
-          error?.name ===
-            "AbortError"
-        ) {
-          throw abortError(
-            signal?.reason ||
-            "cancelled"
-          );
-        }
-
-        lastError =
-          error;
+      if (
+        await probeRawManifest(
+          source,
+          transport,
+          signal
+        )
+      ) {
+        return source;
       }
     }
 
     throw runtimeError(
-      "NovaSparx could not resolve a current raw Fortnite BuildPatch manifest." +
-      (
-        lastError?.message
-          ? " " +
-            lastError.message
-          : ""
-      ),
+      "NovaSparx could not resolve a current raw Fortnite BuildPatch manifest.",
       "NOVASPARX_MANIFEST_UNAVAILABLE"
     );
   }
