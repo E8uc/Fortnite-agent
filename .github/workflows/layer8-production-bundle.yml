@@ -1,0 +1,88 @@
+name: Layer 8 production bundle
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/deploy.yml"
+      - ".github/workflows/layer8-production-bundle.yml"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-*.js"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-production-bundle:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout FNAA
+        uses: actions/checkout@v4
+
+      - name: Check out verified NovaSparx Layer 8 runtime
+        uses: actions/checkout@v4
+        with:
+          repository: E8uc/NovaSparx
+          ref: 6e147ca5ed8b70a0a2b0a6ffd0894f50992aab6c
+          path: .novasparx
+
+      - name: Check out verified CUE4Parse source
+        uses: actions/checkout@v4
+        with:
+          repository: FabianFG/CUE4Parse
+          ref: cfff57a0483501e0fa555dff5bf542748afe0bab
+          path: .novasparx/tools/upstream-cue4parse
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install browser WASM workload
+        run: dotnet workload install wasm-tools
+
+      - name: Build exact production browser bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          dotnet publish \
+            .novasparx/tools/CUE4Parse.BrowserProbe/CUE4Parse.BrowserProbe.csproj \
+            --configuration Release \
+            -p:CUE4ParseSourceProject="$GITHUB_WORKSPACE/.novasparx/tools/upstream-cue4parse/CUE4Parse/CUE4Parse.csproj" \
+            -p:CUE4PARSE_SKIP_NATIVE=true
+
+          output_root=".novasparx/tools/CUE4Parse.BrowserProbe/bin/Release/net10.0"
+          dotnet_js="$(find "$output_root" -type f -path '*/_framework/dotnet.js' -print -quit)"
+          test -n "$dotnet_js"
+
+          framework_dir="$(dirname "$dotnet_js")"
+          bundle="$(dirname "$framework_dir")"
+
+          test -f "$bundle/main.js"
+          test -f "$bundle/worker.js"
+          test -d "$bundle/_framework"
+
+          stage="$RUNNER_TEMP/fnaa-layer8"
+          runtime_dir="$stage/novasparx/runtime"
+          index_dir="$stage/novasparx/location-index"
+
+          mkdir -p "$runtime_dir" "$index_dir"
+          cp -a "$bundle/." "$runtime_dir/"
+          cp .novasparx/tools/CUE4Parse.BrowserProbe/main.js "$runtime_dir/main.js"
+          cp .novasparx/tools/CUE4Parse.BrowserProbe/worker.js "$runtime_dir/worker.js"
+          cp -a .novasparx/web/location-index/. "$index_dir/"
+
+          test -f "$runtime_dir/_framework/dotnet.js"
+          test -f "$runtime_dir/worker.js"
+          test -f "$index_dir/manifest.json"
+
+          runtime_bytes="$(du -sb "$runtime_dir" | cut -f1)"
+          index_bytes="$(du -sb "$index_dir" | cut -f1)"
+
+          test "$runtime_bytes" -gt 1000000
+          test "$runtime_bytes" -lt 100000000
+          test "$index_bytes" -gt 1000000
+          test "$index_bytes" -lt 100000000
+
+          echo "PRODUCTION_LAYER8_BUNDLE_OK runtime=$runtime_bytes index=$index_bytes"
