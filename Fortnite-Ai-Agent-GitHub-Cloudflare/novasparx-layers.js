@@ -303,8 +303,8 @@
             : null;
 
         if (
-          state?.registered !==
-            false
+          state?.mesh ===
+            true
         ) {
           return adapter;
         }
