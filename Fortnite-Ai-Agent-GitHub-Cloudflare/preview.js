@@ -3709,25 +3709,49 @@
         };
       }
 
-      // Exact raw Texture preview is safe because direct=1 never follows JSON
-      // into another asset family.
+      // Layer 8 native Texture path is authoritative for verified Texture
+      // assets. The external exact image remains only a fallback when the
+      // browser parser cannot produce pixels.
       if (
         pathFamily ===
-          "texture" &&
-        await tryExactTypedImage(
-          clean,
-          ui,
-          "Exact Texture preview • no Mesh/Blueprint promotion"
-        )
+          "texture"
       ) {
-        return {
-          state: "ready",
-          kind:
-            "texture-direct-image"
-        };
+        const nativeRendered =
+          await tryTextureDecode(
+            clean,
+            ui,
+            "Layer 8 • browser CUE4Parse Texture",
+            signal
+          );
+
+        if (nativeRendered) {
+          return {
+            state: "ready",
+            kind:
+              "browser-texture"
+          };
+        }
+
+        throwIfAborted(
+          signal
+        );
+
+        if (
+          await tryExactTypedImage(
+            clean,
+            ui,
+            "Exact Texture fallback • no Mesh/Blueprint promotion"
+          )
+        ) {
+          return {
+            state: "ready",
+            kind:
+              "texture-direct-image"
+          };
+        }
       }
 
-      // 3) Public Dilly JSON can expose exact visual references for many
+      // Public Dilly JSON can expose exact visual references for many
       // materials, Blueprints and effects without waking Back4App.
       let publicPlan = null;
 
@@ -3793,233 +3817,6 @@
           publicPlan =
             null;
         }
-      }
-
-      // Browser-first Layer 8: when the native NovaSparx Texture engine is
-      // registered, decode the exact Texture in a cancellable Worker before
-      // considering any hosted fallback.
-      if (
-        pathFamily ===
-          "texture" &&
-        window.NovaSparxLocalParser
-          ?.status?.()
-          ?.texture ===
-          true
-      ) {
-        try {
-          setStatus(
-            ui.status,
-            "NovaSparx: decoding Texture in your browser…"
-          );
-
-          const localTexture =
-            await window
-              .NovaSparxLocalParser
-              .resolveTexture(
-                clean,
-                {
-                  signal
-                }
-              );
-
-          throwIfAborted(
-            signal
-          );
-
-          const width =
-            Number(
-              localTexture?.width
-            );
-
-          const height =
-            Number(
-              localTexture?.height
-            );
-
-          const pixels =
-            localTexture?.pixels instanceof
-              Uint8ClampedArray
-              ? localTexture.pixels
-              : localTexture?.pixels instanceof
-                  Uint8Array
-                ? new Uint8ClampedArray(
-                    localTexture
-                      .pixels
-                      .buffer,
-                    localTexture
-                      .pixels
-                      .byteOffset,
-                    localTexture
-                      .pixels
-                      .byteLength
-                  )
-                : localTexture?.pixels instanceof
-                    ArrayBuffer
-                  ? new Uint8ClampedArray(
-                      localTexture
-                        .pixels
-                    )
-                  : null;
-
-          if (
-            !Number.isInteger(
-              width
-            ) ||
-            !Number.isInteger(
-              height
-            ) ||
-            width <= 0 ||
-            height <= 0 ||
-            width > 2048 ||
-            height > 2048 ||
-            !pixels ||
-            pixels.byteLength !==
-              width *
-              height *
-              4
-          ) {
-            throw new Error(
-              "NovaSparx browser Texture engine returned invalid RGBA pixels."
-            );
-          }
-
-          const canvas =
-            document.createElement(
-              "canvas"
-            );
-
-          canvas.width =
-            width;
-
-          canvas.height =
-            height;
-
-          const context =
-            canvas.getContext(
-              "2d",
-              {
-                alpha:
-                  true
-              }
-            );
-
-          if (!context) {
-            throw new Error(
-              "Canvas 2D is unavailable for the Texture preview."
-            );
-          }
-
-          context.putImageData(
-            new ImageData(
-              pixels,
-              width,
-              height
-            ),
-            0,
-            0
-          );
-
-          const blob =
-            await new Promise(
-              (resolve) =>
-                canvas.toBlob(
-                  resolve,
-                  "image/png"
-                )
-            );
-
-          throwIfAborted(
-            signal
-          );
-
-          if (!blob) {
-            throw new Error(
-              "NovaSparx could not encode the browser Texture preview."
-            );
-          }
-
-          const objectUrl =
-            URL.createObjectURL(
-              blob
-            );
-
-          try {
-            if (
-              await loadImage(
-                ui.image,
-                objectUrl,
-                12_000,
-                signal
-              )
-            ) {
-              throwIfAborted(
-                signal
-              );
-
-              setStatus(
-                ui.status,
-                "NovaSparx • browser Texture"
-              );
-
-              if (ui.meta) {
-                ui.meta.textContent =
-                  `${width}×${height} • decoded locally`;
-              }
-
-              return {
-                state:
-                  "ready",
-                kind:
-                  "browser-texture",
-                width,
-                height,
-                source:
-                  "NovaSparx browser Worker"
-              };
-            }
-          } finally {
-            URL.revokeObjectURL(
-              objectUrl
-            );
-          }
-        } catch (error) {
-          if (
-            signal?.aborted ||
-            error?.name ===
-              "AbortError"
-          ) {
-            throw abortError(
-              signal
-            );
-          }
-
-          console.warn(
-            "NovaSparx browser Texture:",
-            error
-          );
-        }
-      }
-
-      // 4) The NovaSparx server remains a temporary fallback while the
-      // browser parser is being brought online. It is never the first choice.
-      // 3) The NovaSparx server can decode the asset itself when it is a real
-      // UTexture and no public still image exists.
-      if (
-        pathFamily ===
-          "texture" &&
-        window.NovaSparxAssociations
-          ?.allowTextureDecode?.(
-            clean
-          ) !== false &&
-        await tryTextureDecode(
-          clean,
-          ui
-        )
-      ) {
-        return {
-          state: "ready",
-          kind: "texture"
-        };
       }
 
       // 4) Inspect before deciding what preview is technically honest.
