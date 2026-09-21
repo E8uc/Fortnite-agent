@@ -27,6 +27,51 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check out NovaSparx main
+        uses: actions/checkout@v4
+        with:
+          repository: E8uc/NovaSparx
+          ref: main
+          path: .novasparx
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install browser WASM workload
+        run: dotnet workload install wasm-tools
+
+      - name: Build Layer 8 browser runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          dotnet publish             .novasparx/tools/CUE4Parse.BrowserProbe/CUE4Parse.BrowserProbe.csproj             --configuration Release
+
+          output_root=".novasparx/tools/CUE4Parse.BrowserProbe/bin/Release/net10.0"
+          dotnet_js="$(find "$output_root" -type f -path '*/_framework/dotnet.js' -print -quit)"
+          test -n "$dotnet_js"
+
+          framework_dir="$(dirname "$dotnet_js")"
+          bundle="$(dirname "$framework_dir")"
+
+          cp .novasparx/tools/CUE4Parse.BrowserProbe/main.js "$bundle/main.js"
+          cp .novasparx/tools/CUE4Parse.BrowserProbe/worker.js "$bundle/worker.js"
+
+          site="Fortnite-Ai-Agent-GitHub-Cloudflare"
+
+          rm -rf             "$site/novasparx-runtime"             "$site/novasparx-location-index"
+
+          mkdir -p             "$site/novasparx-runtime"             "$site/novasparx-location-index"
+
+          cp -a "$bundle"/. "$site/novasparx-runtime/"
+          cp -a .novasparx/web/location-index/. "$site/novasparx-location-index/"
+
+          test -s "$site/novasparx-runtime/worker.js"
+          test -s "$site/novasparx-runtime/_framework/dotnet.js"
+          test -s "$site/novasparx-location-index/manifest.json"
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
