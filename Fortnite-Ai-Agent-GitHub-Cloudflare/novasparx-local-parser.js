@@ -56,16 +56,48 @@
     return error;
   }
 
+  function capabilityError(
+    capability
+  ) {
+    const error =
+      new Error(
+        capability ===
+          "resolveTexture"
+          ? "NovaSparx browser Texture engine is not installed on this build."
+          : "NovaSparx browser Mesh engine is not installed on this build."
+      );
+
+    error.code =
+      capability ===
+        "resolveTexture"
+        ? "NOVASPARX_TEXTURE_ENGINE_UNAVAILABLE"
+        : "NOVASPARX_MESH_ENGINE_UNAVAILABLE";
+
+    return error;
+  }
+
   function register(
     candidate
   ) {
+    const hasMesh =
+      typeof candidate
+        ?.resolveMesh ===
+      "function";
+
+    const hasTexture =
+      typeof candidate
+        ?.resolveTexture ===
+      "function";
+
     if (
       !candidate ||
-      typeof candidate.resolveMesh !==
-        "function"
+      (
+        !hasMesh &&
+        !hasTexture
+      )
     ) {
       throw new TypeError(
-        "NovaSparx local parser must expose resolveMesh(path, options)."
+        "NovaSparx local parser must expose resolveMesh(path, options) and/or resolveTexture(path, options)."
       );
     }
 
@@ -279,6 +311,15 @@
       throw unavailableError();
     }
 
+    if (
+      typeof engine.resolveMesh !==
+        "function"
+    ) {
+      throw capabilityError(
+        "resolveMesh"
+      );
+    }
+
     const state =
       options.prepare ===
         false
@@ -332,6 +373,80 @@
     return result;
   }
 
+  async function resolveTexture(
+    path,
+    options = {}
+  ) {
+    throwIfAborted(
+      options.signal
+    );
+
+    if (!engine) {
+      throw unavailableError();
+    }
+
+    if (
+      typeof engine.resolveTexture !==
+        "function"
+    ) {
+      throw capabilityError(
+        "resolveTexture"
+      );
+    }
+
+    const state =
+      options.prepare ===
+        false
+        ? {
+            engine,
+            engineState:
+              null,
+            transport:
+              transportFor(
+                options
+              ),
+            bootstrap:
+              options.bootstrap ||
+              null,
+            randomAccess:
+              globalThis
+                .NovaSparxRandomAccess ||
+              null
+          }
+        : await prepare(
+            options
+          );
+
+    throwIfAborted(
+      options.signal
+    );
+
+    const result =
+      await engine.resolveTexture(
+        path,
+        {
+          ...options,
+          transport:
+            state.transport,
+          bootstrap:
+            state.bootstrap,
+          randomAccess:
+            state.randomAccess ||
+            globalThis
+              .NovaSparxRandomAccess ||
+            null,
+          parserState:
+            state.engineState
+        }
+      );
+
+    throwIfAborted(
+      options.signal
+    );
+
+    return result;
+  }
+
   function status() {
     const transport =
       globalThis
@@ -339,9 +454,17 @@
 
     return {
       version:
-        "2.2.0",
+        "2.3.0",
       registered:
         Boolean(engine),
+      mesh:
+        typeof engine
+          ?.resolveMesh ===
+        "function",
+      texture:
+        typeof engine
+          ?.resolveTexture ===
+        "function",
       prepared:
         Boolean(
           prepared?.engine ===
@@ -383,11 +506,12 @@
   globalThis.NovaSparxLocalParser =
     Object.freeze({
       version:
-        "2.2.0",
+        "2.3.0",
       register,
       reset,
       prepare,
       resolveMesh,
+      resolveTexture,
       status
     });
 })();
