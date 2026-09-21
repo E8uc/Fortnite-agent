@@ -88,6 +88,7 @@ jobs:
             'novasparx-browser-transport.selftest.mjs'
             'novasparx-random-access.js'
             'novasparx-local-parser.js'
+            'novasparx-texture-runtime.js'
             'novasparx-layers.js'
             'novasparx-associations.js'
             'novasparx-renderer.js'
@@ -144,3 +145,86 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Verify diagnosis search cards and capability buttons
         run: node Fortnite-Ai-Agent-GitHub-Cloudflare/diagnosis.browser.test.mjs
+
+
+  layer8-site-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out FNAA
+        uses: actions/checkout@v4
+
+      - name: Check out NovaSparx main
+        uses: actions/checkout@v4
+        with:
+          repository: E8uc/NovaSparx
+          ref: main
+          path: .novasparx
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install browser WASM workload
+        run: dotnet workload install wasm-tools
+
+      - name: Prepare NovaSparx runtime inside FNAA site
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          dotnet publish \
+            .novasparx/tools/CUE4Parse.BrowserProbe/CUE4Parse.BrowserProbe.csproj \
+            --configuration Release
+
+          output_root=".novasparx/tools/CUE4Parse.BrowserProbe/bin/Release/net10.0"
+          dotnet_js="$(find "$output_root" -type f -path '*/_framework/dotnet.js' -print -quit)"
+          test -n "$dotnet_js"
+
+          framework_dir="$(dirname "$dotnet_js")"
+          bundle="$(dirname "$framework_dir")"
+          site="Fortnite-Ai-Agent-GitHub-Cloudflare"
+
+          cp .novasparx/tools/CUE4Parse.BrowserProbe/main.js "$bundle/main.js"
+          cp .novasparx/tools/CUE4Parse.BrowserProbe/worker.js "$bundle/worker.js"
+
+          rm -rf \
+            "$site/novasparx-runtime" \
+            "$site/novasparx-location-index"
+
+          mkdir -p \
+            "$site/novasparx-runtime" \
+            "$site/novasparx-location-index"
+
+          cp -a "$bundle"/. "$site/novasparx-runtime/"
+          cp -a .novasparx/web/location-index/. "$site/novasparx-location-index/"
+
+          test -s "$site/novasparx-runtime/worker.js"
+          test -s "$site/novasparx-runtime/_framework/dotnet.js"
+          test -s "$site/novasparx-location-index/manifest.json"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install Chromium test runtime
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npx playwright install --with-deps chromium
+
+      - name: Verify FNAA Layer 8 from site to visible image
+        run: |
+          node \
+            Fortnite-Ai-Agent-GitHub-Cloudflare/layer8-site.browser.test.mjs \
+            Fortnite-Ai-Agent-GitHub-Cloudflare
+
+      - name: Preserve FNAA Layer 8 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fnaa-layer8-site-proof
+          path: |
+            fnaa-layer8-site-proof.json
+            fnaa-layer8-site-preview.png
