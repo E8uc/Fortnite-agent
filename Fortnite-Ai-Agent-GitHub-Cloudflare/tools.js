@@ -989,7 +989,20 @@
       return (
         window.NovaSparxLocalParser
           ?.status?.()
-          ?.registered ===
+          ?.mesh ===
+        true
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function browserTextureParserReady() {
+    try {
+      return (
+        window.NovaSparxLocalParser
+          ?.status?.()
+          ?.texture ===
         true
       );
     } catch {
@@ -1071,7 +1084,12 @@
             "Hide 3D Model"
           );
       } else if (
-        capabilities.canViewImage
+        capabilities.canViewImage &&
+        (
+          kind !==
+            "texture" ||
+          browserTextureParserReady()
+        )
       ) {
         previewButton.disabled =
           false;
