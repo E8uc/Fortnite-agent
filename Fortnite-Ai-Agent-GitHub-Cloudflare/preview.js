@@ -3144,7 +3144,7 @@
           return (
             window.NovaSparxLocalParser
               ?.status?.()
-              ?.registered ===
+              ?.mesh ===
             true
           );
         } catch {
