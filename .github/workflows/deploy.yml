@@ -67,9 +67,8 @@ jobs:
           framework_dir="$(dirname "$dotnet_js")"
           bundle="$(dirname "$framework_dir")"
 
-          test -f "$bundle/main.js"
-          test -f "$bundle/worker.js"
           test -d "$bundle/_framework"
+          test -f "$bundle/_framework/dotnet.js"
 
           runtime_dir="Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx/runtime"
           index_dir="Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx/location-index"
