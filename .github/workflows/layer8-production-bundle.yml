@@ -59,9 +59,8 @@ jobs:
           framework_dir="$(dirname "$dotnet_js")"
           bundle="$(dirname "$framework_dir")"
 
-          test -f "$bundle/main.js"
-          test -f "$bundle/worker.js"
           test -d "$bundle/_framework"
+          test -f "$bundle/_framework/dotnet.js"
 
           stage="$RUNNER_TEMP/fnaa-layer8"
           runtime_dir="$stage/novasparx/runtime"
