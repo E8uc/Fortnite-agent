@@ -26,7 +26,9 @@ const NOVASPARX_EDGE_MAX_METADATA_BYTES =
 const NOVASPARX_EDGE_ALLOWED_RANGE_HOSTS = [
   "egdownload.fastly-edge.com",
   "download.epicgames.com",
-  "export-service-new.dillyapis.com"
+  "export-service-new.dillyapis.com",
+  "fortnite-direct.dillycdn.com",
+  "stormforge.dillycdn.com"
 ];
 
 const SITE_URL =
