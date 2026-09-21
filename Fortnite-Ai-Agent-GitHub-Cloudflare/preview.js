@@ -2211,31 +2211,120 @@
     path,
     ui,
     label =
-      "Decoded Fortnite texture • NovaSparx 1.0"
+      "Decoded Fortnite texture • NovaSparx Layer 8",
+    signal =
+      window.NovaSparxBrowserGuard
+        ?.activeSignal?.() ||
+      null
   ) {
+    throwIfAborted(
+      signal
+    );
+
+    const parser =
+      window.NovaSparxLocalParser;
+
+    if (
+      !parser?.resolveTexture ||
+      parser?.status?.()
+        ?.texture !==
+        true
+    ) {
+      return false;
+    }
+
     setStatus(
       ui.status,
-      "NovaSparx: decoding texture…"
+      "NovaSparx Layer 8: reading Fortnite Texture bytes in your browser…"
+    );
+
+    let result;
+
+    try {
+      result =
+        await parser
+          .resolveTexture(
+            path,
+            {
+              signal,
+              maxPreviewSize:
+                window.NovaSparxBrowserGuard
+                  ?.status?.()
+                  ?.isIOS
+                  ? 512
+                  : window.NovaSparxBrowserGuard
+                      ?.status?.()
+                      ?.isMobile
+                    ? 768
+                    : 1024
+            }
+          );
+
+      throwIfAborted(
+        signal
+      );
+    } catch (error) {
+      if (
+        signal?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        throw abortError(
+          signal
+        );
+      }
+
+      setStatus(
+        ui.status,
+        error?.message ||
+          "NovaSparx could not decode this Texture in the browser.",
+        "error"
+      );
+
+      return false;
+    }
+
+    if (
+      !(result?.blob instanceof Blob) ||
+      !result.width ||
+      !result.height
+    ) {
+      return false;
+    }
+
+    const url =
+      URL.createObjectURL(
+        result.blob
+      );
+
+    rememberObjectUrl(
+      path,
+      url
     );
 
     const ok =
       await loadImage(
         ui.image,
-        endpoint(
-          "/nova/texture",
-          path
-        ),
+        url,
         fastImageTimeout(
           12_000,
-          7_000
-        )
+          8_000
+        ),
+        signal
       );
 
+    throwIfAborted(
+      signal
+    );
+
     if (!ok) {
-      ui.image
-        .removeAttribute(
-          "src"
-        );
+      release(
+        path
+      );
+
+      ui.image.removeAttribute(
+        "src"
+      );
 
       return false;
     }
@@ -2245,7 +2334,14 @@
 
     setMeta(
       ui.meta,
-      label,
+      (
+        label +
+        " • " +
+        result.width +
+        "×" +
+        result.height +
+        " • browser CUE4Parse"
+      ),
       "high"
     );
 
