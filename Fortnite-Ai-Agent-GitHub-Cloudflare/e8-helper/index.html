@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b0b0d">
+  <title>E8 Helper — Control Panel</title>
+  <meta name="description" content="Set up E8 AI and E8 Path Finder for your Discord server.">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="E8 Helper home">
+      <span class="brand-mark">𝑬𝟖</span>
+      <span>
+        <strong>E8 Helper</strong>
+        <small>Control Panel</small>
+      </span>
+    </a>
+    <div id="saveState" class="save-state hidden">Saved</div>
+    <button id="signOutBtn" class="ghost small hidden" type="button">Sign out</button>
+  </header>
+
+  <main>
+    <section id="landing" class="landing">
+      <div class="hero-card">
+        <div class="eyebrow">E8 • Discord</div>
+        <h1>Set up E8 Helper<br><span>without the technical stuff.</span></h1>
+        <p>Choose what E8 does, pick your channels, connect AI once, and you're done.</p>
+        <button id="discordLoginBtn" class="primary large" type="button">
+          <span class="discord-dot"></span>
+          Continue with Discord
+        </button>
+        <p class="tiny">Only servers you can manage will appear.</p>
+      </div>
+
+      <div class="feature-preview">
+        <article>
+          <span class="icon">AI</span>
+          <div>
+            <h3>𝑬𝟖𝐴𝑖</h3>
+            <p>Natural server chat with E8's personality.</p>
+          </div>
+        </article>
+        <article>
+          <span class="icon">/</span>
+          <div>
+            <h3>𝑬𝟖 𝑃𝑎𝑡ℎ 𝑓𝑖𝑛𝑑𝑒𝑟</h3>
+            <p>Fortnite cosmetic paths with one simple command.</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="app" class="app-shell hidden">
+      <aside class="sidebar">
+        <div class="server-picker">
+          <label for="guildSelect">Your server</label>
+          <select id="guildSelect"></select>
+        </div>
+
+        <nav class="nav">
+          <a href="#overview" class="active">Overview</a>
+          <a href="#ai">𝑬𝟖𝐴𝑖</a>
+          <a href="#pathfinder">Path Finder</a>
+          <a href="#emojis">Custom Emojis</a>
+          <a href="#support">Support</a>
+          <a href="#permissions">Permissions</a>
+          <a href="#schedule">Schedule</a>
+          <a href="#advanced">Advanced</a>
+        </nav>
+
+        <div class="creator-card">
+          <span>E8 Helper</span>
+          <strong>Created & developed by e8uc.</strong>
+          <small>Part of E8</small>
+        </div>
+      </aside>
+
+      <div class="content">
+        <div id="loadingPanel" class="panel loading-card">
+          <div class="spinner"></div>
+          <p>Loading your server…</p>
+        </div>
+
+        <div id="installPanel" class="panel hidden">
+          <div class="panel-heading">
+            <div>
+              <span class="section-kicker">One quick step</span>
+              <h2>Add E8 Helper</h2>
+              <p>E8 Helper needs to be in this server before we can finish setup.</p>
+            </div>
+          </div>
+          <div class="install-actions">
+            <a id="installBotBtn" class="primary" target="_blank" rel="noopener">Add E8 Helper</a>
+            <button id="refreshInstallBtn" class="secondary" type="button">I've added it — refresh</button>
+          </div>
+        </div>
+
+        <div id="dashboard" class="hidden">
+          <section id="overview" class="panel">
+            <div class="panel-heading">
+              <div>
+                <span class="section-kicker">Server setup</span>
+                <h2 id="serverTitle">E8 Helper</h2>
+                <p id="serverSubtitle">Choose at least one feature. You can change anything later.</p>
+              </div>
+              <span id="setupBadge" class="badge">Setup in progress</span>
+            </div>
+
+            <div class="feature-toggle-grid">
+              <button id="aiFeatureCard" class="feature-toggle" type="button">
+                <span class="feature-symbol">AI</span>
+                <span class="feature-copy">
+                  <strong>𝑬𝟖𝐴𝑖</strong>
+                  <small>Natural chat for your server</small>
+                </span>
+                <span class="switch" aria-hidden="true"><i></i></span>
+              </button>
+
+              <button id="pathFeatureCard" class="feature-toggle" type="button">
+                <span class="feature-symbol">/</span>
+                <span class="feature-copy">
+                  <strong>𝑬𝟖 𝑃𝑎𝑡ℎ 𝑓𝑖𝑛𝑑𝑒𝑟</strong>
+                  <small>Fortnite cosmetic asset paths</small>
+                </span>
+                <span class="switch" aria-hidden="true"><i></i></span>
+              </button>
+            </div>
+
+            <div class="notice soft">
+              <strong>E8 stays E8.</strong>
+              <span>The E8 identity and creator credit stay fixed on every server.</span>
+            </div>
+          </section>
+
+          <section id="ai" class="panel">
+            <div class="panel-heading">
+              <div>
+                <span class="section-kicker">AI Chat</span>
+                <h2>𝑬𝟖𝐴𝑖</h2>
+                <p>E8's casual chat personality, configured for your server.</p>
+              </div>
+              <span id="aiStatus" class="badge muted">Disabled</span>
+            </div>
+
+            <div id="aiDisabled" class="empty-state">
+              Enable 𝑬𝟖𝐴𝑖 in Overview to set it up.
+            </div>
+
+            <div id="aiSettings" class="stack hidden">
+              <div id="openrouterCard" class="connection-card">
+                <div>
+                  <span class="connection-label">AI connection</span>
+                  <strong id="openrouterTitle">Connect OpenRouter</strong>
+                  <p id="openrouterText">Sign in once and approve E8 Helper. No API keys or model settings.</p>
+                </div>
+                <button id="openrouterBtn" class="primary" type="button">Continue with OpenRouter</button>
+              </div>
+
+              <div class="field">
+                <label for="aiChannel">AI Chat channel</label>
+                <select id="aiChannel"></select>
+                <small>E8 will only chat in this channel.</small>
+              </div>
+
+              <div class="notice">
+                <strong>E8 Recommended</strong>
+                <span>The AI model and technical settings are handled automatically.</span>
+              </div>
+            </div>
+          </section>
+
+          <section id="pathfinder" class="panel">
+            <div class="panel-heading">
+              <div>
+                <span class="section-kicker">Fortnite Tools</span>
+                <h2>𝑬𝟖 𝑃𝑎𝑡ℎ 𝑓𝑖𝑛𝑑𝑒𝑟</h2>
+                <p>Find Fortnite cosmetic asset paths with <code>/find</code>.</p>
+              </div>
+              <span id="pathStatus" class="badge muted">Disabled</span>
+            </div>
+
+            <div id="pathDisabled" class="empty-state">
+              Enable Path Finder in Overview to set it up.
+            </div>
+
+            <div id="pathSettings" class="stack hidden">
+              <div class="field">
+                <label for="pathChannel">Path Finder channel</label>
+                <select id="pathChannel"></select>
+                <small><code>/find</code> will work here only.</small>
+              </div>
+
+              <div class="field">
+                <label>Who can use it?</label>
+                <div class="segmented">
+                  <button id="pathEveryone" type="button">Everyone</button>
+                  <button id="pathRoles" type="button">Selected roles</button>
+                </div>
+              </div>
+
+              <div id="pathRoleBox" class="field hidden">
+                <label>Allowed roles</label>
+                <div id="pathRoleList" class="choice-list"></div>
+              </div>
+
+              <div class="notice soft">
+                <strong>Always free.</strong>
+                <span>Path Finder does not use your AI allowance.</span>
+              </div>
+            </div>
+          </section>
+
+          <section id="emojis" class="panel">
+            <div class="panel-heading">
+              <div>
+                <span class="section-kicker">Personality</span>
+                <h2>Custom Emojis</h2>
+                <p>Pick an emoji from your server and tell E8 what it means.</p>
+              </div>
+              <button id="addEmojiBtn" class="secondary" type="button">Add custom emoji</button>
+            </div>
+
+            <div id="selectedEmojiList" class="emoji-selected-list"></div>
+            <div id="emojiEmpty" class="empty-state">No custom emojis added yet.</div>
+          </section>
+
+          <section id="support" class="panel">
+            <div class="panel-heading">
+              <div>
+                <span class="section-kicker">Help flow</span>
+                <h2>Support</h2>
+                <p>Optional. Tell E8 where members should go when they actually need help.</p>
+              </div>
+              <span class="badge muted">Optional</span>
+            </div>
+
+            <div class="form-grid">
+              <div class="field">
+                <label for="supportChannel">Support channel</label>
+                <select id="supportChannel"></select>
+              </div>
+              <div class="field">
+                <label for="supportRole">Support role</label>
+                <select id="supportRole"></select>
+              </div>
+              <div class="field full">
+                <label for="ticketUrl">Ticket link</label>
+                <input id="ticketUrl" type="url" inputmode="url" placeholder="https://discord.gg/... or your ticket link">
+                <small>Leave it empty if you want E8 to use the support channel instead.</small>
+              </div>
+            </div>
+          </section>
+
+          <section id="permissions" class="panel">
+            <div class="panel-heading">
+              <div>
+                <span class="section-kicker">Control access</span>
+                <h2>Permissions</h2>
+                <p>The server owner can always manage E8 Helper.</p>
+              </div>
+              <span class="badge good">Owner detected</span>
+            </div>
+
+            <div class="field">
+              <label>Who else can manage E8 Helper?</label>
+              <small class="above">Optional — select trusted roles that can open and edit this control panel.</small>
+              <div id="managerRoleList" class="choice-list"></div>
+            </div>
+          </section>
+
+          <section id="schedule" class="panel">
+            <div class="panel-heading">
+              <div>
+                <span class="section-kicker">Online hours</span>
+                <h2>Schedule</h2>
+                <p>Default: 2:00 PM → 11:00 PM. E8 follows your selected timezone.</p>
+              </div>
+            </div>
+
+            <div class="form-grid three">
+              <div class="field">
+                <label for="timezone">Timezone</label>
+                <select id="timezone"></select>
+              </div>
+              <div class="field">
+                <label for="wakeTime">Wake time</label>
+                <input id="wakeTime" type="time" value="14:00">
+              </div>
+              <div class="field">
+                <label for="sleepTime">Sleep time</label>
+                <input id="sleepTime" type="time" value="23:00">
+              </div>
+            </div>
+          </section>
+
+          <section id="advanced" class="panel">
+            <div class="panel-heading">
+              <div>
+                <span class="section-kicker">Advanced</span>
+                <h2>Memory & Privacy</h2>
+                <p>Simple defaults that keep conversations natural without over-saving.</p>
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div>
+                <strong>Conversation context</strong>
+                <p>Remember the recent conversation so replies make sense.</p>
+              </div>
+              <button id="conversationMemoryToggle" class="switch-button" type="button"><i></i></button>
+            </div>
+
+            <div class="setting-row disabled-setting">
+              <div>
+                <strong>Long-term member memory</strong>
+                <p>Optional long-term memory is kept off for now.</p>
+              </div>
+              <span class="badge muted">Coming later</span>
+            </div>
+
+            <div id="disconnectOpenrouterWrap" class="danger-zone hidden">
+              <div>
+                <strong>Disconnect OpenRouter</strong>
+                <p>AI Chat will stop working until it is connected again.</p>
+              </div>
+              <button id="disconnectOpenrouterBtn" class="danger" type="button">Disconnect</button>
+            </div>
+          </section>
+
+          <div class="finish-bar">
+            <div>
+              <strong id="finishTitle">Finish setup</strong>
+              <span id="finishHint">Choose at least one feature to continue.</span>
+            </div>
+            <button id="finishBtn" class="primary" type="button">Finish setup</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <dialog id="emojiDialog">
+    <div class="dialog-head">
+      <div>
+        <span class="section-kicker">Your server</span>
+        <h2>Choose an emoji</h2>
+      </div>
+      <button id="closeEmojiDialog" class="icon-button" type="button" aria-label="Close">×</button>
+    </div>
+    <div id="emojiPickerGrid" class="emoji-picker-grid"></div>
+    <div id="emojiPickerEmpty" class="empty-state hidden">This server has no custom emojis available.</div>
+  </dialog>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>
