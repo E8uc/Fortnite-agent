@@ -3,7 +3,7 @@ const DISCORD_INSTALL="https://discord.com/oauth2/authorize?client_id=1551891287
 const SK="e8helper.session",GK="e8helper.guild",DK="e8helper.draft.";
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const page=document.body.dataset.page||"landing";
-const st={token:"",me:null,guildId:"",resources:null,config:null,openrouter:false,saveTimer:null,saving:false,queued:false,queuedFinish:false,revision:0,dirty:false,draftRestored:false,installBaseline:new Set(),installBaselineReady:false};
+const st={token:"",me:null,guildId:"",resources:null,config:null,openrouter:false,saveTimer:null,saving:false,queued:false,queuedFinish:false,revision:0,dirty:false,draftRestored:false,installBaseline:new Set(),installBaselineReady:false,installLeftPage:false};
 
 function esc(v){return String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]))}
 function clone(v){return JSON.parse(JSON.stringify(v))}
@@ -63,27 +63,73 @@ async function installedGuildIds(){
   })));
   return checks.filter(x=>x.installed).map(x=>x.id);
 }
+function continueInstalledGuild(guildId){
+  clearInterval(waitForAnyInstall._timer);
+  localStorage.setItem(GK,String(guildId));
+  location.replace("overview.html?guild="+encodeURIComponent(guildId)+"&installed=1");
+}
+function showInstalledChoices(ids){
+  const box=$("#installedChoices");
+  if(!box)return;
+  box.innerHTML="";
+  const map=new Map((st.me?.guilds||[]).map(g=>[String(g.id),g]));
+  for(const id of ids){
+    const g=map.get(String(id));
+    if(!g)continue;
+    const b=document.createElement("button");
+    b.className="guild-card";
+    b.innerHTML=avatar(g)+'<span><strong>'+esc(g.name)+'</strong><small>E8 Helper is already here</small></span>';
+    b.onclick=()=>continueInstalledGuild(id);
+    box.appendChild(b);
+  }
+  box.classList.toggle("hidden",!box.children.length);
+  $("#installHint")?.classList.toggle("hidden",!!box.children.length);
+}
 async function waitForAnyInstall(){
   $("#loading")?.classList.add("hidden");
   $("#guildPicker")?.classList.add("hidden");
   $("#overviewContent")?.classList.add("hidden");
   $("#installWait")?.classList.remove("hidden");
-  const check=async()=>{
+  st.installLeftPage=false;
+
+  const cleanup=()=>{
+    clearInterval(waitForAnyInstall._timer);
+    window.removeEventListener("focus",onFocus);
+    window.removeEventListener("blur",onBlur);
+    document.removeEventListener("visibilitychange",onVisibility);
+  };
+  const check=async(allowExisting=false)=>{
     const installed=await installedGuildIds();
     const found=installed.find(id=>!st.installBaseline.has(String(id)));
-    if(!found)return false;
-    clearInterval(waitForAnyInstall._timer);
-    window.removeEventListener("focus",check);
-    document.removeEventListener("visibilitychange",onVisibility);
-    localStorage.setItem(GK,String(found));
-    location.replace("overview.html?guild="+encodeURIComponent(found)+"&installed=1");
-    return true;
+    if(found){
+      cleanup();
+      continueInstalledGuild(found);
+      return true;
+    }
+
+    if(allowExisting&&st.installLeftPage&&installed.length===1){
+      cleanup();
+      continueInstalledGuild(installed[0]);
+      return true;
+    }
+
+    if(allowExisting&&st.installLeftPage&&installed.length>1){
+      showInstalledChoices(installed);
+    }
+    return false;
   };
-  const onVisibility=()=>{if(document.visibilityState==="visible")check()};
-  window.addEventListener("focus",check);
+  const onBlur=()=>{st.installLeftPage=true};
+  const onFocus=()=>check(true);
+  const onVisibility=()=>{
+    if(document.visibilityState==="hidden")st.installLeftPage=true;
+    else check(true);
+  };
+
+  window.addEventListener("blur",onBlur);
+  window.addEventListener("focus",onFocus);
   document.addEventListener("visibilitychange",onVisibility);
   clearInterval(waitForAnyInstall._timer);
-  waitForAnyInstall._timer=setInterval(()=>{if(document.visibilityState==="visible")check()},2500);
+  waitForAnyInstall._timer=setInterval(()=>{if(document.visibilityState==="visible")check(false)},2500);
 }
 async function waitForInstall(guildId){
   const wait=$("#installWait");
@@ -317,6 +363,9 @@ async function bootDashboard(){
     $("#guildPicker")?.classList.add("hidden");
     $("#overviewContent")?.classList.add("hidden");
     $("#installWait")?.classList.remove("hidden");
+    if(st.installBaseline.size){
+      showInstalledChoices([...st.installBaseline]);
+    }
     return;
   }
   if(page==="overview"&&(q.get("choose")==="1"||(!q.get("guild")&&!localStorage.getItem(GK)))){$("#loading")?.classList.add("hidden");renderGuildPicker();return}
