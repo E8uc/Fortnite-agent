@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#08101f">
   <meta name="description" content="The server owner always has access. Extra manager roles are optional.">
   <title>Permissions • E8 Helper</title>
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=20260923-4">
 </head>
 <body data-page="permissions">
   <div id="toast" class="toast" aria-live="polite"></div>
@@ -17,11 +17,14 @@
       <div id="pageContent" class="hidden">
         <div class="page-head"><div><span class="eyebrow">Permissions</span><h1>Permissions</h1><p>The server owner always has access. Extra manager roles are optional.</p></div><span id="saveState" class="save-state">Saved</span></div>
         
-<div class="panel setting"><label>Additional manager roles</label><div id="managerRoleList" class="chips"></div><span>These roles can manage E8 Helper settings too.</span></div>
+<div class="settings-grid">
+  <div class="panel setting"><strong>Server owner</strong><p>Always has full access to E8 Helper settings.</p><span>Detected automatically from Discord.</span></div>
+  <div class="panel setting"><label>Additional manager roles</label><div id="managerRoleList" class="chips"></div><span>Optional. These roles can manage E8 Helper settings too.</span></div>
+</div>
       </div>
       
     </div>
   </main>
-  <script src="./app.js" defer></script>
+  <script src="./app.js?v=20260923-4" defer></script>
 </body>
 </html>
