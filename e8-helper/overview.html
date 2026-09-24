@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#08101f">
+  <meta name="description" content="Choose what E8 Helper should do in your server.">
+  <title>Overview • E8 Helper</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body data-page="overview">
+  <div id="toast" class="toast" aria-live="polite"></div>
+  <main class="page">
+    <div class="page-shell">
+      <section id="loading" class="panel loading"><span class="spinner"></span><p>Opening E8 Helper…</p></section>
+      <section id="authRequired" class="panel auth-required hidden"><h2>Sign in to continue</h2><p>Your E8 Helper settings are managed from the website.</p><button id="signInAgain" class="primary">Sign in with Discord</button></section>
+      <section id="guildPicker" class="hidden">
+        <div class="page-head"><div><span class="eyebrow">Servers</span><h1>Choose a server</h1><p>Only servers you can manage are shown.</p></div></div>
+        <div id="guildGrid" class="guild-grid"></div>
+      </section>
+      <div id="overviewContent" class="hidden">
+        <div class="page-head"><div><span class="eyebrow">Overview</span><h1 id="guildTitle">E8 Helper</h1><p id="guildSubtitle"></p></div><span id="saveState" class="save-state">Saved</span></div>
+        <div class="page-grid">
+          <div class="feature-grid">
+            <label class="feature"><input id="aiEnabled" type="checkbox"><span><strong>𝑬𝟖𝐴𝑖</strong><small>Natural AI chat for your server.</small></span></label>
+            <label class="feature"><input id="pathEnabled" type="checkbox"><span><strong>𝑬𝟖 Path Finder</strong><small>Fortnite paths through <code>/find</code>.</small></span></label>
+          </div>
+          <div class="panel"><strong>Room rules</strong><p>AI Chat and Path Finder must use different rooms. E8 keeps each configured room at 10 seconds slowmode or higher.</p></div>
+          <div class="finish"><button id="finishSetup" class="primary">Finish setup</button></div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script src="./app.js" defer></script>
+</body>
+</html>
