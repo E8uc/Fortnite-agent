@@ -1,5 +1,5 @@
 const API="https://e8helper.a39328122.workers.dev";
-const REQUIRED_WORKER_BUILD="2026-09-24-oauth-panel-v1";
+const REQUIRED_WORKER_BUILD="2026-09-24-oauth-panel-v2";
 const SK="e8helper.session",GK="e8helper.guild",DK="e8helper.draft.";
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const page=document.body.dataset.page||"landing";
@@ -103,13 +103,9 @@ async function startInstall(guildId=""){
     return;
   }
 
-  // Open synchronously from the user's tap so iOS keeps the E8 tab alive
-  // while Discord opens in a separate browser/app context.
-  let installWindow=null;
-  try{installWindow=window.open("about:blank","_blank")}catch{}
-
   const button=$("#installButton");
   if(button){button.disabled=true;button.textContent="Checking E8 backend…";}
+
   try{
     const versionResponse=await fetch(API+"/dashboard/api/version",{cache:"no-store"});
     const versionBody=await versionResponse.json().catch(()=>({}));
@@ -117,22 +113,36 @@ async function startInstall(guildId=""){
       throw new Error("E8 backend update is not live yet. Deploy the latest E8-Helper Worker first.");
     }
 
-    if(button)button.textContent="Opening Discord…";
+    if(button)button.textContent="Preparing Discord OAuth…";
     const result=await api("/dashboard/api/install/start",{
       method:"POST",
       body:JSON.stringify({guildId:id})
     });
     if(!result.authorizeUrl)throw new Error("Discord install link is unavailable.");
 
-    armInstallWatcher(id);
-    if(installWindow&&!installWindow.closed){
-      installWindow.location.href=result.authorizeUrl;
-    }else{
-      location.assign(result.authorizeUrl);
+    const authorize=new URL(result.authorizeUrl);
+    const scopes=new Set((authorize.searchParams.get("scope")||"").split(/\s+/).filter(Boolean));
+    const expectedCallback=API+"/dashboard/auth/discord/callback";
+    const valid=
+      authorize.origin==="https://discord.com" &&
+      authorize.pathname==="/oauth2/authorize" &&
+      authorize.searchParams.get("response_type")==="code" &&
+      authorize.searchParams.get("redirect_uri")===expectedCallback &&
+      !!authorize.searchParams.get("state") &&
+      scopes.has("bot") &&
+      scopes.has("identify") &&
+      authorize.searchParams.get("integration_type")==="0" &&
+      authorize.searchParams.get("guild_id")===id &&
+      authorize.searchParams.get("disable_guild_select")==="true";
+
+    if(!valid){
+      throw new Error("E8 received a non-code-grant Discord URL. The live Worker is not using the advanced OAuth flow.");
     }
+
+    if(button)button.textContent="Opening Discord…";
+    location.href=authorize.toString();
   }catch(e){
     console.error(e);
-    try{installWindow?.close()}catch{}
     if(button){button.disabled=false;button.textContent="Add E8 Helper to "+(guild.name||"this server");}
     toast(e.message||"Couldn't start the Discord install.","error");
   }
