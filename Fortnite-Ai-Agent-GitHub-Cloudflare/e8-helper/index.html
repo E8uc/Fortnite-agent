@@ -20,6 +20,11 @@
         <small>Control Panel</small>
       </span>
     </a>
+    <button id="menuBtn" class="menu-button hidden" type="button" aria-label="Open navigation" aria-expanded="false">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
     <div id="saveState" class="save-state hidden">Saved</div>
     <button id="signOutBtn" class="ghost small hidden" type="button">Sign out</button>
   </header>
@@ -67,7 +72,6 @@
           <a href="#ai">𝑬𝟖𝐴𝑖</a>
           <a href="#pathfinder">Path Finder</a>
           <a href="#emojis">Custom Emojis</a>
-          <a href="#support">Support</a>
           <a href="#permissions">Permissions</a>
           <a href="#schedule">Schedule</a>
           <a href="#advanced">Advanced</a>
@@ -229,33 +233,6 @@
             <div id="emojiEmpty" class="empty-state">No custom emojis added yet.</div>
           </section>
 
-          <section id="support" class="panel">
-            <div class="panel-heading">
-              <div>
-                <span class="section-kicker">Help flow</span>
-                <h2>Support</h2>
-                <p>Optional. Tell E8 where members should go when they actually need help.</p>
-              </div>
-              <span class="badge muted">Optional</span>
-            </div>
-
-            <div class="form-grid">
-              <div class="field">
-                <label for="supportChannel">Support channel</label>
-                <select id="supportChannel"></select>
-              </div>
-              <div class="field">
-                <label for="supportRole">Support role</label>
-                <select id="supportRole"></select>
-              </div>
-              <div class="field full">
-                <label for="ticketUrl">Ticket link</label>
-                <input id="ticketUrl" type="url" inputmode="url" placeholder="https://discord.gg/... or your ticket link">
-                <small>Leave it empty if you want E8 to use the support channel instead.</small>
-              </div>
-            </div>
-          </section>
-
           <section id="permissions" class="panel">
             <div class="panel-heading">
               <div>
@@ -344,6 +321,7 @@
     </section>
   </main>
 
+  <button id="menuBackdrop" class="menu-backdrop hidden" type="button" aria-label="Close navigation"></button>
   <div id="toast" class="toast hidden" role="status"></div>
 
   <dialog id="emojiDialog">
