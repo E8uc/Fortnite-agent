@@ -10,7 +10,7 @@ function toast(message,type="info"){const el=$("#toast");if(!el)return;el.textCo
 function saveState(message,kind=""){const el=$("#saveState");if(!el)return;el.textContent=message;el.dataset.kind=kind}
 async function api(path,options={}){const headers=new Headers(options.headers||{});if(st.token)headers.set("Authorization","Bearer "+st.token);if(options.body)headers.set("Content-Type","application/json");const response=await fetch(API+path,{...options,headers});const raw=await response.text();let body={};try{body=raw?JSON.parse(raw):{}}catch{body={message:raw}}if(!response.ok){const e=new Error(body.message||body.error||("Request failed ("+response.status+")"));e.status=response.status;e.body=body;throw e}return body}
 function openWeb(url){const w=window.open(url,"_blank","noopener,noreferrer");if(!w)location.href=url}
-function login(){openWeb(API+"/dashboard/auth/discord/start?install=1")}
+function login(){location.href=API+"/dashboard/auth/discord/start?install=1"}
 function drawer(open){$("#drawer")?.classList.toggle("open",open);$("#backdrop")?.classList.toggle("hidden",!open);$("#drawer")?.setAttribute("aria-hidden",String(!open));$("#menuButton")?.setAttribute("aria-expanded",String(open))}
 function guildQuery(){return st.guildId?"?guild="+encodeURIComponent(st.guildId):""}
 function icon(g,size=96){return g?.icon?"https://cdn.discordapp.com/icons/"+g.id+"/"+g.icon+".png?size="+size:""}
@@ -217,13 +217,18 @@ function bindDashboard(){
 }
 async function bootLanding(){
   bindLanding();reveal();
-  const hash=new URLSearchParams(location.hash.slice(1)),session=hash.get("session"),install=hash.get("install")==="1";
-  if(session){localStorage.setItem(SK,session);history.replaceState(null,"",location.pathname+location.search);st.token=session;try{await loadMe();if(install)await startInstall()}catch(e){console.error(e);toast("Discord sign in could not be completed.","error")}}
+  const hash=new URLSearchParams(location.hash.slice(1)),session=hash.get("session");
+  if(session){localStorage.setItem(SK,session);history.replaceState(null,"",location.pathname+location.search);st.token=session;try{await loadMe()}catch(e){console.error(e);toast("Discord sign in could not be completed.","error")}}
   const q=new URLSearchParams(location.search);if(q.get("login")==="cancelled")toast("Discord sign in cancelled.");
 }
 async function bootDashboard(){
   injectShell();bindDashboard();
-  st.token=localStorage.getItem(SK)||"";
+  const hash=new URLSearchParams(location.hash.slice(1)),session=hash.get("session");
+  if(session){
+    localStorage.setItem(SK,session);
+    history.replaceState(null,"",location.pathname+location.search);
+  }
+  st.token=session||localStorage.getItem(SK)||"";
   if(!st.token){$("#loading")?.classList.add("hidden");$("#authRequired")?.classList.remove("hidden");$("#signInAgain")?.addEventListener("click",login);return}
   try{await loadMe()}catch{localStorage.removeItem(SK);$("#loading")?.classList.add("hidden");$("#authRequired")?.classList.remove("hidden");$("#signInAgain")?.addEventListener("click",login);return}
   const q=new URLSearchParams(location.search);
