@@ -1,4 +1,5 @@
 const API_BASE = "https://e8helper.a39328122.workers.dev";
+const BOT_INSTALL_URL = "https://discord.com/oauth2/authorize?client_id=1551891287442071562&scope=bot%20applications.commands&permissions=84992";
 const STORAGE_KEY = "e8-helper-dashboard-session";
 const PENDING_GUILD_KEY = "e8-helper-pending-guild";
 
@@ -629,9 +630,7 @@ async function boot() {
 }
 
 $("discordLoginBtn").addEventListener("click", () => {
-  const guild = getInitialGuildFromUrl();
-  if (guild) localStorage.setItem(PENDING_GUILD_KEY, guild);
-  location.href = API_BASE + "/dashboard/auth/discord/start";
+  location.href = BOT_INSTALL_URL;
 });
 ui.signOut.addEventListener("click", signOut);
 ui.guildSelect.addEventListener("change", () => loadGuild(ui.guildSelect.value));
