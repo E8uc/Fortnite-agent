@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#17142d">
+  <meta name="description" content="E8 Helper — E8 AI and E8 Path Finder for Discord.">
+  <title>E8 Helper</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="ambient a"></div><div class="ambient b"></div>
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+  <header class="topbar glass">
+    <a class="brand" href="#top"><b>E8</b><span>E8 Helper</span></a>
+    <div class="top-actions">
+      <button id="serverSwitcher" class="server-switch hidden"></button>
+      <button id="menuButton" class="hamburger" aria-label="Open menu" aria-expanded="false"><i></i><i></i><i></i></button>
+    </div>
+  </header>
+
+  <div id="backdrop" class="backdrop hidden"></div>
+  <aside id="drawer" class="drawer glass" aria-hidden="true">
+    <div class="drawer-title"><div><small>E8 Helper</small><strong>Control Panel</strong></div><button id="closeMenu" class="close">×</button></div>
+    <nav id="landingNav" class="nav-list">
+      <a href="#about">What it does</a><a href="#features">Features</a><a href="#soon">More soon</a><a href="./author.html">Author</a>
+    </nav>
+    <nav id="dashboardNav" class="nav-list hidden">
+      <button data-section="overview">Overview</button><button data-section="ai">𝑬𝟖𝐴𝑖</button><button data-section="path">𝑬𝟖 Path Finder</button>
+      <button data-section="emojis">Custom Emojis</button><button data-section="permissions">Permissions</button><button data-section="schedule">Schedule</button>
+      <button data-section="memory">Memory & Privacy</button><button data-section="advanced">Advanced</button>
+    </nav>
+    <div class="drawer-foot"><a href="./author.html">Created & developed by e8uc.</a><button id="logoutButton" class="link-button hidden">Sign out</button></div>
+  </aside>
+
+  <main id="landingView">
+    <section id="top" class="hero shell">
+      <div class="orb"></div>
+      <div class="hero-copy reveal">
+        <span class="pill">E8 • Discord Assistant</span>
+        <h1>Meet <em>E8 Helper</em></h1>
+        <p>Natural AI chat and Fortnite path finding in one simple bot. Pick what you want, choose your rooms, and E8 handles the rest.</p>
+        <div class="actions"><button class="primary js-start">Add E8 Helper to your server</button><a class="secondary" href="#about">See how it works</a></div>
+      </div>
+    </section>
+
+    <section id="about" class="shell section">
+      <div class="heading reveal"><small>Simple by design</small><h2>No IDs. No API keys. No confusing setup.</h2><p>Sign in with Discord, choose your server, enable at least one feature, and select channels by name. Your progress stays saved.</p></div>
+      <div class="cards">
+        <article class="card reveal"><span class="icon">AI</span><h3>𝑬𝟖𝐴𝑖</h3><p>Connect OpenRouter with one sign-in and approval. No copy/paste API key and no model picking.</p></article>
+        <article class="card reveal"><span class="icon">/</span><h3>𝑬𝟖 Path Finder</h3><p>The command stays <code>/find</code> everywhere. Search Fortnite cosmetic paths in a dedicated room.</p></article>
+        <article class="card reveal"><span class="icon">✦</span><h3>Custom reactions</h3><p>Pick emojis directly from your server and describe what each one means so E8 can use them naturally.</p></article>
+      </div>
+    </section>
+
+    <section id="features" class="shell section split">
+      <div class="panel reveal"><small>Clear setup</small><h2>Everything has its own place.</h2><p>AI, Path Finder, emojis, permissions, schedule, memory and advanced options each have a simple section inside the hamburger menu.</p></div>
+      <div class="steps"><div class="mini glass reveal"><b>01</b><span><strong>Choose features</strong><small>AI Chat, Path Finder, or both.</small></span></div><div class="mini glass reveal"><b>02</b><span><strong>Pick rooms</strong><small>By name, never by ID.</small></span></div><div class="mini glass reveal"><b>03</b><span><strong>Done</strong><small>Everything stays saved.</small></span></div></div>
+    </section>
+
+    <section id="soon" class="shell final reveal"><div class="panel"><small>This is only the beginning</small><h2>More and more soon.</h2><p>E8 Helper keeps growing without making setup harder.</p><button class="primary js-start">Add E8 Helper to your server</button><a class="author-link" href="./author.html">Author • e8uc.</a></div></section>
+  </main>
+
+  <main id="dashboardView" class="dashboard hidden">
+    <div class="dash-shell">
+      <section id="loading" class="panel loading"><span class="spinner"></span><p>Opening E8 Helper…</p></section>
+      <section id="guildPicker" class="hidden"><div class="heading"><small>Choose a server</small><h2>Where should E8 Helper work?</h2><p>Only servers you can manage are shown.</p></div><div id="guildGrid" class="guild-grid"></div></section>
+
+      <div id="guildSetup" class="hidden">
+        <section id="section-overview" class="dash-section active">
+          <div class="dash-head"><div><small>Overview</small><h2 id="guildTitle">E8 Helper</h2><p id="guildSubtitle"></p></div><span id="saveState" class="save-state">Saved</span></div>
+          <div id="installCard" class="panel hidden"><h3>Add E8 Helper first</h3><p>Install the bot, then come back. Your setup stays here.</p><div class="actions left"><a id="installButton" class="primary" target="_blank" rel="noreferrer">Add E8 Helper</a><button id="refreshInstall" class="secondary">I added it</button></div></div>
+          <div id="featureCards" class="feature-grid">
+            <label class="feature glass"><input id="aiEnabled" type="checkbox"><i></i><span><strong>𝑬𝟖𝐴𝑖</strong><small>Natural AI chat.</small></span></label>
+            <label class="feature glass"><input id="pathEnabled" type="checkbox"><i></i><span><strong>𝑬𝟖 Path Finder</strong><small>Fortnite paths with <code>/find</code>.</small></span></label>
+          </div>
+          <p id="featureWarning" class="warning hidden">Choose at least one feature.</p>
+          <div class="panel compact"><strong>One room per feature</strong><p>AI Chat and Path Finder cannot use the same room. E8 keeps configured rooms at 10 seconds slowmode or higher.</p></div>
+          <div class="finish"><button id="finishSetup" class="primary">Finish setup</button></div>
+        </section>
+
+        <section id="section-ai" class="dash-section"><div class="dash-head"><div><small>𝑬𝟖𝐴𝑖</small><h2>AI Chat</h2><p>Connect once. E8 chooses the free OpenRouter route for you.</p></div></div><div class="settings-grid">
+          <div class="panel setting"><div class="row"><div><strong>OpenRouter</strong><span>No API key copy/paste.</span></div><b id="openrouterStatus" class="badge">Not connected</b></div><button id="connectOpenRouter" class="primary">Continue with OpenRouter</button></div>
+          <div class="panel setting"><label>AI Chat Channel</label><select id="aiChannel"></select><span>Choose the room where E8 can chat.</span></div>
+        </div></section>
+
+        <section id="section-path" class="dash-section"><div class="dash-head"><div><small>𝑬𝟖 Path Finder</small><h2>Path Finder</h2><p>The command stays <code>/find</code> everywhere.</p></div></div><div class="settings-grid">
+          <div class="panel setting"><label>Path Finder Channel</label><select id="pathChannel"></select><span>Must be different from AI Chat.</span></div>
+          <div class="panel setting"><label>Who can use it?</label><div class="segments"><button id="pathEveryone">Everyone</button><button id="pathRoles">Selected roles</button></div><div id="pathRoleList" class="chips"></div></div>
+        </div></section>
+
+        <section id="section-emojis" class="dash-section"><div class="dash-head"><div><small>Custom Emojis</small><h2>Teach E8 your reactions.</h2><p>Pick an emoji from your server, then describe when E8 should use it.</p></div><button id="addEmoji" class="secondary">Add custom emoji</button></div><div id="emojiList" class="emoji-list"></div></section>
+
+        <section id="section-permissions" class="dash-section"><div class="dash-head"><div><small>Permissions</small><h2>Who can manage E8?</h2><p>The server owner always has access. Extra manager roles are optional.</p></div></div><div class="panel setting"><label>Additional manager roles</label><div id="managerRoleList" class="chips"></div></div></section>
+
+        <section id="section-schedule" class="dash-section"><div class="dash-head"><div><small>Schedule</small><h2>When should E8 be online?</h2><p>Default: 2:00 PM to 11:00 PM in your timezone.</p></div></div><div class="settings-grid">
+          <div class="panel setting"><label>Wake time</label><input id="wakeTime" type="time" value="14:00"></div><div class="panel setting"><label>Sleep time</label><input id="sleepTime" type="time" value="23:00"></div>
+          <div class="panel setting wide"><label>Timezone</label><input id="timeZone" type="text" list="tzList" autocomplete="off"><datalist id="tzList"><option value="Asia/Baghdad"><option value="America/New_York"><option value="Europe/London"><option value="Asia/Dubai"><option value="Asia/Riyadh"><option value="Australia/Sydney"></datalist><span>Times are local to this timezone.</span></div>
+        </div></section>
+
+        <section id="section-memory" class="dash-section"><div class="dash-head"><div><small>Memory & Privacy</small><h2>Comfortable by default.</h2><p>Short context stays on. Long-term member memory stays off unless you enable it.</p></div></div><div class="settings-grid">
+          <label class="panel switch-setting"><span><strong>Conversation context</strong><small>Short recent context for natural replies.</small></span><input id="conversationMemory" type="checkbox" checked><i></i></label>
+          <label class="panel switch-setting"><span><strong>Long-term member memory</strong><small>Optional. Off by default.</small></span><input id="longTermMemory" type="checkbox"><i></i></label>
+        </div></section>
+
+        <section id="section-advanced" class="dash-section"><div class="dash-head"><div><small>Advanced</small><h2>Extra control, still simple.</h2><p>E8 identity and creator credits stay fixed across every server.</p></div></div><div class="panel setting"><strong>E8 Helper</strong><p>Created & developed by e8uc. • Part of E8</p><span>Server owners customize behavior, not ownership or creator credits.</span></div></section>
+      </div>
+    </div>
+  </main>
+
+  <dialog id="emojiDialog" class="emoji-dialog glass"><div class="dialog-head"><div><small>Custom Emojis</small><h3>Choose an emoji</h3></div><button id="closeEmoji" class="close">×</button></div><div id="emojiGrid" class="emoji-grid"></div></dialog>
+  <script src="./app.js" defer></script>
+</body>
+</html>
