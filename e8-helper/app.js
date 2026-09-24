@@ -3,7 +3,7 @@ const DISCORD_INSTALL="https://discord.com/oauth2/authorize?client_id=1551891287
 const SK="e8helper.session",GK="e8helper.guild",DK="e8helper.draft.";
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const page=document.body.dataset.page||"landing";
-const st={token:"",me:null,guildId:"",resources:null,config:null,openrouter:false,saveTimer:null,saving:false,queued:false,queuedFinish:false,revision:0,dirty:false,draftRestored:false,installBaseline:new Set(),installBaselineReady:false,installLeftPage:false};
+const st={token:"",me:null,guildId:"",resources:null,config:null,openrouter:false,saveTimer:null,saving:false,queued:false,queuedFinish:false,revision:0,dirty:false,draftRestored:false};
 
 function esc(v){return String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]))}
 function clone(v){return JSON.parse(JSON.stringify(v))}
@@ -51,125 +51,67 @@ function updateHeader(){const guild=st.resources?.guild||(st.me?.guilds||[]).fin
 async function loadMe(){st.me=await api("/dashboard/api/me");return st.me}
 async function botInstalled(guildId){
   try{
-    const r=await api("/dashboard/api/guild/"+guildId+"/resources");
+    const r=await api("/dashboard/api/guild/"+encodeURIComponent(guildId)+"/resources");
     return !!r.botInstalled;
   }catch{return false}
 }
-async function installedGuildIds(){
-  const guilds=Array.isArray(st.me?.guilds)?st.me.guilds:[];
-  const checks=await Promise.all(guilds.map(async g=>({
-    id:String(g.id),
-    installed:await botInstalled(String(g.id))
-  })));
-  return checks.filter(x=>x.installed).map(x=>x.id);
+function installUrlForGuild(guildId){
+  const url=new URL(DISCORD_INSTALL);
+  url.searchParams.set("guild_id",String(guildId));
+  url.searchParams.set("disable_guild_select","true");
+  return url.toString();
 }
-function continueInstalledGuild(guildId){
-  clearInterval(waitForAnyInstall._timer);
-  localStorage.setItem(GK,String(guildId));
-  location.replace("overview.html?guild="+encodeURIComponent(guildId)+"&installed=1");
+function stopInstallWatcher(){
+  const w=stopInstallWatcher.current;
+  if(!w)return;
+  clearInterval(w.timer);
+  window.removeEventListener("focus",w.onFocus);
+  document.removeEventListener("visibilitychange",w.onVisibility);
+  stopInstallWatcher.current=null;
 }
-function showInstalledChoices(ids){
-  const box=$("#installedChoices");
-  if(!box)return;
-  box.innerHTML="";
-  const map=new Map((st.me?.guilds||[]).map(g=>[String(g.id),g]));
-  for(const id of ids){
-    const g=map.get(String(id));
-    if(!g)continue;
-    const b=document.createElement("button");
-    b.className="guild-card";
-    b.innerHTML=avatar(g)+'<span><strong>'+esc(g.name)+'</strong><small>E8 Helper is already here</small></span>';
-    b.onclick=()=>continueInstalledGuild(id);
-    box.appendChild(b);
-  }
-  box.classList.toggle("hidden",!box.children.length);
-  $("#installHint")?.classList.toggle("hidden",!!box.children.length);
+function armInstallWatcher(guildId){
+  stopInstallWatcher();
+  let checking=false;
+  const check=async()=>{
+    if(checking)return;
+    checking=true;
+    try{
+      if(await botInstalled(guildId)){
+        stopInstallWatcher();
+        location.replace("overview.html?guild="+encodeURIComponent(guildId)+"&installed=1");
+      }
+    }finally{
+      checking=false;
+    }
+  };
+  const onFocus=()=>check();
+  const onVisibility=()=>{if(document.visibilityState==="visible")check()};
+  const timer=setInterval(()=>{if(document.visibilityState==="visible")check()},2500);
+  stopInstallWatcher.current={timer,onFocus,onVisibility};
+  window.addEventListener("focus",onFocus);
+  document.addEventListener("visibilitychange",onVisibility);
+  setTimeout(check,0);
 }
-async function waitForAnyInstall(){
+function showInstallForGuild(guildId){
+  const guild=(st.me?.guilds||[]).find(g=>String(g.id)===String(guildId));
   $("#loading")?.classList.add("hidden");
   $("#guildPicker")?.classList.add("hidden");
   $("#overviewContent")?.classList.add("hidden");
   $("#installWait")?.classList.remove("hidden");
-  st.installLeftPage=false;
-
-  const cleanup=()=>{
-    clearInterval(waitForAnyInstall._timer);
-    window.removeEventListener("focus",onFocus);
-    window.removeEventListener("blur",onBlur);
-    document.removeEventListener("visibilitychange",onVisibility);
-  };
-  const check=async(allowExisting=false)=>{
-    const installed=await installedGuildIds();
-    const found=installed.find(id=>!st.installBaseline.has(String(id)));
-    if(found){
-      cleanup();
-      continueInstalledGuild(found);
-      return true;
-    }
-
-    if(allowExisting&&st.installLeftPage&&installed.length===1){
-      cleanup();
-      continueInstalledGuild(installed[0]);
-      return true;
-    }
-
-    if(allowExisting&&st.installLeftPage&&installed.length>1){
-      showInstalledChoices(installed);
-    }
-    return false;
-  };
-  const onBlur=()=>{st.installLeftPage=true};
-  const onFocus=()=>check(true);
-  const onVisibility=()=>{
-    if(document.visibilityState==="hidden")st.installLeftPage=true;
-    else check(true);
-  };
-
-  window.addEventListener("blur",onBlur);
-  window.addEventListener("focus",onFocus);
-  document.addEventListener("visibilitychange",onVisibility);
-  clearInterval(waitForAnyInstall._timer);
-  waitForAnyInstall._timer=setInterval(()=>{if(document.visibilityState==="visible")check(false)},2500);
+  if($("#installGuildName"))$("#installGuildName").textContent=guild?.name||"this server";
+  if($("#installButton"))$("#installButton").textContent="Add E8 Helper to "+(guild?.name||"this server");
+  armInstallWatcher(String(guildId));
 }
-async function waitForInstall(guildId){
-  const wait=$("#installWait");
-  $("#loading")?.classList.add("hidden");
-  $("#guildPicker")?.classList.add("hidden");
-  wait?.classList.remove("hidden");
-  const check=async()=>{
-    if(await botInstalled(guildId)){
-      clearInterval(waitForInstall._timer);
-      window.removeEventListener("focus",check);
-      document.removeEventListener("visibilitychange",onVisibility);
-      location.replace("overview.html?guild="+encodeURIComponent(guildId)+"&installed=1");
-      return true;
-    }
-    return false;
-  };
-  const onVisibility=()=>{if(document.visibilityState==="visible")check()};
-  window.addEventListener("focus",check);
-  document.addEventListener("visibilitychange",onVisibility);
-  clearInterval(waitForInstall._timer);
-  waitForInstall._timer=setInterval(()=>{if(document.visibilityState==="visible")check()},2500);
-  check();
-}
-async function startInstall(guildId=""){
-  try{
-    if(guildId){
-      waitForInstall(String(guildId));
-      openWeb(DISCORD_INSTALL);
-      return;
-    }
-    if(!st.installBaselineReady){
-      toast("Still preparing Discord setup. Try again in a moment.","info");
-      return;
-    }
-    openWeb(DISCORD_INSTALL);
-    waitForAnyInstall();
-  }catch(e){
-    console.error(e);
-    toast(e.message||"Couldn't open Discord.","error");
+function startInstall(guildId=""){
+  const id=String(guildId||"");
+  const guild=(st.me?.guilds||[]).find(g=>String(g.id)===id);
+  if(!id||!guild){
+    location.href="overview.html?choose=1";
+    return;
   }
+  // Keep this fully synchronous so iOS treats it as the user's tap.
+  armInstallWatcher(id);
+  openWeb(installUrlForGuild(id));
 }
 async function loadGuild(id){
   st.guildId=String(id);localStorage.setItem(GK,st.guildId);
@@ -177,7 +119,7 @@ async function loadGuild(id){
     api("/dashboard/api/guild/"+st.guildId+"/resources"),
     api("/dashboard/api/guild/"+st.guildId+"/config")
   ]);
-  if(!resources.botInstalled){$("#loading")?.classList.add("hidden");$("#installWait")?.classList.remove("hidden");waitForInstall(st.guildId);return false}
+  if(!resources.botInstalled){showInstallForGuild(st.guildId);return false}
   st.resources=resources;st.openrouter=!!configResponse.openrouterConnected;
   st.config=restoreDraft(clone(configResponse.config));ensureShape();updateHeader();return true;
 }
@@ -325,7 +267,7 @@ function bindLanding(){
 }
 function reveal(){const items=$$(".reveal");if(!("IntersectionObserver"in window)){items.forEach(x=>x.classList.add("visible"));return}const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("visible");o.unobserve(e.target)}}),{threshold:.12});items.forEach(x=>o.observe(x))}
 function bindDashboard(){
-  $("#menuButton")?.addEventListener("click",()=>drawer(true));$("#closeMenu")?.addEventListener("click",()=>drawer(false));$("#backdrop")?.addEventListener("click",()=>drawer(false));$("#logoutButton")?.addEventListener("click",logout);$("#installButton")?.addEventListener("click",()=>startInstall(st.guildId||""));
+  $("#menuButton")?.addEventListener("click",()=>drawer(true));$("#closeMenu")?.addEventListener("click",()=>drawer(false));$("#backdrop")?.addEventListener("click",()=>drawer(false));$("#logoutButton")?.addEventListener("click",logout);$("#installButton")?.addEventListener("click",()=>startInstall(st.guildId||""));$("#changeInstallServer")?.addEventListener("click",()=>location.href="overview.html?choose=1");
   $("#aiEnabled")?.addEventListener("change",markChanged);$("#pathEnabled")?.addEventListener("change",markChanged);$("#finishSetup")?.addEventListener("click",()=>flushSave(true));
   $("#connectOpenRouter")?.addEventListener("click",connectOpenRouter);$("#aiChannel")?.addEventListener("change",()=>{if($("#aiChannel").value&&$("#aiChannel").value===$("#pathChannel")?.value){$("#aiChannel").value="";toast("AI Chat and Path Finder need different rooms.","error")}markChanged()});
   $("#pathChannel")?.addEventListener("change",()=>{if($("#pathChannel").value&&$("#pathChannel").value===$("#aiChannel")?.value){$("#pathChannel").value="";toast("AI Chat and Path Finder need different rooms.","error")}markChanged()});
@@ -356,19 +298,8 @@ async function bootDashboard(){
   const q=new URLSearchParams(location.search);
   if(page==="overview"&&q.get("install")==="1"){
     localStorage.removeItem(GK);
-    st.guildId="";
-    st.installBaseline=new Set(await installedGuildIds());
-    st.installBaselineReady=true;
-    $("#loading")?.classList.add("hidden");
-    $("#guildPicker")?.classList.add("hidden");
-    $("#overviewContent")?.classList.add("hidden");
-    $("#installWait")?.classList.remove("hidden");
-    if(st.installBaseline.size){
-      showInstalledChoices([...st.installBaseline]);
-    }
-    return;
   }
-  if(page==="overview"&&(q.get("choose")==="1"||(!q.get("guild")&&!localStorage.getItem(GK)))){$("#loading")?.classList.add("hidden");renderGuildPicker();return}
+  if(page==="overview"&&(q.get("install")==="1"||q.get("choose")==="1"||(!q.get("guild")&&!localStorage.getItem(GK)))){$("#loading")?.classList.add("hidden");renderGuildPicker();return}
   const guild=q.get("guild")||localStorage.getItem(GK);
   if(!guild){location.replace("overview.html?choose=1");return}
   try{
