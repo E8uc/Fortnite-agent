@@ -2,7 +2,7 @@ const API="https://e8helper.a39328122.workers.dev";
 const SK="e8helper.session",GK="e8helper.guild",DK="e8helper.draft.";
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const page=document.body.dataset.page||"landing";
-const st={token:"",me:null,guildId:"",resources:null,config:null,openrouter:false,saveTimer:null,saving:false,queued:false,queuedFinish:false,revision:0};
+const st={token:"",me:null,guildId:"",resources:null,config:null,openrouter:false,saveTimer:null,saving:false,queued:false,queuedFinish:false,revision:0,dirty:false,draftRestored:false};
 
 function esc(v){return String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]))}
 function clone(v){return JSON.parse(JSON.stringify(v))}
@@ -17,14 +17,14 @@ function icon(g,size=96){return g?.icon?"https://cdn.discordapp.com/icons/"+g.id
 function avatar(g,cls="guild-avatar"){const u=icon(g);return u?'<img class="'+cls+'" src="'+u+'" alt="">':'<span class="'+cls+'">'+esc(String(g?.name||"E8").slice(0,2).toUpperCase())+"</span>"}
 function draftKey(){return DK+st.guildId}
 function localSave(){if(st.guildId&&st.config)localStorage.setItem(draftKey(),JSON.stringify({savedAt:Date.now(),config:st.config}))}
-function restoreDraft(serverConfig){try{const local=JSON.parse(localStorage.getItem(draftKey())||"null");if(local?.config&&Number(local.savedAt)>Number(serverConfig?.updatedAt||0)){setTimeout(()=>toast("Your saved draft was restored."),180);return local.config}}catch{}return serverConfig}
-function ensureShape(){const c=st.config||(st.config={});c.features=c.features||{};c.ai=c.ai||{enabled:false,channelId:"",timezone:"America/New_York",wakeMinute:840,sleepMinute:1380,conversationMemory:true,longTermMemberMemory:false};c.pathFinder=c.pathFinder||{enabled:false,channelId:"",access:"everyone",roleIds:[]};c.support=c.support||{channelId:"",roleId:"",ticketUrl:""};c.managers=c.managers||{roleIds:[],userIds:[]};c.customEmojis=Array.isArray(c.customEmojis)?c.customEmojis:[]}
+function restoreDraft(serverConfig){try{const local=JSON.parse(localStorage.getItem(draftKey())||"null");if(local?.config&&Number(local.savedAt)>Number(serverConfig?.updatedAt||0)){st.dirty=true;st.draftRestored=true;setTimeout(()=>toast("Your saved draft was restored."),180);return local.config}}catch{}return serverConfig}
+function ensureShape(){const c=st.config||(st.config={});c.features=c.features||{};c.ai=c.ai||{enabled:false,channelId:"",timezone:"America/New_York",wakeMinute:840,sleepMinute:1380,conversationMemory:true};c.pathFinder=c.pathFinder||{enabled:false,channelId:"",access:"everyone",roleIds:[]};c.support=c.support||{channelId:"",roleId:"",ticketUrl:""};c.managers=c.managers||{roleIds:[],userIds:[]};c.customEmojis=Array.isArray(c.customEmojis)?c.customEmojis:[]}
 
 function injectShell(){
   if(page==="landing")return;
   const currentName={
     overview:"Overview",ai:"𝑬𝟖𝐴𝑖",path:"𝑬𝟖 Path Finder",emojis:"Custom Emojis",
-    support:"Support",permissions:"Permissions",schedule:"Schedule",memory:"Memory & Privacy",advanced:"Advanced"
+    support:"Support",permissions:"Permissions",schedule:"Schedule",memory:"Memory & Privacy"
   }[page]||"Overview";
   document.body.insertAdjacentHTML("afterbegin",
     '<header class="topbar"><a class="brand" href="./"><span class="brand-mark">E8</span><span class="brand-name">E8 Helper</span></a><div class="top-actions"><button id="serverSwitcher" class="server-switch hidden"></button><button id="menuButton" class="hamburger" aria-label="Open menu" aria-expanded="false"><i></i><i></i><i></i></button></div></header>'+
@@ -39,7 +39,6 @@ function injectShell(){
       '<a class="js-guild-link" data-href="permissions.html" href="permissions.html">Permissions</a>'+
       '<a class="js-guild-link" data-href="schedule.html" href="schedule.html">Schedule</a>'+
       '<a class="js-guild-link" data-href="memory.html" href="memory.html">Memory & Privacy</a>'+
-      '<a class="js-guild-link" data-href="advanced.html" href="advanced.html">Advanced</a>'+
       '<a href="author.html">Author</a>'+
     '</nav><div class="drawer-foot"><a href="author.html">Created & developed by e8uc.</a><button id="logoutButton" class="link-button">Sign out</button></div></aside>'
   );
@@ -49,7 +48,7 @@ function setNavGuild(){$$(".js-guild-link").forEach(link=>{const base=link.datas
 function updateHeader(){const guild=st.resources?.guild||(st.me?.guilds||[]).find(g=>String(g.id)===String(st.guildId))||{};const sw=$("#serverSwitcher");if(sw&&st.guildId){sw.classList.remove("hidden");sw.innerHTML=avatar(guild,"server-mini")+'<span>'+esc(guild.name||"Server")+"</span>";sw.onclick=()=>location.href="overview.html?choose=1"}setNavGuild()}
 
 async function loadMe(){st.me=await api("/dashboard/api/me");return st.me}
-async function startInstall(guildId=""){try{const result=await api("/dashboard/api/install/start",{method:"POST",body:JSON.stringify(guildId?{guildId}:{})});if(!result.authorizeUrl)throw new Error("Install link unavailable.");location.href=result.authorizeUrl}catch(e){console.error(e);toast(e.message||"Couldn't start the Discord install.","error")}}
+async function startInstall(guildId=""){try{const result=await api("/dashboard/api/install/start",{method:"POST",body:JSON.stringify(guildId?{guildId}:{})});if(!result.authorizeUrl)throw new Error("Install link unavailable.");openWeb(result.authorizeUrl)}catch(e){console.error(e);toast(e.message||"Couldn't start the Discord install.","error")}}
 async function loadGuild(id){
   st.guildId=String(id);localStorage.setItem(GK,st.guildId);
   const [resources,configResponse]=await Promise.all([
@@ -85,7 +84,7 @@ function collectPage(){
   if(page==="path"&&$("#pathChannel"))st.config.pathFinder.channelId=$("#pathChannel").value;
   if(page==="support"){st.config.support.channelId=$("#supportChannel")?.value||"";st.config.support.roleId=$("#supportRole")?.value||"";st.config.support.ticketUrl=$("#ticketUrl")?.value.trim()||""}
   if(page==="schedule"){st.config.ai.wakeMinute=timeToMin($("#wakeTime")?.value,840);st.config.ai.sleepMinute=timeToMin($("#sleepTime")?.value,1380);st.config.ai.timezone=$("#timeZone")?.value.trim()||"America/New_York"}
-  if(page==="memory"){st.config.ai.conversationMemory=$("#conversationMemory")?.checked!==false;st.config.ai.longTermMemberMemory=!!$("#longTermMemory")?.checked}
+  if(page==="memory"){st.config.ai.conversationMemory=$("#conversationMemory")?.checked!==false}
 }
 function validation(c,strict){
   if(!c)return"Settings are not ready yet.";
@@ -98,7 +97,7 @@ function validation(c,strict){
   if((c.customEmojis||[]).some(e=>String(e.description||"").trim().length<4))return"Each custom emoji description needs at least 4 characters.";
   return"";
 }
-function markChanged(){collectPage();st.revision+=1;localSave();const issue=validation(st.config,!!st.config.setupComplete);if(issue){saveState(issue,"attention");return}scheduleSave()}
+function markChanged(){collectPage();st.revision+=1;st.dirty=true;localSave();const issue=validation(st.config,!!st.config.setupComplete);if(issue){saveState(issue,"attention");return}scheduleSave()}
 function scheduleSave(delay=500){clearTimeout(st.saveTimer);saveState("Saving…","");st.saveTimer=setTimeout(()=>flushSave(false),delay)}
 async function flushSave(finish=false){
   if(!st.config||!st.guildId)return;collectPage();
@@ -111,7 +110,7 @@ async function flushSave(finish=false){
   try{
     const result=await api("/dashboard/api/guild/"+st.guildId+"/config",{method:"PUT",body:JSON.stringify(payload)});
     st.openrouter=!!result.openrouterConnected;
-    if(revision===st.revision){st.config=clone(result.config);ensureShape();localStorage.removeItem(draftKey());saveState("Saved","saved");if(finish)toast("E8 Helper is ready for this server.","success")}
+    if(revision===st.revision){st.config=clone(result.config);ensureShape();st.dirty=false;st.draftRestored=false;localStorage.removeItem(draftKey());saveState("Saved","saved");if(finish)toast("E8 Helper is ready for this server.","success")}
     else{st.queued=true;saveState("Saving newer changes…","")}
   }catch(e){
     console.error(e);localSave();
@@ -181,8 +180,7 @@ function renderSchedule(){
   if(!st.config.setupComplete&&st.config.ai.timezone==="America/New_York"){const z=Intl.DateTimeFormat().resolvedOptions().timeZone;if(z)st.config.ai.timezone=z}
   $("#wakeTime").value=minToTime(st.config.ai.wakeMinute??840);$("#sleepTime").value=minToTime(st.config.ai.sleepMinute??1380);$("#timeZone").value=st.config.ai.timezone||"America/New_York";saveState("Saved","saved");
 }
-function renderMemory(){$("#conversationMemory").checked=st.config.ai.conversationMemory!==false;$("#longTermMemory").checked=!!st.config.ai.longTermMemberMemory;saveState("Saved","saved")}
-function renderAdvanced(){$("#ownerDetected").textContent=st.resources?.guild?.ownerId?"Detected automatically":"Detected when available";saveState("Saved","saved")}
+function renderMemory(){$("#conversationMemory").checked=st.config.ai.conversationMemory!==false;saveState(st.dirty?"Draft saved on this device":"Saved",st.dirty?"attention":"saved")}
 function renderCurrent(){
   if(page==="overview")renderOverview();
   if(page==="ai")renderAI();
@@ -192,11 +190,10 @@ function renderCurrent(){
   if(page==="permissions")renderPermissions();
   if(page==="schedule")renderSchedule();
   if(page==="memory")renderMemory();
-  if(page==="advanced")renderAdvanced();
 }
 async function connectOpenRouter(){
   localSave();
-  try{const r=await api("/dashboard/api/guild/"+st.guildId+"/openrouter/start",{method:"POST"});if(r.connected){st.openrouter=true;renderAI();return}location.href=r.authorizeUrl}catch(e){toast(e.message||"Couldn't connect OpenRouter.","error")}
+  try{const r=await api("/dashboard/api/guild/"+st.guildId+"/openrouter/start",{method:"POST"});if(r.connected){st.openrouter=true;renderAI();return}openWeb(r.authorizeUrl)}catch(e){toast(e.message||"Couldn't connect OpenRouter.","error")}
 }
 async function logout(){try{if(st.token)await api("/dashboard/api/logout",{method:"POST"})}catch{}localStorage.removeItem(SK);localStorage.removeItem(GK);location.href="./"}
 
@@ -213,8 +210,9 @@ function bindDashboard(){
   $("#pathEveryone")?.addEventListener("click",()=>{st.config.pathFinder.access="everyone";st.config.pathFinder.roleIds=[];renderPathRoles();markChanged()});
   $("#pathRoles")?.addEventListener("click",()=>{st.config.pathFinder.access="roles";renderPathRoles();markChanged()});
   $("#addEmoji")?.addEventListener("click",openEmojiDialog);$("#closeEmoji")?.addEventListener("click",()=>$("#emojiDialog")?.close());
-  ["supportChannel","supportRole","conversationMemory","longTermMemory"].forEach(id=>$("#"+id)?.addEventListener("change",markChanged));
+  ["supportChannel","supportRole","conversationMemory"].forEach(id=>$("#"+id)?.addEventListener("change",markChanged));
   ["ticketUrl","wakeTime","sleepTime","timeZone"].forEach(id=>{const e=$("#"+id);e?.addEventListener("change",markChanged);e?.addEventListener("input",markChanged)});
+  $(".js-guild-link").forEach(link=>link.addEventListener("click",async e=>{if(!st.dirty&&!st.saving)return;e.preventDefault();const href=link.href;clearTimeout(st.saveTimer);try{await flushSave(false)}catch{}location.href=href}));
   document.addEventListener("keydown",e=>{if(e.key==="Escape")drawer(false)});
 }
 async function bootLanding(){
@@ -236,6 +234,7 @@ async function bootDashboard(){
     const ok=await loadGuild(guild);if(!ok)return;
     $("#loading")?.classList.add("hidden");$("#pageContent")?.classList.remove("hidden");
     renderCurrent();
+    if(st.draftRestored){saveState("Draft restored","attention");const issue=validation(st.config,!!st.config.setupComplete);if(!issue)scheduleSave(50)}
     if(q.get("installed")==="1")toast("E8 Helper added. Finish the setup.","success");
     if(q.get("openrouter")==="connected")toast("OpenRouter connected.","success");
     if(q.get("install")==="cancelled")toast("Bot install cancelled.");
