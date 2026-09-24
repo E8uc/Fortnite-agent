@@ -28,7 +28,7 @@
     </nav>
     <nav id="dashboardNav" class="nav-list hidden">
       <button data-section="overview">Overview</button><button data-section="ai">𝑬𝟖𝐴𝑖</button><button data-section="path">𝑬𝟖 Path Finder</button>
-      <button data-section="emojis">Custom Emojis</button><button data-section="permissions">Permissions</button><button data-section="schedule">Schedule</button>
+      <button data-section="emojis">Custom Emojis</button><button data-section="support">Support</button><button data-section="permissions">Permissions</button><button data-section="schedule">Schedule</button>
       <button data-section="memory">Memory & Privacy</button><button data-section="advanced">Advanced</button>
     </nav>
     <div class="drawer-foot"><a href="./author.html">Created & developed by e8uc.</a><button id="logoutButton" class="link-button hidden">Sign out</button></div>
@@ -40,16 +40,16 @@
       <div class="hero-copy reveal">
         <span class="pill">E8 • Discord Assistant</span>
         <h1>Meet <em>E8 Helper</em></h1>
-        <p>Natural AI chat and Fortnite path finding in one simple bot. Pick what you want, choose your rooms, and E8 handles the rest.</p>
+        <p>A simple Discord assistant with natural AI chat and a free Fortnite Path Finder. Sign in, add E8 to your server, choose what you want, and you are done.</p>
         <div class="actions"><button class="primary js-start">Add E8 Helper to your server</button><a class="secondary" href="#about">See how it works</a></div>
       </div>
     </section>
 
     <section id="about" class="shell section">
-      <div class="heading reveal"><small>Simple by design</small><h2>No IDs. No API keys. No confusing setup.</h2><p>Sign in with Discord, choose your server, enable at least one feature, and select channels by name. Your progress stays saved.</p></div>
+      <div class="heading reveal"><small>Simple by design</small><h2>No IDs. No API keys. No confusing setup.</h2><p>Sign in with Discord, add E8 Helper to a server you manage, then choose at least one feature and select channels by name. Your progress stays saved.</p></div>
       <div class="cards">
         <article class="card reveal"><span class="icon">AI</span><h3>𝑬𝟖𝐴𝑖</h3><p>Connect OpenRouter with one sign-in and approval. No copy/paste API key and no model picking.</p></article>
-        <article class="card reveal"><span class="icon">/</span><h3>𝑬𝟖 Path Finder</h3><p>The command stays <code>/find</code> everywhere. Search Fortnite cosmetic paths in a dedicated room.</p></article>
+        <article class="card reveal"><span class="icon">/</span><h3>𝑬𝟖 Path Finder</h3><p>The command stays <code>/find</code> everywhere. Search Fortnite cosmetic paths in a dedicated room, always free.</p></article>
         <article class="card reveal"><span class="icon">✦</span><h3>Custom reactions</h3><p>Pick emojis directly from your server and describe what each one means so E8 can use them naturally.</p></article>
       </div>
     </section>
@@ -92,7 +92,7 @@
 
         <section id="section-emojis" class="dash-section"><div class="dash-head"><div><small>Custom Emojis</small><h2>Teach E8 your reactions.</h2><p>Pick an emoji from your server, then describe when E8 should use it.</p></div><button id="addEmoji" class="secondary">Add custom emoji</button></div><div id="emojiList" class="emoji-list"></div></section>
 
-        <section id="section-permissions" class="dash-section"><div class="dash-head"><div><small>Permissions</small><h2>Who can manage E8?</h2><p>The server owner always has access. Extra manager roles are optional.</p></div></div><div class="panel setting"><label>Additional manager roles</label><div id="managerRoleList" class="chips"></div></div></section>
+        <section id="section-support" class="dash-section"><div class="dash-head"><div><small>Support</small><h2>Where should E8 send people?</h2><p>Optional. Set your support room, support role, ticket link, or any combination you use.</p></div></div><div class="settings-grid"><div class="panel setting"><label>Support Channel</label><select id="supportChannel"></select><span>Used when someone needs real server support.</span></div><div class="panel setting"><label>Support Role</label><select id="supportRole"></select><span>Optional staff role for your support team.</span></div><div class="panel setting wide"><label>Ticket Link</label><input id="ticketUrl" type="url" inputmode="url" placeholder="https://discord.gg/... or your ticket link"><span>Optional. Leave it empty if your server does not use a ticket link.</span></div></div></section><section id="section-permissions" class="dash-section"><div class="dash-head"><div><small>Permissions</small><h2>Who can manage E8?</h2><p>The server owner always has access. Extra manager roles are optional.</p></div></div><div class="panel setting"><label>Additional manager roles</label><div id="managerRoleList" class="chips"></div></div></section>
 
         <section id="section-schedule" class="dash-section"><div class="dash-head"><div><small>Schedule</small><h2>When should E8 be online?</h2><p>Default: 2:00 PM to 11:00 PM in your timezone.</p></div></div><div class="settings-grid">
           <div class="panel setting"><label>Wake time</label><input id="wakeTime" type="time" value="14:00"></div><div class="panel setting"><label>Sleep time</label><input id="sleepTime" type="time" value="23:00"></div>
@@ -104,7 +104,7 @@
           <label class="panel switch-setting"><span><strong>Long-term member memory</strong><small>Optional. Off by default.</small></span><input id="longTermMemory" type="checkbox"><i></i></label>
         </div></section>
 
-        <section id="section-advanced" class="dash-section"><div class="dash-head"><div><small>Advanced</small><h2>Extra control, still simple.</h2><p>E8 identity and creator credits stay fixed across every server.</p></div></div><div class="panel setting"><strong>E8 Helper</strong><p>Created & developed by e8uc. • Part of E8</p><span>Server owners customize behavior, not ownership or creator credits.</span></div></section>
+        <section id="section-advanced" class="dash-section"><div class="dash-head"><div><small>Advanced</small><h2>Extra control, still simple.</h2><p>Useful server details live here without exposing technical IDs.</p></div></div><div class="settings-grid"><div class="panel setting"><strong>Server owner</strong><p id="ownerDetected">Detected automatically ✓</p><span>The owner always keeps full dashboard access.</span></div><div class="panel setting"><strong>E8 identity</strong><p>Created & developed by e8uc. • Part of E8</p><span>Servers customize behavior, not ownership or creator credits.</span></div></div></section>
       </div>
     </div>
   </main>
