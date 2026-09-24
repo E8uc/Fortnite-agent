@@ -9,6 +9,8 @@ const ui = {
   app: $("app"),
   signOut: $("signOutBtn"),
   saveState: $("saveState"),
+  menuBtn: $("menuBtn"),
+  menuBackdrop: $("menuBackdrop"),
   guildSelect: $("guildSelect"),
   loading: $("loadingPanel"),
   install: $("installPanel"),
@@ -32,9 +34,6 @@ const ui = {
   pathRoleBox: $("pathRoleBox"),
   pathRoleList: $("pathRoleList"),
   managerRoleList: $("managerRoleList"),
-  supportChannel: $("supportChannel"),
-  supportRole: $("supportRole"),
-  ticketUrl: $("ticketUrl"),
   timezone: $("timezone"),
   wakeTime: $("wakeTime"),
   sleepTime: $("sleepTime"),
@@ -141,6 +140,20 @@ function signOut() {
   localStorage.removeItem(PENDING_GUILD_KEY);
   state.session = "";
   location.href = "./";
+}
+
+function setMenuOpen(open) {
+  const shouldOpen = Boolean(open) && window.innerWidth <= 900;
+  document.body.classList.toggle("menu-open", shouldOpen);
+  ui.menuBtn?.setAttribute(
+    "aria-expanded",
+    shouldOpen ? "true" : "false",
+  );
+  ui.menuBackdrop?.classList.toggle("hidden", !shouldOpen);
+}
+
+function toggleMenu() {
+  setMenuOpen(!document.body.classList.contains("menu-open"));
 }
 
 function iconUrl(guild) {
@@ -407,11 +420,6 @@ function renderDashboard() {
 
   fillChannelSelect(ui.aiChannel, state.config.ai.channelId, false);
   fillChannelSelect(ui.pathChannel, state.config.pathFinder.channelId, false);
-  fillChannelSelect(ui.supportChannel, state.config.support.channelId, true);
-  fillRoleSelect(ui.supportRole, state.config.support.roleId);
-
-  ui.ticketUrl.value = state.config.support.ticketUrl || "";
-
   renderAccessMode();
   roleChoices(ui.pathRoleList, state.config.pathFinder.roleIds, (values) => {
     state.config.pathFinder.roleIds = values;
@@ -610,6 +618,7 @@ async function boot() {
   ui.app.classList.remove("hidden");
   ui.signOut.classList.remove("hidden");
   ui.saveState.classList.remove("hidden");
+  ui.menuBtn.classList.remove("hidden");
 
   ui.guildSelect.innerHTML = "";
   for (const guild of state.me.guilds || []) {
@@ -633,7 +642,18 @@ $("discordLoginBtn").addEventListener("click", () => {
   location.href = BOT_INSTALL_URL;
 });
 ui.signOut.addEventListener("click", signOut);
-ui.guildSelect.addEventListener("change", () => loadGuild(ui.guildSelect.value));
+ui.menuBtn.addEventListener("click", toggleMenu);
+ui.menuBackdrop.addEventListener("click", () => setMenuOpen(false));
+window.addEventListener("resize", () => {
+  if (window.innerWidth > 900) setMenuOpen(false);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") setMenuOpen(false);
+});
+ui.guildSelect.addEventListener("change", () => {
+  setMenuOpen(false);
+  loadGuild(ui.guildSelect.value);
+});
 ui.refreshInstall.addEventListener("click", () => loadGuild(state.guildId));
 ui.aiFeature.addEventListener("click", () => toggleFeature("ai"));
 ui.pathFeature.addEventListener("click", () => toggleFeature("path"));
@@ -646,19 +666,6 @@ ui.pathChannel.addEventListener("change", () => {
   state.config.pathFinder.channelId = ui.pathChannel.value;
   markDirty();
 });
-ui.supportChannel.addEventListener("change", () => {
-  state.config.support.channelId = ui.supportChannel.value;
-  markDirty();
-});
-ui.supportRole.addEventListener("change", () => {
-  state.config.support.roleId = ui.supportRole.value;
-  markDirty();
-});
-ui.ticketUrl.addEventListener("input", () => {
-  state.config.support.ticketUrl = ui.ticketUrl.value;
-  markDirty();
-});
-
 ui.pathEveryone.addEventListener("click", () => {
   state.config.pathFinder.access = "everyone";
   renderAccessMode();
@@ -707,6 +714,7 @@ document.querySelectorAll(".nav a").forEach((link) => {
   link.addEventListener("click", () => {
     document.querySelectorAll(".nav a").forEach((item) => item.classList.remove("active"));
     link.classList.add("active");
+    setMenuOpen(false);
   });
 });
 
