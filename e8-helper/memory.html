@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#08101f">
+  <meta name="description" content="Short conversation context stays on by default. Long-term member memory is optional.">
+  <title>Memory & Privacy • E8 Helper</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body data-page="memory">
+  <div id="toast" class="toast" aria-live="polite"></div>
+  <main class="page">
+    <div class="page-shell">
+      <section id="loading" class="panel loading"><span class="spinner"></span><p>Opening E8 Helper…</p></section>
+      <section id="authRequired" class="panel auth-required hidden"><h2>Sign in to continue</h2><p>Your E8 Helper settings are managed from the website.</p><button id="signInAgain" class="primary">Sign in with Discord</button></section>
+      <div id="pageContent" class="hidden">
+        <div class="page-head"><div><span class="eyebrow">Memory & Privacy</span><h1>Memory & Privacy</h1><p>Short conversation context stays on by default. Long-term member memory is optional.</p></div><span id="saveState" class="save-state">Saved</span></div>
+        
+<div class="settings-grid">
+  <label class="panel switch-setting"><span><strong>Conversation context</strong><small>Recent context for natural replies.</small></span><input id="conversationMemory" type="checkbox" checked></label>
+  <label class="panel switch-setting"><span><strong>Long-term member memory</strong><small>Optional and off by default.</small></span><input id="longTermMemory" type="checkbox"></label>
+</div>
+      </div>
+      
+    </div>
+  </main>
+  <script src="./app.js" defer></script>
+</body>
+</html>
