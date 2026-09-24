@@ -1,5 +1,7 @@
 const API="https://e8helper.a39328122.workers.dev";
-const DISCORD_INSTALL="https://discord.com/oauth2/authorize?client_id=1551891287442071562";
+const DISCORD_INSTALL="https://discord.com/oauth2/authorize";
+const DISCORD_APP_ID="1551891287442071562";
+const DISCORD_PERMISSIONS="85008";
 const SK="e8helper.session",GK="e8helper.guild",DK="e8helper.draft.";
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const page=document.body.dataset.page||"landing";
@@ -57,8 +59,12 @@ async function botInstalled(guildId){
 }
 function installUrlForGuild(guildId){
   const url=new URL(DISCORD_INSTALL);
+  url.searchParams.set("client_id",DISCORD_APP_ID);
+  url.searchParams.set("scope","bot applications.commands");
+  url.searchParams.set("permissions",DISCORD_PERMISSIONS);
   url.searchParams.set("guild_id",String(guildId));
   url.searchParams.set("disable_guild_select","true");
+  url.searchParams.set("integration_type","0");
   return url.toString();
 }
 function stopInstallWatcher(){
