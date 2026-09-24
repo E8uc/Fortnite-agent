@@ -1,8 +1,9 @@
 const API="https://e8helper.a39328122.workers.dev";
+const DISCORD_INSTALL="https://discord.com/oauth2/authorize?client_id=1551891287442071562";
 const SK="e8helper.session",GK="e8helper.guild",DK="e8helper.draft.";
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const page=document.body.dataset.page||"landing";
-const st={token:"",me:null,guildId:"",resources:null,config:null,openrouter:false,saveTimer:null,saving:false,queued:false,queuedFinish:false,revision:0,dirty:false,draftRestored:false};
+const st={token:"",me:null,guildId:"",resources:null,config:null,openrouter:false,saveTimer:null,saving:false,queued:false,queuedFinish:false,revision:0,dirty:false,draftRestored:false,installBaseline:new Set()};
 
 function esc(v){return String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]))}
 function clone(v){return JSON.parse(JSON.stringify(v))}
@@ -54,6 +55,36 @@ async function botInstalled(guildId){
     return !!r.botInstalled;
   }catch{return false}
 }
+async function installedGuildIds(){
+  const guilds=Array.isArray(st.me?.guilds)?st.me.guilds:[];
+  const checks=await Promise.all(guilds.map(async g=>({
+    id:String(g.id),
+    installed:await botInstalled(String(g.id))
+  })));
+  return checks.filter(x=>x.installed).map(x=>x.id);
+}
+async function waitForAnyInstall(){
+  $("#loading")?.classList.add("hidden");
+  $("#guildPicker")?.classList.add("hidden");
+  $("#overviewContent")?.classList.add("hidden");
+  $("#installWait")?.classList.remove("hidden");
+  const check=async()=>{
+    const installed=await installedGuildIds();
+    const found=installed.find(id=>!st.installBaseline.has(String(id)));
+    if(!found)return false;
+    clearInterval(waitForAnyInstall._timer);
+    window.removeEventListener("focus",check);
+    document.removeEventListener("visibilitychange",onVisibility);
+    localStorage.setItem(GK,String(found));
+    location.replace("overview.html?guild="+encodeURIComponent(found)+"&installed=1");
+    return true;
+  };
+  const onVisibility=()=>{if(document.visibilityState==="visible")check()};
+  window.addEventListener("focus",check);
+  document.addEventListener("visibilitychange",onVisibility);
+  clearInterval(waitForAnyInstall._timer);
+  waitForAnyInstall._timer=setInterval(()=>{if(document.visibilityState==="visible")check()},2500);
+}
 async function waitForInstall(guildId){
   const wait=$("#installWait");
   $("#loading")?.classList.add("hidden");
@@ -78,13 +109,16 @@ async function waitForInstall(guildId){
 }
 async function startInstall(guildId=""){
   try{
-    const result=await api("/dashboard/api/install/start",{method:"POST",body:JSON.stringify(guildId?{guildId}:{})});
-    if(!result.authorizeUrl)throw new Error("Install link unavailable.");
-    if(guildId)waitForInstall(guildId);
-    openWeb(result.authorizeUrl);
+    if(guildId){
+      waitForInstall(String(guildId));
+    }else{
+      st.installBaseline=new Set(await installedGuildIds());
+      await waitForAnyInstall();
+    }
+    openWeb(DISCORD_INSTALL);
   }catch(e){
     console.error(e);
-    toast(e.message||"Couldn't start the Discord install.","error");
+    toast(e.message||"Couldn't open Discord.","error");
   }
 }
 async function loadGuild(id){
@@ -241,7 +275,7 @@ function bindLanding(){
 }
 function reveal(){const items=$$(".reveal");if(!("IntersectionObserver"in window)){items.forEach(x=>x.classList.add("visible"));return}const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("visible");o.unobserve(e.target)}}),{threshold:.12});items.forEach(x=>o.observe(x))}
 function bindDashboard(){
-  $("#menuButton")?.addEventListener("click",()=>drawer(true));$("#closeMenu")?.addEventListener("click",()=>drawer(false));$("#backdrop")?.addEventListener("click",()=>drawer(false));$("#logoutButton")?.addEventListener("click",logout);$("#installButton")?.addEventListener("click",()=>{if(st.guildId)startInstall(st.guildId)});
+  $("#menuButton")?.addEventListener("click",()=>drawer(true));$("#closeMenu")?.addEventListener("click",()=>drawer(false));$("#backdrop")?.addEventListener("click",()=>drawer(false));$("#logoutButton")?.addEventListener("click",logout);$("#installButton")?.addEventListener("click",()=>startInstall(st.guildId||""));
   $("#aiEnabled")?.addEventListener("change",markChanged);$("#pathEnabled")?.addEventListener("change",markChanged);$("#finishSetup")?.addEventListener("click",()=>flushSave(true));
   $("#connectOpenRouter")?.addEventListener("click",connectOpenRouter);$("#aiChannel")?.addEventListener("change",()=>{if($("#aiChannel").value&&$("#aiChannel").value===$("#pathChannel")?.value){$("#aiChannel").value="";toast("AI Chat and Path Finder need different rooms.","error")}markChanged()});
   $("#pathChannel")?.addEventListener("change",()=>{if($("#pathChannel").value&&$("#pathChannel").value===$("#aiChannel")?.value){$("#pathChannel").value="";toast("AI Chat and Path Finder need different rooms.","error")}markChanged()});
@@ -270,6 +304,15 @@ async function bootDashboard(){
   if(!st.token){$("#loading")?.classList.add("hidden");$("#authRequired")?.classList.remove("hidden");$("#signInAgain")?.addEventListener("click",login);return}
   try{await loadMe()}catch{localStorage.removeItem(SK);$("#loading")?.classList.add("hidden");$("#authRequired")?.classList.remove("hidden");$("#signInAgain")?.addEventListener("click",login);return}
   const q=new URLSearchParams(location.search);
+  if(page==="overview"&&q.get("install")==="1"){
+    localStorage.removeItem(GK);
+    st.guildId="";
+    $("#loading")?.classList.add("hidden");
+    $("#guildPicker")?.classList.add("hidden");
+    $("#overviewContent")?.classList.add("hidden");
+    $("#installWait")?.classList.remove("hidden");
+    return;
+  }
   if(page==="overview"&&(q.get("choose")==="1"||(!q.get("guild")&&!localStorage.getItem(GK)))){$("#loading")?.classList.add("hidden");renderGuildPicker();return}
   const guild=q.get("guild")||localStorage.getItem(GK);
   if(!guild){location.replace("overview.html?choose=1");return}
