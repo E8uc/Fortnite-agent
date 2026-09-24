@@ -1,2 +1,244 @@
-const API="https://e8helper.a39328122.workers.dev",SK="e8helper.session",GK="e8helper.guild",DK="e8helper.draft.";const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];const st={token:"",me:null,guildId:"",resources:null,config:null,openrouter:false,timer:null,saving:false};function toast(m,t="info"){const e=$("#toast");if(!e)return;e.textContent=m;e.dataset.type=t;e.classList.add("show");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("show"),3000)}function saveState(m,k=""){const e=$("#saveState");if(e){e.textContent=m;e.dataset.kind=k}}async function api(p,o={}){const h=new Headers(o.headers||{});if(st.token)h.set("Authorization","Bearer "+st.token);if(o.body)h.set("Content-Type","application/json");const r=await fetch(API+p,{...o,headers:h}),x=await r.text();let b={};try{b=x?JSON.parse(x):{}}catch{b={message:x}}if(!r.ok){const e=new Error(b.message||b.error||("Request failed ("+r.status+")"));e.status=r.status;e.body=b;throw e}return b}function login(){location.href=API+"/dashboard/auth/discord/start?install=1"}function esc(v){return String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]))}function icon(g,s=96){return g?.icon?"https://cdn.discordapp.com/icons/"+g.id+"/"+g.icon+".png?size="+s:""}function avatar(g,c="guild-avatar"){const u=icon(g);return u?'<img class="'+c+'" src="'+u+'" alt="">':'<span class="'+c+' guild-fallback">'+esc(String(g?.name||"E8").slice(0,2).toUpperCase())+"</span>"}function drawer(v){$("#drawer")?.classList.toggle("open",v);$("#backdrop")?.classList.toggle("hidden",!v);$("#drawer")?.setAttribute("aria-hidden",String(!v))}function landing(){ $("#landingView")?.classList.remove("hidden");$("#dashboardView")?.classList.add("hidden");$("#landingNav")?.classList.remove("hidden");$("#dashboardNav")?.classList.add("hidden");$("#serverSwitcher")?.classList.add("hidden");$("#logoutButton")?.classList.add("hidden")}function dashboard(){ $("#landingView")?.classList.add("hidden");$("#dashboardView")?.classList.remove("hidden");$("#landingNav")?.classList.add("hidden");$("#dashboardNav")?.classList.remove("hidden");$("#logoutButton")?.classList.remove("hidden")}function section(n){$$(".dash-section").forEach(e=>e.classList.toggle("active",e.id==="section-"+n));$$("#dashboardNav [data-section]").forEach(e=>e.classList.toggle("active",e.dataset.section===n));drawer(false);scrollTo({top:0,behavior:"smooth"})}function draftKey(){return DK+st.guildId}function localSave(){if(st.guildId&&st.config)localStorage.setItem(draftKey(),JSON.stringify({savedAt:Date.now(),config:st.config}))}function restore(c){try{const x=JSON.parse(localStorage.getItem(draftKey())||"null");if(x?.config&&Number(x.savedAt)>Number(c?.updatedAt||0)){setTimeout(()=>toast("Your saved draft was restored."),200);return x.config}}catch{}return c}function guildPicker(){dashboard();st.guildId="";$("#loading")?.classList.add("hidden");$("#guildSetup")?.classList.add("hidden");$("#guildPicker")?.classList.remove("hidden");$("#serverSwitcher")?.classList.add("hidden");const g=$("#guildGrid");g.innerHTML="";for(const x of st.me?.guilds||[]){const b=document.createElement("button");b.className="guild-card glass";b.innerHTML=avatar(x)+'<span><strong>'+esc(x.name)+'</strong><small>'+(x.owner?"Server owner":"Can manage server")+'</small></span><b>›</b>';b.onclick=()=>openGuild(x.id);g.appendChild(b)}if(!(st.me?.guilds||[]).length)g.innerHTML='<div class="panel empty"><strong>No manageable servers found.</strong><p>You need Manage Server permission or an E8 manager role.</p></div>'}async function startInstall(guildId=""){try{const r=await api("/dashboard/api/install/start",{method:"POST",body:JSON.stringify(guildId?{guildId}: {})});if(!r.authorizeUrl)throw new Error("Install link unavailable.");location.href=r.authorizeUrl}catch(e){console.error(e);toast(e.message||"Couldn't start the Discord install.","error");if(guildId)guildPicker()}}
-async function openGuild(id){st.guildId=String(id);localStorage.setItem(GK,st.guildId);dashboard();$("#guildPicker")?.classList.add("hidden");$("#guildSetup")?.classList.add("hidden");$("#loading")?.classList.remove("hidden");try{const [r,c]=await Promise.all([api("/dashboard/api/guild/"+st.guildId+"/resources"),api("/dashboard/api/guild/"+st.guildId+"/config")]);if(!r.botInstalled){await startInstall(st.guildId);return}st.resources=r;st.openrouter=!!c.openrouterConnected;st.config=restore(JSON.parse(JSON.stringify(c.config)));const g=r.guild||(st.me.guilds||[]).find(x=>String(x.id)===st.guildId)||{};$("#guildTitle").textContent=g.name||"E8 Helper";$("#guildSubtitle").textContent=st.config.setupComplete?"Everything is ready. Change anything whenever you want.":"Choose what E8 should do here. Your progress saves automatically.";const sw=$("#serverSwitcher");sw.classList.remove("hidden");sw.innerHTML=avatar(g,"server-mini")+"<span>"+esc(g.name||"Server")+"</span><b>⌄</b>";$("#loading")?.classList.add("hidden");$("#guildSetup")?.classList.remove("hidden");section("overview");render()}catch(e){console.error(e);if(e.status===401)return logout(false);toast(e.message||"Couldn't open this server.","error")}}function installOnly(u){$("#installCard")?.classList.remove("hidden");$("#featureCards")?.classList.add("hidden");$("#finishSetup")?.closest(".finish")?.classList.add("hidden");$$("#dashboardNav [data-section]").forEach(b=>b.disabled=b.dataset.section!=="overview");$("#installButton").href=u||"#";saveState("Waiting for install","attention")}function channel(sel,val,ph){const e=$(sel);e.innerHTML='<option value="">'+esc(ph)+"</option>";for(const c of st.resources?.channels||[]){const o=document.createElement("option");o.value=c.id;o.textContent="# "+c.name;o.selected=String(c.id)===String(val||"");e.appendChild(o)}}function roleSelect(sel,val,ph){const e=$(sel);e.innerHTML='<option value="">'+esc(ph)+"</option>";for(const r of st.resources?.roles||[]){if(r.managed)continue;const o=document.createElement("option");o.value=r.id;o.textContent="@"+r.name;o.selected=String(r.id)===String(val||"");e.appendChild(o)}}function chip(r,on,fn){const l=document.createElement("label");l.className="role-chip";l.innerHTML='<input type="checkbox" '+(on?"checked":"")+"><span>@"+esc(r.name)+"</span>";$("input",l).onchange=e=>fn(e.target.checked);return l}function pathAccess(){const roles=st.config.pathFinder.access==="roles";$("#pathEveryone").classList.toggle("active",!roles);$("#pathRoles").classList.toggle("active",roles);const box=$("#pathRoleList");box.classList.toggle("hidden",!roles);box.innerHTML="";if(!roles)return;const set=new Set(st.config.pathFinder.roleIds||[]);for(const r of st.resources.roles||[]){if(r.managed)continue;box.appendChild(chip(r,set.has(r.id),v=>{const s=new Set(st.config.pathFinder.roleIds||[]);v?s.add(r.id):s.delete(r.id);st.config.pathFinder.roleIds=[...s];changed()}))}}function managers(){const box=$("#managerRoleList");box.innerHTML="";const set=new Set(st.config.managers?.roleIds||[]);for(const r of st.resources.roles||[]){if(r.managed)continue;box.appendChild(chip(r,set.has(r.id),v=>{const s=new Set(st.config.managers.roleIds||[]);v?s.add(r.id):s.delete(r.id);st.config.managers.roleIds=[...s];changed()}))}}function emojiList(){const box=$("#emojiList"),arr=st.config.customEmojis||[];box.innerHTML="";$("#addEmoji").textContent=arr.length?"Add another custom emoji":"Add custom emoji";if(!arr.length){box.innerHTML='<div class="panel empty"><strong>No custom emojis yet.</strong><p>Add one from this server and tell E8 what it means.</p></div>';return}for(const e of arr){const s=(st.resources.emojis||[]).find(x=>String(x.id)===String(e.id));if(!s)continue;const c=document.createElement("article");c.className="emoji-item panel";c.innerHTML='<div class="emoji-identity"><img src="'+s.imageUrl+'" alt=""><div><strong>:'+esc(s.name)+':</strong><small>&lt;'+(s.animated?"a":"")+":"+esc(s.name)+":"+s.id+'&gt;</small></div></div><label>What does this emoji mean?</label><textarea maxlength="180" rows="2" placeholder="Example: use this when something is cute or sweet">'+esc(e.description||"")+'</textarea><button class="danger-link" type="button">Remove</button>';$("textarea",c).oninput=x=>{e.description=x.target.value.slice(0,180);localSave();if(e.description.trim())queue()};$(".danger-link",c).onclick=()=>{st.config.customEmojis=st.config.customEmojis.filter(x=>String(x.id)!==String(e.id));emojiList();changed()};box.appendChild(c)}}function emojiDialog(){const d=$("#emojiDialog"),g=$("#emojiGrid"),used=new Set((st.config.customEmojis||[]).map(x=>String(x.id)));g.innerHTML="";for(const e of (st.resources.emojis||[]).filter(x=>x.available&&!used.has(String(x.id)))){const b=document.createElement("button");b.className="emoji-pick";b.innerHTML='<img src="'+e.imageUrl+'" alt=""><span>:'+esc(e.name)+":</span>";b.onclick=()=>{st.config.customEmojis.push({id:e.id,name:e.name,animated:e.animated,description:""});localSave();emojiList();d.close();saveState("Describe the emoji to save it","attention")};g.appendChild(b)}if(!g.children.length)g.innerHTML='<p class="empty-text">No more server emojis are available.</p>';d.showModal()}function render(){const c=st.config;$("#installCard")?.classList.add("hidden");$("#featureCards")?.classList.remove("hidden");$("#finishSetup")?.closest(".finish")?.classList.remove("hidden");$$("#dashboardNav [data-section]").forEach(b=>b.disabled=false);if(!c.setupComplete&&c.ai.timezone==="America/New_York"){const z=Intl.DateTimeFormat().resolvedOptions().timeZone;if(z)c.ai.timezone=z}$("#aiEnabled").checked=!!c.ai.enabled;$("#pathEnabled").checked=!!c.pathFinder.enabled;$("#conversationMemory").checked=c.ai.conversationMemory!==false;$("#longTermMemory").checked=!!c.ai.longTermMemberMemory;$("#wakeTime").value=minToTime(c.ai.wakeMinute??840);$("#sleepTime").value=minToTime(c.ai.sleepMinute??1380);$("#timeZone").value=c.ai.timezone||"America/New_York";channel("#aiChannel",c.ai.channelId,"Choose an AI Chat channel");channel("#pathChannel",c.pathFinder.channelId,"Choose a Path Finder channel");channel("#supportChannel",c.support?.channelId,"No support channel");roleSelect("#supportRole",c.support?.roleId,"No support role");$("#ticketUrl").value=c.support?.ticketUrl||"";pathAccess();managers();emojiList();$("#openrouterStatus").textContent=st.openrouter?"Connected":"Not connected";$("#openrouterStatus").classList.toggle("good",st.openrouter);$("#connectOpenRouter").textContent=st.openrouter?"Reconnect OpenRouter":"Continue with OpenRouter";$("#ownerDetected").textContent=st.resources.guild?.ownerId?"Detected automatically ✓":"Detected when available";$("#finishSetup").textContent=c.setupComplete?"Save settings":"Finish setup";updateNav();saveState(c.setupComplete?"Saved":"Draft saved","saved")}function updateNav(){const a=$('#dashboardNav [data-section="ai"]'),p=$('#dashboardNav [data-section="path"]');if(a)a.dataset.enabled=st.config.ai.enabled?"true":"false";if(p)p.dataset.enabled=st.config.pathFinder.enabled?"true":"false"}function minToTime(n){n=Math.max(0,Math.min(1439,Number(n)||0));return String(Math.floor(n/60)).padStart(2,"0")+":"+String(n%60).padStart(2,"0")}function timeToMin(v,f){const m=/^(\d{2}):(\d{2})$/.exec(v||"");if(!m)return f;const h=+m[1],x=+m[2];return h<24&&x<60?h*60+x:f}function collect(){const c=st.config;c.features=c.features||{};c.support=c.support||{};c.managers=c.managers||{roleIds:[],userIds:[]};c.customEmojis=c.customEmojis||[];c.ai.enabled=$("#aiEnabled").checked;c.features.aiChat=c.ai.enabled;c.ai.channelId=$("#aiChannel").value;c.ai.timezone=$("#timeZone").value.trim()||"America/New_York";c.ai.wakeMinute=timeToMin($("#wakeTime").value,840);c.ai.sleepMinute=timeToMin($("#sleepTime").value,1380);c.ai.conversationMemory=$("#conversationMemory").checked;c.ai.longTermMemberMemory=$("#longTermMemory").checked;c.pathFinder.enabled=$("#pathEnabled").checked;c.features.pathFinder=c.pathFinder.enabled;c.pathFinder.channelId=$("#pathChannel").value;c.support.channelId=$("#supportChannel").value;c.support.roleId=$("#supportRole").value;c.support.ticketUrl=$("#ticketUrl").value.trim();return c}function valid(c,finish=false){if(!c.ai.enabled&&!c.pathFinder.enabled)return"Choose AI Chat, Path Finder, or both.";if(c.ai.enabled&&c.pathFinder.enabled&&c.ai.channelId&&c.ai.channelId===c.pathFinder.channelId)return"AI Chat and Path Finder need different channels.";if(finish){if(c.ai.enabled&&!c.ai.channelId)return"Choose an AI Chat channel.";if(c.pathFinder.enabled&&!c.pathFinder.channelId)return"Choose a Path Finder channel.";if(c.ai.enabled&&!st.openrouter)return"Connect OpenRouter before finishing AI Chat setup.";if((c.customEmojis||[]).some(x=>!String(x.description||"").trim()))return"Add a short meaning for each custom emoji."}return""}function changed(){collect();localSave();updateNav();const e=valid(st.config,false);if(e){saveState(e,"attention");return}if(st.config.setupComplete&&(st.config.customEmojis||[]).some(x=>!String(x.description||"").trim())){saveState("Finish the emoji description","attention");return}queue()}function queue(){clearTimeout(st.timer);saveState("Saving…","");st.timer=setTimeout(()=>save(false),500)}async function save(finish){if(st.saving)return;collect();const old=!!st.config.setupComplete;if(finish)st.config.setupComplete=true;const e=valid(st.config,finish||st.config.setupComplete);if(e){st.config.setupComplete=old;saveState(e,"attention");toast(e,"error");return}st.saving=true;try{const r=await api("/dashboard/api/guild/"+st.guildId+"/config",{method:"PUT",body:JSON.stringify(st.config)});st.config=JSON.parse(JSON.stringify(r.config));st.openrouter=!!r.openrouterConnected;localStorage.removeItem(draftKey());render();if(finish)toast("E8 Helper is ready for this server.","success")}catch(e){st.config.setupComplete=old;localSave();saveState("Not saved","error");if(e.body?.error==="bot_not_installed"){await startInstall(st.guildId);return}toast(e.message||"Couldn't save yet.","error")}finally{st.saving=false}}async function openrouter(){localSave();try{const r=await api("/dashboard/api/guild/"+st.guildId+"/openrouter/start",{method:"POST"});if(r.connected){st.openrouter=true;render();return}location.href=r.authorizeUrl}catch(e){toast(e.message||"Couldn't connect OpenRouter.","error")}}async function logout(show=true){try{if(st.token)await api("/dashboard/api/logout",{method:"POST"})}catch{}localStorage.removeItem(SK);localStorage.removeItem(GK);st.token="";st.me=null;drawer(false);landing();if(show)toast("Signed out.")}function bind(){$$(".js-start").forEach(x=>x.onclick=login);$("#menuButton").onclick=()=>drawer(true);$("#closeMenu").onclick=()=>drawer(false);$("#backdrop").onclick=()=>drawer(false);$("#serverSwitcher").onclick=guildPicker;$("#logoutButton").onclick=()=>logout();$$("#dashboardNav [data-section]").forEach(b=>b.onclick=()=>section(b.dataset.section));$("#refreshInstall").onclick=()=>openGuild(st.guildId);$("#finishSetup").onclick=()=>save(true);$("#connectOpenRouter").onclick=openrouter;$("#addEmoji").onclick=emojiDialog;$("#closeEmoji").onclick=()=>$("#emojiDialog").close();$("#pathEveryone").onclick=()=>{st.config.pathFinder.access="everyone";st.config.pathFinder.roleIds=[];pathAccess();changed()};$("#pathRoles").onclick=()=>{st.config.pathFinder.access="roles";pathAccess();changed()};["aiEnabled","pathEnabled","aiChannel","pathChannel","supportChannel","supportRole","conversationMemory","longTermMemory"].forEach(id=>$("#"+id)?.addEventListener("change",()=>{if((id==="aiChannel"||id==="pathChannel")&&$("#aiChannel").value&&$("#aiChannel").value===$("#pathChannel").value){$("#"+id).value="";toast("AI Chat and Path Finder need different rooms.","error")}changed()}));["wakeTime","sleepTime","timeZone","ticketUrl"].forEach(id=>{$("#"+id)?.addEventListener("change",changed);$("#"+id)?.addEventListener("input",changed)});document.addEventListener("keydown",e=>{if(e.key==="Escape")drawer(false)})}function reveal(){const a=$$(".reveal");if(!("IntersectionObserver"in window))return a.forEach(x=>x.classList.add("visible"));const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("visible");o.unobserve(e.target)}}),{threshold:.12});a.forEach(x=>o.observe(x))}async function boot(){const hp=new URLSearchParams(location.hash.slice(1)),s=hp.get("session"),installAfterLogin=hp.get("install")==="1";if(s){localStorage.setItem(SK,s);history.replaceState(null,"",location.pathname+location.search)}st.token=s||localStorage.getItem(SK)||"";bind();reveal();if(!st.token)return landing();dashboard();try{st.me=await api("/dashboard/api/me")}catch{return logout(false)}if(installAfterLogin){await startInstall();return}const q=new URLSearchParams(location.search),g=q.get("guild")||localStorage.getItem(GK);if(q.get("openrouter")==="connected")toast("OpenRouter connected.","success");if(q.get("installed")==="1")toast("E8 Helper added. Let's finish setup.","success");if(q.get("install")==="cancelled")toast("Bot install cancelled.","info");if(g&&(st.me.guilds||[]).some(x=>String(x.id)===String(g)))await openGuild(g);else guildPicker()}boot();
+const API="https://e8helper.a39328122.workers.dev";
+const SK="e8helper.session",GK="e8helper.guild",DK="e8helper.draft.";
+const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
+const page=document.body.dataset.page||"landing";
+const st={token:"",me:null,guildId:"",resources:null,config:null,openrouter:false,saveTimer:null,saving:false,queued:false,queuedFinish:false,revision:0};
+
+function esc(v){return String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]))}
+function clone(v){return JSON.parse(JSON.stringify(v))}
+function toast(message,type="info"){const el=$("#toast");if(!el)return;el.textContent=message;el.dataset.type=type;el.classList.add("show");clearTimeout(el._timer);el._timer=setTimeout(()=>el.classList.remove("show"),2800)}
+function saveState(message,kind=""){const el=$("#saveState");if(!el)return;el.textContent=message;el.dataset.kind=kind}
+async function api(path,options={}){const headers=new Headers(options.headers||{});if(st.token)headers.set("Authorization","Bearer "+st.token);if(options.body)headers.set("Content-Type","application/json");const response=await fetch(API+path,{...options,headers});const raw=await response.text();let body={};try{body=raw?JSON.parse(raw):{}}catch{body={message:raw}}if(!response.ok){const e=new Error(body.message||body.error||("Request failed ("+response.status+")"));e.status=response.status;e.body=body;throw e}return body}
+function openWeb(url){const w=window.open(url,"_blank","noopener,noreferrer");if(!w)location.href=url}
+function login(){openWeb(API+"/dashboard/auth/discord/start?install=1")}
+function drawer(open){$("#drawer")?.classList.toggle("open",open);$("#backdrop")?.classList.toggle("hidden",!open);$("#drawer")?.setAttribute("aria-hidden",String(!open));$("#menuButton")?.setAttribute("aria-expanded",String(open))}
+function guildQuery(){return st.guildId?"?guild="+encodeURIComponent(st.guildId):""}
+function icon(g,size=96){return g?.icon?"https://cdn.discordapp.com/icons/"+g.id+"/"+g.icon+".png?size="+size:""}
+function avatar(g,cls="guild-avatar"){const u=icon(g);return u?'<img class="'+cls+'" src="'+u+'" alt="">':'<span class="'+cls+'">'+esc(String(g?.name||"E8").slice(0,2).toUpperCase())+"</span>"}
+function draftKey(){return DK+st.guildId}
+function localSave(){if(st.guildId&&st.config)localStorage.setItem(draftKey(),JSON.stringify({savedAt:Date.now(),config:st.config}))}
+function restoreDraft(serverConfig){try{const local=JSON.parse(localStorage.getItem(draftKey())||"null");if(local?.config&&Number(local.savedAt)>Number(serverConfig?.updatedAt||0)){setTimeout(()=>toast("Your saved draft was restored."),180);return local.config}}catch{}return serverConfig}
+function ensureShape(){const c=st.config||(st.config={});c.features=c.features||{};c.ai=c.ai||{enabled:false,channelId:"",timezone:"America/New_York",wakeMinute:840,sleepMinute:1380,conversationMemory:true,longTermMemberMemory:false};c.pathFinder=c.pathFinder||{enabled:false,channelId:"",access:"everyone",roleIds:[]};c.support=c.support||{channelId:"",roleId:"",ticketUrl:""};c.managers=c.managers||{roleIds:[],userIds:[]};c.customEmojis=Array.isArray(c.customEmojis)?c.customEmojis:[]}
+
+function injectShell(){
+  if(page==="landing")return;
+  const currentName={
+    overview:"Overview",ai:"𝑬𝟖𝐴𝑖",path:"𝑬𝟖 Path Finder",emojis:"Custom Emojis",
+    support:"Support",permissions:"Permissions",schedule:"Schedule",memory:"Memory & Privacy",advanced:"Advanced"
+  }[page]||"Overview";
+  document.body.insertAdjacentHTML("afterbegin",
+    '<header class="topbar"><a class="brand" href="./"><span class="brand-mark">E8</span><span class="brand-name">E8 Helper</span></a><div class="top-actions"><button id="serverSwitcher" class="server-switch hidden"></button><button id="menuButton" class="hamburger" aria-label="Open menu" aria-expanded="false"><i></i><i></i><i></i></button></div></header>'+
+    '<div id="backdrop" class="backdrop hidden"></div>'+
+    '<aside id="drawer" class="drawer" aria-hidden="true"><div class="drawer-title"><div><small>E8 Helper</small><strong>'+esc(currentName)+'</strong></div><button id="closeMenu" class="close">×</button></div>'+
+    '<nav class="nav-list">'+
+      '<a class="js-guild-link" data-href="overview.html" href="overview.html">Overview</a>'+
+      '<a class="js-guild-link" data-href="ai.html" href="ai.html">𝑬𝟖𝐴𝑖</a>'+
+      '<a class="js-guild-link" data-href="path.html" href="path.html">𝑬𝟖 Path Finder</a>'+
+      '<a class="js-guild-link" data-href="emojis.html" href="emojis.html">Custom Emojis</a>'+
+      '<a class="js-guild-link" data-href="support.html" href="support.html">Support</a>'+
+      '<a class="js-guild-link" data-href="permissions.html" href="permissions.html">Permissions</a>'+
+      '<a class="js-guild-link" data-href="schedule.html" href="schedule.html">Schedule</a>'+
+      '<a class="js-guild-link" data-href="memory.html" href="memory.html">Memory & Privacy</a>'+
+      '<a class="js-guild-link" data-href="advanced.html" href="advanced.html">Advanced</a>'+
+      '<a href="author.html">Author</a>'+
+    '</nav><div class="drawer-foot"><a href="author.html">Created & developed by e8uc.</a><button id="logoutButton" class="link-button">Sign out</button></div></aside>'
+  );
+  document.querySelector('.nav-list a[data-href="'+page+'.html"]')?.setAttribute("aria-current","page");
+}
+function setNavGuild(){$$(".js-guild-link").forEach(link=>{const base=link.dataset.href||link.getAttribute("href").split("?")[0];link.href=base+guildQuery()})}
+function updateHeader(){const guild=st.resources?.guild||(st.me?.guilds||[]).find(g=>String(g.id)===String(st.guildId))||{};const sw=$("#serverSwitcher");if(sw&&st.guildId){sw.classList.remove("hidden");sw.innerHTML=avatar(guild,"server-mini")+'<span>'+esc(guild.name||"Server")+"</span>";sw.onclick=()=>location.href="overview.html?choose=1"}setNavGuild()}
+
+async function loadMe(){st.me=await api("/dashboard/api/me");return st.me}
+async function startInstall(guildId=""){try{const result=await api("/dashboard/api/install/start",{method:"POST",body:JSON.stringify(guildId?{guildId}:{})});if(!result.authorizeUrl)throw new Error("Install link unavailable.");location.href=result.authorizeUrl}catch(e){console.error(e);toast(e.message||"Couldn't start the Discord install.","error")}}
+async function loadGuild(id){
+  st.guildId=String(id);localStorage.setItem(GK,st.guildId);
+  const [resources,configResponse]=await Promise.all([
+    api("/dashboard/api/guild/"+st.guildId+"/resources"),
+    api("/dashboard/api/guild/"+st.guildId+"/config")
+  ]);
+  if(!resources.botInstalled){await startInstall(st.guildId);return false}
+  st.resources=resources;st.openrouter=!!configResponse.openrouterConnected;
+  st.config=restoreDraft(clone(configResponse.config));ensureShape();updateHeader();return true;
+}
+function renderGuildPicker(){
+  $("#overviewContent")?.classList.add("hidden");$("#guildPicker")?.classList.remove("hidden");$("#serverSwitcher")?.classList.add("hidden");
+  const grid=$("#guildGrid");if(!grid)return;grid.innerHTML="";
+  for(const g of st.me?.guilds||[]){
+    const b=document.createElement("button");b.className="guild-card";
+    b.innerHTML=avatar(g)+'<span><strong>'+esc(g.name)+'</strong><small>'+(g.owner?"Server owner":"Can manage server")+"</small></span>";
+    b.onclick=()=>{localStorage.setItem(GK,String(g.id));location.href="overview.html?guild="+encodeURIComponent(g.id)};
+    grid.appendChild(b);
+  }
+  if(!grid.children.length)grid.innerHTML='<div class="panel empty"><strong>No manageable servers found.</strong><p>You need Manage Server permission.</p></div>';
+}
+
+function channelOptions(el,value,placeholder){if(!el)return;el.innerHTML='<option value="">'+esc(placeholder)+"</option>";for(const c of st.resources?.channels||[]){const o=document.createElement("option");o.value=c.id;o.textContent="# "+c.name;o.selected=String(c.id)===String(value||"");el.appendChild(o)}}
+function roleOptions(el,value,placeholder){if(!el)return;el.innerHTML='<option value="">'+esc(placeholder)+"</option>";for(const r of st.resources?.roles||[]){if(r.managed)continue;const o=document.createElement("option");o.value=r.id;o.textContent="@"+r.name;o.selected=String(r.id)===String(value||"");el.appendChild(o)}}
+function roleChip(role,on,onChange){const l=document.createElement("label");l.className="role-chip";l.innerHTML='<input type="checkbox" '+(on?"checked":"")+"><span>@"+esc(role.name)+"</span>";$("input",l).onchange=e=>onChange(e.target.checked);return l}
+function minToTime(n){n=Math.max(0,Math.min(1439,Number(n)||0));return String(Math.floor(n/60)).padStart(2,"0")+":"+String(n%60).padStart(2,"0")}
+function timeToMin(v,f){const m=/^(\d{2}):(\d{2})$/.exec(v||"");if(!m)return f;const h=+m[1],x=+m[2];return h<24&&x<60?h*60+x:f}
+
+function collectPage(){
+  if(!st.config)return;ensureShape();
+  if(page==="overview"){st.config.ai.enabled=!!$("#aiEnabled")?.checked;st.config.pathFinder.enabled=!!$("#pathEnabled")?.checked;st.config.features.aiChat=st.config.ai.enabled;st.config.features.pathFinder=st.config.pathFinder.enabled}
+  if(page==="ai"&&$("#aiChannel"))st.config.ai.channelId=$("#aiChannel").value;
+  if(page==="path"&&$("#pathChannel"))st.config.pathFinder.channelId=$("#pathChannel").value;
+  if(page==="support"){st.config.support.channelId=$("#supportChannel")?.value||"";st.config.support.roleId=$("#supportRole")?.value||"";st.config.support.ticketUrl=$("#ticketUrl")?.value.trim()||""}
+  if(page==="schedule"){st.config.ai.wakeMinute=timeToMin($("#wakeTime")?.value,840);st.config.ai.sleepMinute=timeToMin($("#sleepTime")?.value,1380);st.config.ai.timezone=$("#timeZone")?.value.trim()||"America/New_York"}
+  if(page==="memory"){st.config.ai.conversationMemory=$("#conversationMemory")?.checked!==false;st.config.ai.longTermMemberMemory=!!$("#longTermMemory")?.checked}
+}
+function validation(c,strict){
+  if(!c)return"Settings are not ready yet.";
+  if(c.ai?.enabled&&c.pathFinder?.enabled&&c.ai.channelId&&String(c.ai.channelId)===String(c.pathFinder.channelId))return"AI Chat and Path Finder need different channels.";
+  if(!strict)return"";
+  if(!c.ai?.enabled&&!c.pathFinder?.enabled)return"Choose AI Chat, Path Finder, or both.";
+  if(c.ai?.enabled&&!c.ai.channelId)return"Choose an AI Chat channel.";
+  if(c.ai?.enabled&&c.ai.provider==="openrouter"&&!st.openrouter)return"Connect OpenRouter before finishing AI Chat setup.";
+  if(c.pathFinder?.enabled&&!c.pathFinder.channelId)return"Choose a Path Finder channel.";
+  if((c.customEmojis||[]).some(e=>String(e.description||"").trim().length<4))return"Each custom emoji description needs at least 4 characters.";
+  return"";
+}
+function markChanged(){collectPage();st.revision+=1;localSave();const issue=validation(st.config,!!st.config.setupComplete);if(issue){saveState(issue,"attention");return}scheduleSave()}
+function scheduleSave(delay=500){clearTimeout(st.saveTimer);saveState("Saving…","");st.saveTimer=setTimeout(()=>flushSave(false),delay)}
+async function flushSave(finish=false){
+  if(!st.config||!st.guildId)return;collectPage();
+  if(st.saving){st.queued=true;st.queuedFinish=st.queuedFinish||finish;return}
+  const wasComplete=!!st.config.setupComplete;
+  if(finish){st.config.setupComplete=true;st.revision+=1;localSave()}
+  const issue=validation(st.config,!!st.config.setupComplete);
+  if(issue){if(finish)st.config.setupComplete=wasComplete;localSave();saveState(issue,"attention");if(finish)toast(issue,"error");return}
+  const revision=st.revision,payload=clone(st.config);st.saving=true;saveState("Saving…","");
+  try{
+    const result=await api("/dashboard/api/guild/"+st.guildId+"/config",{method:"PUT",body:JSON.stringify(payload)});
+    st.openrouter=!!result.openrouterConnected;
+    if(revision===st.revision){st.config=clone(result.config);ensureShape();localStorage.removeItem(draftKey());saveState("Saved","saved");if(finish)toast("E8 Helper is ready for this server.","success")}
+    else{st.queued=true;saveState("Saving newer changes…","")}
+  }catch(e){
+    console.error(e);localSave();
+    if(e.body?.error==="bot_not_installed"){await startInstall(st.guildId);return}
+    saveState("Not saved","error");toast(e.message||"Couldn't save your changes.","error");
+  }finally{
+    st.saving=false;
+    if(st.queued){const nextFinish=st.queuedFinish;st.queued=false;st.queuedFinish=false;setTimeout(()=>flushSave(nextFinish),0)}
+  }
+}
+
+function renderOverview(){
+  $("#guildPicker")?.classList.add("hidden");$("#overviewContent")?.classList.remove("hidden");
+  const g=st.resources?.guild||{};$("#guildTitle").textContent=g.name||"E8 Helper";
+  $("#guildSubtitle").textContent=st.config.setupComplete?"Everything is ready. Change anything whenever you want.":"Choose at least one feature, then finish setup.";
+  $("#aiEnabled").checked=!!st.config.ai.enabled;$("#pathEnabled").checked=!!st.config.pathFinder.enabled;
+  $("#finishSetup").textContent=st.config.setupComplete?"Save setup":"Finish setup";saveState(st.config.setupComplete?"Saved":"Draft saved","saved");
+}
+function renderAI(){
+  channelOptions($("#aiChannel"),st.config.ai.channelId,"Choose an AI Chat channel");
+  $("#openrouterStatus").textContent=st.openrouter?"Connected":"Not connected";$("#openrouterStatus").classList.toggle("good",st.openrouter);
+  $("#connectOpenRouter").textContent=st.openrouter?"Reconnect OpenRouter":"Continue with OpenRouter";saveState("Saved","saved");
+}
+function renderPathRoles(){
+  const roleMode=st.config.pathFinder.access==="roles";
+  $("#pathEveryone")?.classList.toggle("active",!roleMode);$("#pathRoles")?.classList.toggle("active",roleMode);
+  const box=$("#pathRoleList");if(!box)return;box.classList.toggle("hidden",!roleMode);box.innerHTML="";if(!roleMode)return;
+  const selected=new Set(st.config.pathFinder.roleIds||[]);
+  for(const role of st.resources?.roles||[]){if(role.managed)continue;box.appendChild(roleChip(role,selected.has(role.id),on=>{const s=new Set(st.config.pathFinder.roleIds||[]);on?s.add(role.id):s.delete(role.id);st.config.pathFinder.roleIds=[...s];markChanged()}))}
+}
+function renderPath(){channelOptions($("#pathChannel"),st.config.pathFinder.channelId,"Choose a Path Finder channel");renderPathRoles();saveState("Saved","saved")}
+function emojiMarkup(e){return"<"+(e.animated?"a":"")+":"+e.name+":"+e.id+">"}
+function renderEmojis(){
+  const box=$("#emojiList");if(!box)return;box.innerHTML="";const list=st.config.customEmojis||[];
+  $("#addEmoji").textContent=list.length?"Add another custom emoji":"Add custom emoji";
+  if(!list.length){box.innerHTML='<div class="panel empty"><strong>No custom emojis yet.</strong><p>Add one from this server and describe when E8 should use it.</p></div>';saveState("Saved","saved");return}
+  for(const entry of list){
+    const source=(st.resources?.emojis||[]).find(e=>String(e.id)===String(entry.id));if(!source)continue;
+    const card=document.createElement("article");card.className="emoji-item panel";
+    const len=String(entry.description||"").trim().length;
+    card.innerHTML='<div class="emoji-identity"><img src="'+source.imageUrl+'" alt=""><div><strong>:'+esc(source.name)+':</strong><small>'+esc(emojiMarkup(source))+'</small></div></div>'+
+      '<div><label class="field-label">When should E8 use this emoji?</label><textarea minlength="4" maxlength="180" rows="3" placeholder="At least 4 characters">'+esc(entry.description||"")+'</textarea>'+
+      '<div class="emoji-meta"><span class="helper">Minimum 4 characters.</span><span class="char-count">'+len+'/180</span></div></div><div><button class="danger-button" type="button">Remove</button></div>';
+    const ta=$("textarea",card),count=$(".char-count",card);
+    ta.oninput=()=>{entry.description=ta.value.slice(0,180);count.textContent=String(entry.description.trim().length)+"/180";markChanged()};
+    $(".danger-button",card).onclick=()=>{st.config.customEmojis=st.config.customEmojis.filter(x=>String(x.id)!==String(entry.id));st.revision+=1;localSave();renderEmojis();scheduleSave(100)};
+    box.appendChild(card);
+  }
+  const issue=validation(st.config,!!st.config.setupComplete);saveState(issue||"Saved",issue?"attention":"saved");
+}
+function openEmojiDialog(){
+  const dialog=$("#emojiDialog"),grid=$("#emojiGrid");if(!dialog||!grid)return;
+  const used=new Set((st.config.customEmojis||[]).map(e=>String(e.id)));grid.innerHTML="";
+  for(const e of (st.resources?.emojis||[]).filter(e=>e.available&&!used.has(String(e.id)))){
+    const b=document.createElement("button");b.className="emoji-pick";b.innerHTML='<img src="'+e.imageUrl+'" alt=""><span>:'+esc(e.name)+":</span>";
+    b.onclick=()=>{st.config.customEmojis.push({id:e.id,name:e.name,animated:e.animated,description:""});st.revision+=1;localSave();dialog.close();renderEmojis();saveState("Write at least 4 characters","attention")};grid.appendChild(b);
+  }
+  if(!grid.children.length)grid.innerHTML='<p class="empty-text">No more server emojis are available.</p>';dialog.showModal();
+}
+function renderSupport(){channelOptions($("#supportChannel"),st.config.support.channelId,"No support channel");roleOptions($("#supportRole"),st.config.support.roleId,"No support role");$("#ticketUrl").value=st.config.support.ticketUrl||"";saveState("Saved","saved")}
+function renderPermissions(){
+  const box=$("#managerRoleList");if(!box)return;box.innerHTML="";const selected=new Set(st.config.managers.roleIds||[]);
+  for(const role of st.resources?.roles||[]){if(role.managed)continue;box.appendChild(roleChip(role,selected.has(role.id),on=>{const s=new Set(st.config.managers.roleIds||[]);on?s.add(role.id):s.delete(role.id);st.config.managers.roleIds=[...s];markChanged()}))}
+  saveState("Saved","saved");
+}
+function renderSchedule(){
+  if(!st.config.setupComplete&&st.config.ai.timezone==="America/New_York"){const z=Intl.DateTimeFormat().resolvedOptions().timeZone;if(z)st.config.ai.timezone=z}
+  $("#wakeTime").value=minToTime(st.config.ai.wakeMinute??840);$("#sleepTime").value=minToTime(st.config.ai.sleepMinute??1380);$("#timeZone").value=st.config.ai.timezone||"America/New_York";saveState("Saved","saved");
+}
+function renderMemory(){$("#conversationMemory").checked=st.config.ai.conversationMemory!==false;$("#longTermMemory").checked=!!st.config.ai.longTermMemberMemory;saveState("Saved","saved")}
+function renderAdvanced(){$("#ownerDetected").textContent=st.resources?.guild?.ownerId?"Detected automatically":"Detected when available";saveState("Saved","saved")}
+function renderCurrent(){
+  if(page==="overview")renderOverview();
+  if(page==="ai")renderAI();
+  if(page==="path")renderPath();
+  if(page==="emojis")renderEmojis();
+  if(page==="support")renderSupport();
+  if(page==="permissions")renderPermissions();
+  if(page==="schedule")renderSchedule();
+  if(page==="memory")renderMemory();
+  if(page==="advanced")renderAdvanced();
+}
+async function connectOpenRouter(){
+  localSave();
+  try{const r=await api("/dashboard/api/guild/"+st.guildId+"/openrouter/start",{method:"POST"});if(r.connected){st.openrouter=true;renderAI();return}location.href=r.authorizeUrl}catch(e){toast(e.message||"Couldn't connect OpenRouter.","error")}
+}
+async function logout(){try{if(st.token)await api("/dashboard/api/logout",{method:"POST"})}catch{}localStorage.removeItem(SK);localStorage.removeItem(GK);location.href="./"}
+
+function bindLanding(){
+  $$(".js-start").forEach(b=>b.addEventListener("click",login));
+  $("#menuButton")?.addEventListener("click",()=>drawer(true));$("#closeMenu")?.addEventListener("click",()=>drawer(false));$("#backdrop")?.addEventListener("click",()=>drawer(false));
+}
+function reveal(){const items=$$(".reveal");if(!("IntersectionObserver"in window)){items.forEach(x=>x.classList.add("visible"));return}const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("visible");o.unobserve(e.target)}}),{threshold:.12});items.forEach(x=>o.observe(x))}
+function bindDashboard(){
+  $("#menuButton")?.addEventListener("click",()=>drawer(true));$("#closeMenu")?.addEventListener("click",()=>drawer(false));$("#backdrop")?.addEventListener("click",()=>drawer(false));$("#logoutButton")?.addEventListener("click",logout);
+  $("#aiEnabled")?.addEventListener("change",markChanged);$("#pathEnabled")?.addEventListener("change",markChanged);$("#finishSetup")?.addEventListener("click",()=>flushSave(true));
+  $("#connectOpenRouter")?.addEventListener("click",connectOpenRouter);$("#aiChannel")?.addEventListener("change",()=>{if($("#aiChannel").value&&$("#aiChannel").value===$("#pathChannel")?.value){$("#aiChannel").value="";toast("AI Chat and Path Finder need different rooms.","error")}markChanged()});
+  $("#pathChannel")?.addEventListener("change",()=>{if($("#pathChannel").value&&$("#pathChannel").value===$("#aiChannel")?.value){$("#pathChannel").value="";toast("AI Chat and Path Finder need different rooms.","error")}markChanged()});
+  $("#pathEveryone")?.addEventListener("click",()=>{st.config.pathFinder.access="everyone";st.config.pathFinder.roleIds=[];renderPathRoles();markChanged()});
+  $("#pathRoles")?.addEventListener("click",()=>{st.config.pathFinder.access="roles";renderPathRoles();markChanged()});
+  $("#addEmoji")?.addEventListener("click",openEmojiDialog);$("#closeEmoji")?.addEventListener("click",()=>$("#emojiDialog")?.close());
+  ["supportChannel","supportRole","conversationMemory","longTermMemory"].forEach(id=>$("#"+id)?.addEventListener("change",markChanged));
+  ["ticketUrl","wakeTime","sleepTime","timeZone"].forEach(id=>{const e=$("#"+id);e?.addEventListener("change",markChanged);e?.addEventListener("input",markChanged)});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape")drawer(false)});
+}
+async function bootLanding(){
+  bindLanding();reveal();
+  const hash=new URLSearchParams(location.hash.slice(1)),session=hash.get("session"),install=hash.get("install")==="1";
+  if(session){localStorage.setItem(SK,session);history.replaceState(null,"",location.pathname+location.search);st.token=session;try{await loadMe();if(install)await startInstall()}catch(e){console.error(e);toast("Discord sign in could not be completed.","error")}}
+  const q=new URLSearchParams(location.search);if(q.get("login")==="cancelled")toast("Discord sign in cancelled.");
+}
+async function bootDashboard(){
+  injectShell();bindDashboard();
+  st.token=localStorage.getItem(SK)||"";
+  if(!st.token){$("#loading")?.classList.add("hidden");$("#authRequired")?.classList.remove("hidden");$("#signInAgain")?.addEventListener("click",login);return}
+  try{await loadMe()}catch{localStorage.removeItem(SK);$("#loading")?.classList.add("hidden");$("#authRequired")?.classList.remove("hidden");$("#signInAgain")?.addEventListener("click",login);return}
+  const q=new URLSearchParams(location.search);
+  if(page==="overview"&&(q.get("choose")==="1"||(!q.get("guild")&&!localStorage.getItem(GK)))){$("#loading")?.classList.add("hidden");renderGuildPicker();return}
+  const guild=q.get("guild")||localStorage.getItem(GK);
+  if(!guild){location.replace("overview.html?choose=1");return}
+  try{
+    const ok=await loadGuild(guild);if(!ok)return;
+    $("#loading")?.classList.add("hidden");$("#pageContent")?.classList.remove("hidden");
+    renderCurrent();
+    if(q.get("installed")==="1")toast("E8 Helper added. Finish the setup.","success");
+    if(q.get("openrouter")==="connected")toast("OpenRouter connected.","success");
+    if(q.get("install")==="cancelled")toast("Bot install cancelled.");
+  }catch(e){console.error(e);$("#loading")?.classList.add("hidden");toast(e.message||"Couldn't open this server.","error")}
+}
+if(page==="landing")bootLanding();else bootDashboard();
