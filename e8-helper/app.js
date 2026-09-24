@@ -55,6 +55,36 @@ async function botInstalled(guildId){
     return !!r.botInstalled;
   }catch{return false}
 }
+function stopInstallWatcher(){
+  const w=stopInstallWatcher.current;
+  if(!w)return;
+  clearInterval(w.timer);
+  window.removeEventListener("focus",w.check);
+  document.removeEventListener("visibilitychange",w.onVisibility);
+  stopInstallWatcher.current=null;
+}
+function armInstallWatcher(guildId){
+  stopInstallWatcher();
+  let busy=false;
+  const check=async()=>{
+    if(busy)return;
+    busy=true;
+    try{
+      if(await botInstalled(guildId)){
+        stopInstallWatcher();
+        location.replace("overview.html?guild="+encodeURIComponent(guildId)+"&installed=1");
+      }
+    }finally{
+      busy=false;
+    }
+  };
+  const onVisibility=()=>{if(document.visibilityState==="visible")check()};
+  const timer=setInterval(()=>{if(document.visibilityState==="visible")check()},2000);
+  stopInstallWatcher.current={timer,check,onVisibility};
+  window.addEventListener("focus",check);
+  document.addEventListener("visibilitychange",onVisibility);
+  setTimeout(check,0);
+}
 function showInstallForGuild(guildId){
   const guild=(st.me?.guilds||[]).find(g=>String(g.id)===String(guildId));
   $("#loading")?.classList.add("hidden");
@@ -63,6 +93,7 @@ function showInstallForGuild(guildId){
   $("#installWait")?.classList.remove("hidden");
   if($("#installGuildName"))$("#installGuildName").textContent=guild?.name||"this server";
   if($("#installButton"))$("#installButton").textContent="Add E8 Helper to "+(guild?.name||"this server");
+  armInstallWatcher(String(guildId));
 }
 async function startInstall(guildId=""){
   const id=String(guildId||"");
@@ -71,6 +102,12 @@ async function startInstall(guildId=""){
     location.href="overview.html?choose=1";
     return;
   }
+
+  // Open synchronously from the user's tap so iOS keeps the E8 tab alive
+  // while Discord opens in a separate browser/app context.
+  let installWindow=null;
+  try{installWindow=window.open("about:blank","_blank")}catch{}
+
   const button=$("#installButton");
   if(button){button.disabled=true;button.textContent="Checking E8 backend…";}
   try{
@@ -86,9 +123,16 @@ async function startInstall(guildId=""){
       body:JSON.stringify({guildId:id})
     });
     if(!result.authorizeUrl)throw new Error("Discord install link is unavailable.");
-    location.assign(result.authorizeUrl);
+
+    armInstallWatcher(id);
+    if(installWindow&&!installWindow.closed){
+      installWindow.location.href=result.authorizeUrl;
+    }else{
+      location.assign(result.authorizeUrl);
+    }
   }catch(e){
     console.error(e);
+    try{installWindow?.close()}catch{}
     if(button){button.disabled=false;button.textContent="Add E8 Helper to "+(guild.name||"this server");}
     toast(e.message||"Couldn't start the Discord install.","error");
   }
