@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#08101f">
+  <meta name="robots" content="noindex">
+  <title>Continue Setup • E8 Helper</title>
+  <link rel="stylesheet" href="./styles.css?v=20260924-5">
+</head>
+<body>
+  <div id="toast" class="toast" aria-live="polite"></div>
+  <main class="page">
+    <div class="page-shell">
+      <section class="panel">
+        <span class="eyebrow">Discord</span>
+        <h1>Continue E8 Helper setup</h1>
+        <p id="status">Checking the server you selected…</p>
+        <div class="actions">
+          <button id="continueButton" class="primary" type="button">I added E8 Helper — Continue</button>
+          <a class="link-button" href="./overview.html?choose=1&v=20260924-5">Choose another server</a>
+        </div>
+      </section>
+    </div>
+  </main>
+<script>
+(() => {
+  const API = "https://e8helper.a39328122.workers.dev";
+  const SK = "e8helper.session";
+  const GK = "e8helper.guild";
+  const status = document.getElementById("status");
+  const button = document.getElementById("continueButton");
+
+  const token = localStorage.getItem(SK) || "";
+  const guildId = localStorage.getItem(GK) || "";
+
+  function setStatus(message){ status.textContent = message; }
+
+  async function checkInstalled(){
+    if (!token) {
+      setStatus("Your E8 session is missing. Return to E8 Helper and sign in again.");
+      button.disabled = true;
+      return false;
+    }
+    if (!guildId) {
+      setStatus("No server is selected yet. Return to E8 Helper and choose a server.");
+      button.disabled = true;
+      return false;
+    }
+
+    button.disabled = true;
+    button.textContent = "Checking server…";
+    try {
+      const response = await fetch(API + "/dashboard/api/guild/" + encodeURIComponent(guildId) + "/resources", {
+        headers: { Authorization: "Bearer " + token },
+        cache: "no-store"
+      });
+      const body = await response.json().catch(() => ({}));
+
+      if (response.status === 401) {
+        setStatus("Your E8 session expired. Return to E8 Helper and sign in again.");
+        return false;
+      }
+      if (!response.ok) {
+        setStatus(body.message || body.error || "E8 could not check this server yet.");
+        return false;
+      }
+      if (!body.botInstalled) {
+        setStatus("E8 Helper is not in the selected server yet. Finish adding it in Discord, then return here.");
+        return false;
+      }
+
+      setStatus("E8 Helper is in the server. Opening the panel…");
+      location.replace("./overview.html?guild=" + encodeURIComponent(guildId) + "&installed=1&v=20260924-5");
+      return true;
+    } catch (error) {
+      setStatus("E8 could not reach the server check. Try again.");
+      return false;
+    } finally {
+      button.disabled = false;
+      button.textContent = "I added E8 Helper — Continue";
+    }
+  }
+
+  button.addEventListener("click", checkInstalled);
+  window.addEventListener("focus", checkInstalled);
+  window.addEventListener("pageshow", checkInstalled);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") checkInstalled();
+  });
+
+  checkInstalled();
+})();
+</script>
+</body>
+</html>
