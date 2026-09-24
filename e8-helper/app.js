@@ -3,7 +3,7 @@ const DISCORD_INSTALL="https://discord.com/oauth2/authorize?client_id=1551891287
 const SK="e8helper.session",GK="e8helper.guild",DK="e8helper.draft.";
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const page=document.body.dataset.page||"landing";
-const st={token:"",me:null,guildId:"",resources:null,config:null,openrouter:false,saveTimer:null,saving:false,queued:false,queuedFinish:false,revision:0,dirty:false,draftRestored:false,installBaseline:new Set()};
+const st={token:"",me:null,guildId:"",resources:null,config:null,openrouter:false,saveTimer:null,saving:false,queued:false,queuedFinish:false,revision:0,dirty:false,draftRestored:false,installBaseline:new Set(),installBaselineReady:false};
 
 function esc(v){return String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]))}
 function clone(v){return JSON.parse(JSON.stringify(v))}
@@ -111,11 +111,15 @@ async function startInstall(guildId=""){
   try{
     if(guildId){
       waitForInstall(String(guildId));
-    }else{
-      st.installBaseline=new Set(await installedGuildIds());
-      await waitForAnyInstall();
+      openWeb(DISCORD_INSTALL);
+      return;
+    }
+    if(!st.installBaselineReady){
+      toast("Still preparing Discord setup. Try again in a moment.","info");
+      return;
     }
     openWeb(DISCORD_INSTALL);
+    waitForAnyInstall();
   }catch(e){
     console.error(e);
     toast(e.message||"Couldn't open Discord.","error");
@@ -307,6 +311,8 @@ async function bootDashboard(){
   if(page==="overview"&&q.get("install")==="1"){
     localStorage.removeItem(GK);
     st.guildId="";
+    st.installBaseline=new Set(await installedGuildIds());
+    st.installBaselineReady=true;
     $("#loading")?.classList.add("hidden");
     $("#guildPicker")?.classList.add("hidden");
     $("#overviewContent")?.classList.add("hidden");
