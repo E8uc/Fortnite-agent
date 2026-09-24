@@ -1,4 +1,5 @@
 const API="https://e8helper.a39328122.workers.dev";
+const REQUIRED_WORKER_BUILD="2026-09-24-oauth-panel-v1";
 const SK="e8helper.session",GK="e8helper.guild",DK="e8helper.draft.";
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const page=document.body.dataset.page||"landing";
@@ -71,8 +72,15 @@ async function startInstall(guildId=""){
     return;
   }
   const button=$("#installButton");
-  if(button){button.disabled=true;button.textContent="Opening Discord…";}
+  if(button){button.disabled=true;button.textContent="Checking E8 backend…";}
   try{
+    const versionResponse=await fetch(API+"/dashboard/api/version",{cache:"no-store"});
+    const versionBody=await versionResponse.json().catch(()=>({}));
+    if(!versionResponse.ok||versionBody.build!==REQUIRED_WORKER_BUILD){
+      throw new Error("E8 backend update is not live yet. Deploy the latest E8-Helper Worker first.");
+    }
+
+    if(button)button.textContent="Opening Discord…";
     const result=await api("/dashboard/api/install/start",{
       method:"POST",
       body:JSON.stringify({guildId:id})
