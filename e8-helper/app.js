@@ -9,7 +9,7 @@ function clone(v){return JSON.parse(JSON.stringify(v))}
 function toast(message,type="info"){const el=$("#toast");if(!el)return;el.textContent=message;el.dataset.type=type;el.classList.add("show");clearTimeout(el._timer);el._timer=setTimeout(()=>el.classList.remove("show"),2800)}
 function saveState(message,kind=""){const el=$("#saveState");if(!el)return;el.textContent=message;el.dataset.kind=kind}
 async function api(path,options={}){const headers=new Headers(options.headers||{});if(st.token)headers.set("Authorization","Bearer "+st.token);if(options.body)headers.set("Content-Type","application/json");const response=await fetch(API+path,{...options,headers});const raw=await response.text();let body={};try{body=raw?JSON.parse(raw):{}}catch{body={message:raw}}if(!response.ok){const e=new Error(body.message||body.error||("Request failed ("+response.status+")"));e.status=response.status;e.body=body;throw e}return body}
-function openWeb(url){const w=window.open(url,"_blank","noopener,noreferrer");if(!w)location.href=url}
+function openWeb(url){const a=document.createElement("a");a.href=url;a.target="_blank";a.rel="noopener noreferrer";document.body.appendChild(a);a.click();a.remove()}
 function login(){location.href=API+"/dashboard/auth/discord/start?install=1"}
 function drawer(open){$("#drawer")?.classList.toggle("open",open);$("#backdrop")?.classList.toggle("hidden",!open);$("#drawer")?.setAttribute("aria-hidden",String(!open));$("#menuButton")?.setAttribute("aria-expanded",String(open))}
 function guildQuery(){return st.guildId?"?guild="+encodeURIComponent(st.guildId):""}
@@ -48,14 +48,52 @@ function setNavGuild(){$$(".js-guild-link").forEach(link=>{const base=link.datas
 function updateHeader(){const guild=st.resources?.guild||(st.me?.guilds||[]).find(g=>String(g.id)===String(st.guildId))||{};const sw=$("#serverSwitcher");if(sw&&st.guildId){sw.classList.remove("hidden");sw.innerHTML=avatar(guild,"server-mini")+'<span>'+esc(guild.name||"Server")+"</span>";sw.onclick=()=>location.href="overview.html?choose=1"}setNavGuild()}
 
 async function loadMe(){st.me=await api("/dashboard/api/me");return st.me}
-async function startInstall(guildId=""){try{const result=await api("/dashboard/api/install/start",{method:"POST",body:JSON.stringify(guildId?{guildId}:{})});if(!result.authorizeUrl)throw new Error("Install link unavailable.");openWeb(result.authorizeUrl)}catch(e){console.error(e);toast(e.message||"Couldn't start the Discord install.","error")}}
+async function botInstalled(guildId){
+  try{
+    const r=await api("/dashboard/api/guild/"+guildId+"/resources");
+    return !!r.botInstalled;
+  }catch{return false}
+}
+async function waitForInstall(guildId){
+  const wait=$("#installWait");
+  $("#loading")?.classList.add("hidden");
+  $("#guildPicker")?.classList.add("hidden");
+  wait?.classList.remove("hidden");
+  const check=async()=>{
+    if(await botInstalled(guildId)){
+      clearInterval(waitForInstall._timer);
+      window.removeEventListener("focus",check);
+      document.removeEventListener("visibilitychange",onVisibility);
+      location.replace("overview.html?guild="+encodeURIComponent(guildId)+"&installed=1");
+      return true;
+    }
+    return false;
+  };
+  const onVisibility=()=>{if(document.visibilityState==="visible")check()};
+  window.addEventListener("focus",check);
+  document.addEventListener("visibilitychange",onVisibility);
+  clearInterval(waitForInstall._timer);
+  waitForInstall._timer=setInterval(()=>{if(document.visibilityState==="visible")check()},2500);
+  check();
+}
+async function startInstall(guildId=""){
+  try{
+    const result=await api("/dashboard/api/install/start",{method:"POST",body:JSON.stringify(guildId?{guildId}:{})});
+    if(!result.authorizeUrl)throw new Error("Install link unavailable.");
+    if(guildId)waitForInstall(guildId);
+    openWeb(result.authorizeUrl);
+  }catch(e){
+    console.error(e);
+    toast(e.message||"Couldn't start the Discord install.","error");
+  }
+}
 async function loadGuild(id){
   st.guildId=String(id);localStorage.setItem(GK,st.guildId);
   const [resources,configResponse]=await Promise.all([
     api("/dashboard/api/guild/"+st.guildId+"/resources"),
     api("/dashboard/api/guild/"+st.guildId+"/config")
   ]);
-  if(!resources.botInstalled){await startInstall(st.guildId);return false}
+  if(!resources.botInstalled){$("#loading")?.classList.add("hidden");$("#installWait")?.classList.remove("hidden");waitForInstall(st.guildId);return false}
   st.resources=resources;st.openrouter=!!configResponse.openrouterConnected;
   st.config=restoreDraft(clone(configResponse.config));ensureShape();updateHeader();return true;
 }
@@ -203,7 +241,7 @@ function bindLanding(){
 }
 function reveal(){const items=$$(".reveal");if(!("IntersectionObserver"in window)){items.forEach(x=>x.classList.add("visible"));return}const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("visible");o.unobserve(e.target)}}),{threshold:.12});items.forEach(x=>o.observe(x))}
 function bindDashboard(){
-  $("#menuButton")?.addEventListener("click",()=>drawer(true));$("#closeMenu")?.addEventListener("click",()=>drawer(false));$("#backdrop")?.addEventListener("click",()=>drawer(false));$("#logoutButton")?.addEventListener("click",logout);
+  $("#menuButton")?.addEventListener("click",()=>drawer(true));$("#closeMenu")?.addEventListener("click",()=>drawer(false));$("#backdrop")?.addEventListener("click",()=>drawer(false));$("#logoutButton")?.addEventListener("click",logout);$("#installButton")?.addEventListener("click",()=>{if(st.guildId)startInstall(st.guildId)});
   $("#aiEnabled")?.addEventListener("change",markChanged);$("#pathEnabled")?.addEventListener("change",markChanged);$("#finishSetup")?.addEventListener("click",()=>flushSave(true));
   $("#connectOpenRouter")?.addEventListener("click",connectOpenRouter);$("#aiChannel")?.addEventListener("change",()=>{if($("#aiChannel").value&&$("#aiChannel").value===$("#pathChannel")?.value){$("#aiChannel").value="";toast("AI Chat and Path Finder need different rooms.","error")}markChanged()});
   $("#pathChannel")?.addEventListener("change",()=>{if($("#pathChannel").value&&$("#pathChannel").value===$("#aiChannel")?.value){$("#pathChannel").value="";toast("AI Chat and Path Finder need different rooms.","error")}markChanged()});
