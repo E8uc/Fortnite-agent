@@ -1,7 +1,4 @@
 const API="https://e8helper.a39328122.workers.dev";
-const DISCORD_INSTALL="https://discord.com/oauth2/authorize";
-const DISCORD_APP_ID="1551891287442071562";
-const DISCORD_PERMISSIONS="85008";
 const SK="e8helper.session",GK="e8helper.guild",DK="e8helper.draft.";
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const page=document.body.dataset.page||"landing";
@@ -57,47 +54,6 @@ async function botInstalled(guildId){
     return !!r.botInstalled;
   }catch{return false}
 }
-function installUrlForGuild(guildId){
-  const url=new URL(DISCORD_INSTALL);
-  url.searchParams.set("client_id",DISCORD_APP_ID);
-  url.searchParams.set("scope","bot applications.commands");
-  url.searchParams.set("permissions",DISCORD_PERMISSIONS);
-  url.searchParams.set("guild_id",String(guildId));
-  url.searchParams.set("disable_guild_select","true");
-  url.searchParams.set("integration_type","0");
-  return url.toString();
-}
-function stopInstallWatcher(){
-  const w=stopInstallWatcher.current;
-  if(!w)return;
-  clearInterval(w.timer);
-  window.removeEventListener("focus",w.onFocus);
-  document.removeEventListener("visibilitychange",w.onVisibility);
-  stopInstallWatcher.current=null;
-}
-function armInstallWatcher(guildId){
-  stopInstallWatcher();
-  let checking=false;
-  const check=async()=>{
-    if(checking)return;
-    checking=true;
-    try{
-      if(await botInstalled(guildId)){
-        stopInstallWatcher();
-        location.replace("overview.html?guild="+encodeURIComponent(guildId)+"&installed=1");
-      }
-    }finally{
-      checking=false;
-    }
-  };
-  const onFocus=()=>check();
-  const onVisibility=()=>{if(document.visibilityState==="visible")check()};
-  const timer=setInterval(()=>{if(document.visibilityState==="visible")check()},2500);
-  stopInstallWatcher.current={timer,onFocus,onVisibility};
-  window.addEventListener("focus",onFocus);
-  document.addEventListener("visibilitychange",onVisibility);
-  setTimeout(check,0);
-}
 function showInstallForGuild(guildId){
   const guild=(st.me?.guilds||[]).find(g=>String(g.id)===String(guildId));
   $("#loading")?.classList.add("hidden");
@@ -106,18 +62,28 @@ function showInstallForGuild(guildId){
   $("#installWait")?.classList.remove("hidden");
   if($("#installGuildName"))$("#installGuildName").textContent=guild?.name||"this server";
   if($("#installButton"))$("#installButton").textContent="Add E8 Helper to "+(guild?.name||"this server");
-  armInstallWatcher(String(guildId));
 }
-function startInstall(guildId=""){
+async function startInstall(guildId=""){
   const id=String(guildId||"");
   const guild=(st.me?.guilds||[]).find(g=>String(g.id)===id);
   if(!id||!guild){
     location.href="overview.html?choose=1";
     return;
   }
-  // Keep this fully synchronous so iOS treats it as the user's tap.
-  armInstallWatcher(id);
-  openWeb(installUrlForGuild(id));
+  const button=$("#installButton");
+  if(button){button.disabled=true;button.textContent="Opening Discord…";}
+  try{
+    const result=await api("/dashboard/api/install/start",{
+      method:"POST",
+      body:JSON.stringify({guildId:id})
+    });
+    if(!result.authorizeUrl)throw new Error("Discord install link is unavailable.");
+    location.assign(result.authorizeUrl);
+  }catch(e){
+    console.error(e);
+    if(button){button.disabled=false;button.textContent="Add E8 Helper to "+(guild.name||"this server");}
+    toast(e.message||"Couldn't start the Discord install.","error");
+  }
 }
 async function loadGuild(id){
   st.guildId=String(id);localStorage.setItem(GK,st.guildId);
