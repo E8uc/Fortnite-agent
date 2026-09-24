@@ -1,5 +1,5 @@
 const API="https://e8helper.a39328122.workers.dev";
-const REQUIRED_WORKER_BUILD="2026-09-24-oauth-panel-v2";
+const REQUIRED_WORKER_BUILD="2026-09-24-install-resume-v1";
 const SK="e8helper.session",GK="e8helper.guild",DK="e8helper.draft.";
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const page=document.body.dataset.page||"landing";
@@ -51,7 +51,7 @@ function updateHeader(){const guild=st.resources?.guild||(st.me?.guilds||[]).fin
 async function loadMe(){st.me=await api("/dashboard/api/me");return st.me}
 async function botInstalled(guildId){
   try{
-    const r=await api("/dashboard/api/guild/"+encodeURIComponent(guildId)+"/resources");
+    const r=await api("/dashboard/api/guild/"+encodeURIComponent(guildId)+"/installed");
     return !!r.botInstalled;
   }catch{return false}
 }
@@ -60,6 +60,7 @@ function stopInstallWatcher(){
   if(!w)return;
   clearInterval(w.timer);
   window.removeEventListener("focus",w.check);
+  window.removeEventListener("pageshow",w.onPageShow);
   document.removeEventListener("visibilitychange",w.onVisibility);
   stopInstallWatcher.current=null;
 }
@@ -67,21 +68,25 @@ function armInstallWatcher(guildId){
   stopInstallWatcher();
   let busy=false;
   const check=async()=>{
-    if(busy)return;
+    if(busy)return false;
     busy=true;
     try{
       if(await botInstalled(guildId)){
         stopInstallWatcher();
         location.replace("overview.html?guild="+encodeURIComponent(guildId)+"&installed=1");
+        return true;
       }
+      return false;
     }finally{
       busy=false;
     }
   };
   const onVisibility=()=>{if(document.visibilityState==="visible")check()};
+  const onPageShow=()=>check();
   const timer=setInterval(()=>{if(document.visibilityState==="visible")check()},2000);
-  stopInstallWatcher.current={timer,check,onVisibility};
+  stopInstallWatcher.current={timer,check,onVisibility,onPageShow};
   window.addEventListener("focus",check);
+  window.addEventListener("pageshow",onPageShow);
   document.addEventListener("visibilitychange",onVisibility);
   setTimeout(check,0);
 }
@@ -109,21 +114,17 @@ async function prepareInstall(guildId){
 
     const authorize=new URL(result.authorizeUrl);
     const scopes=new Set((authorize.searchParams.get("scope")||"").split(/\s+/).filter(Boolean));
-    const expectedCallback=API+"/dashboard/auth/discord/callback";
     const valid=
       authorize.origin==="https://discord.com" &&
       authorize.pathname==="/oauth2/authorize" &&
-      authorize.searchParams.get("response_type")==="code" &&
-      authorize.searchParams.get("redirect_uri")===expectedCallback &&
-      !!authorize.searchParams.get("state") &&
       scopes.has("bot") &&
-      scopes.has("identify") &&
+      scopes.has("applications.commands") &&
       authorize.searchParams.get("integration_type")==="0" &&
       authorize.searchParams.get("guild_id")===id &&
       authorize.searchParams.get("disable_guild_select")==="true";
 
     if(!valid){
-      throw new Error("E8 received a non-code-grant Discord URL. The live Worker is not using the advanced OAuth flow.");
+      throw new Error("E8 received an invalid Discord guild install URL.");
     }
 
     st.installAuthorizeUrl=authorize.toString();
@@ -163,6 +164,20 @@ function startInstall(guildId=""){
   openWeb(st.installAuthorizeUrl);
   const button=$("#installButton");
   if(button)button.textContent="Open Discord again";
+}
+async function continueAfterInstall(){
+  if(!st.guildId)return;
+  const button=$("#continueInstall");
+  if(button){button.disabled=true;button.textContent="Checking server…";}
+  try{
+    if(await botInstalled(st.guildId)){
+      location.replace("overview.html?guild="+encodeURIComponent(st.guildId)+"&installed=1");
+      return;
+    }
+    toast("E8 Helper is not in this server yet. Finish Add to Server in Discord, then come back.","info");
+  }finally{
+    if(button){button.disabled=false;button.textContent="I added E8 Helper — Continue";}
+  }
 }
 async function loadGuild(id){
   st.guildId=String(id);localStorage.setItem(GK,st.guildId);
@@ -318,7 +333,7 @@ function bindLanding(){
 }
 function reveal(){const items=$$(".reveal");if(!("IntersectionObserver"in window)){items.forEach(x=>x.classList.add("visible"));return}const o=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("visible");o.unobserve(e.target)}}),{threshold:.12});items.forEach(x=>o.observe(x))}
 function bindDashboard(){
-  $("#menuButton")?.addEventListener("click",()=>drawer(true));$("#closeMenu")?.addEventListener("click",()=>drawer(false));$("#backdrop")?.addEventListener("click",()=>drawer(false));$("#logoutButton")?.addEventListener("click",logout);$("#installButton")?.addEventListener("click",()=>startInstall(st.guildId||""));$("#changeInstallServer")?.addEventListener("click",()=>location.href="overview.html?choose=1");
+  $("#menuButton")?.addEventListener("click",()=>drawer(true));$("#closeMenu")?.addEventListener("click",()=>drawer(false));$("#backdrop")?.addEventListener("click",()=>drawer(false));$("#logoutButton")?.addEventListener("click",logout);$("#installButton")?.addEventListener("click",()=>startInstall(st.guildId||""));$("#continueInstall")?.addEventListener("click",continueAfterInstall);$("#changeInstallServer")?.addEventListener("click",()=>location.href="overview.html?choose=1");
   $("#aiEnabled")?.addEventListener("change",markChanged);$("#pathEnabled")?.addEventListener("change",markChanged);$("#finishSetup")?.addEventListener("click",()=>flushSave(true));
   $("#connectOpenRouter")?.addEventListener("click",connectOpenRouter);$("#aiChannel")?.addEventListener("change",()=>{if($("#aiChannel").value&&$("#aiChannel").value===$("#pathChannel")?.value){$("#aiChannel").value="";toast("AI Chat and Path Finder need different rooms.","error")}markChanged()});
   $("#pathChannel")?.addEventListener("change",()=>{if($("#pathChannel").value&&$("#pathChannel").value===$("#aiChannel")?.value){$("#pathChannel").value="";toast("AI Chat and Path Finder need different rooms.","error")}markChanged()});
