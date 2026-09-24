@@ -3,7 +3,7 @@ const REQUIRED_WORKER_BUILD="2026-09-24-oauth-panel-v2";
 const SK="e8helper.session",GK="e8helper.guild",DK="e8helper.draft.";
 const $=(s,r=document)=>r.querySelector(s),$$=(s,r=document)=>[...r.querySelectorAll(s)];
 const page=document.body.dataset.page||"landing";
-const st={token:"",me:null,guildId:"",resources:null,config:null,openrouter:false,saveTimer:null,saving:false,queued:false,queuedFinish:false,revision:0,dirty:false,draftRestored:false};
+const st={token:"",me:null,guildId:"",resources:null,config:null,openrouter:false,saveTimer:null,saving:false,queued:false,queuedFinish:false,revision:0,dirty:false,draftRestored:false,installAuthorizeUrl:"",installPreparing:false};
 
 function esc(v){return String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]))}
 function clone(v){return JSON.parse(JSON.stringify(v))}
@@ -85,26 +85,14 @@ function armInstallWatcher(guildId){
   document.addEventListener("visibilitychange",onVisibility);
   setTimeout(check,0);
 }
-function showInstallForGuild(guildId){
-  const guild=(st.me?.guilds||[]).find(g=>String(g.id)===String(guildId));
-  $("#loading")?.classList.add("hidden");
-  $("#guildPicker")?.classList.add("hidden");
-  $("#overviewContent")?.classList.add("hidden");
-  $("#installWait")?.classList.remove("hidden");
-  if($("#installGuildName"))$("#installGuildName").textContent=guild?.name||"this server";
-  if($("#installButton"))$("#installButton").textContent="Add E8 Helper to "+(guild?.name||"this server");
-  armInstallWatcher(String(guildId));
-}
-async function startInstall(guildId=""){
+async function prepareInstall(guildId){
   const id=String(guildId||"");
   const guild=(st.me?.guilds||[]).find(g=>String(g.id)===id);
-  if(!id||!guild){
-    location.href="overview.html?choose=1";
-    return;
-  }
-
+  if(!id||!guild||st.installPreparing)return;
+  st.installPreparing=true;
+  st.installAuthorizeUrl="";
   const button=$("#installButton");
-  if(button){button.disabled=true;button.textContent="Checking E8 backend…";}
+  if(button){button.disabled=true;button.textContent="Preparing Discord…";}
 
   try{
     const versionResponse=await fetch(API+"/dashboard/api/version",{cache:"no-store"});
@@ -113,7 +101,6 @@ async function startInstall(guildId=""){
       throw new Error("E8 backend update is not live yet. Deploy the latest E8-Helper Worker first.");
     }
 
-    if(button)button.textContent="Preparing Discord OAuth…";
     const result=await api("/dashboard/api/install/start",{
       method:"POST",
       body:JSON.stringify({guildId:id})
@@ -139,13 +126,43 @@ async function startInstall(guildId=""){
       throw new Error("E8 received a non-code-grant Discord URL. The live Worker is not using the advanced OAuth flow.");
     }
 
-    if(button)button.textContent="Opening Discord…";
-    location.href=authorize.toString();
+    st.installAuthorizeUrl=authorize.toString();
+    if(button){button.disabled=false;button.textContent="Add E8 Helper to "+(guild.name||"this server");}
   }catch(e){
     console.error(e);
-    if(button){button.disabled=false;button.textContent="Add E8 Helper to "+(guild.name||"this server");}
-    toast(e.message||"Couldn't start the Discord install.","error");
+    if(button){button.disabled=true;button.textContent="Discord setup unavailable";}
+    toast(e.message||"Couldn't prepare the Discord install.","error");
+  }finally{
+    st.installPreparing=false;
   }
+}
+function showInstallForGuild(guildId){
+  const guild=(st.me?.guilds||[]).find(g=>String(g.id)===String(guildId));
+  $("#loading")?.classList.add("hidden");
+  $("#guildPicker")?.classList.add("hidden");
+  $("#overviewContent")?.classList.add("hidden");
+  $("#installWait")?.classList.remove("hidden");
+  if($("#installGuildName"))$("#installGuildName").textContent=guild?.name||"this server";
+  armInstallWatcher(String(guildId));
+  prepareInstall(String(guildId));
+}
+function startInstall(guildId=""){
+  const id=String(guildId||"");
+  const guild=(st.me?.guilds||[]).find(g=>String(g.id)===id);
+  if(!id||!guild){
+    location.href="overview.html?choose=1";
+    return;
+  }
+  if(!st.installAuthorizeUrl){
+    toast("Discord setup is still preparing.","info");
+    prepareInstall(id);
+    return;
+  }
+
+  armInstallWatcher(id);
+  openWeb(st.installAuthorizeUrl);
+  const button=$("#installButton");
+  if(button)button.textContent="Open Discord again";
 }
 async function loadGuild(id){
   st.guildId=String(id);localStorage.setItem(GK,st.guildId);
