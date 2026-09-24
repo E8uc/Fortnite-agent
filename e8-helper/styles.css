@@ -39,9 +39,9 @@ button{color:inherit}
 }
 .panel{border-radius:18px;padding:20px}
 .topbar{
-  background:rgba(9,18,38,.97);
+  background:#142344;
   border:1px solid var(--line);
-  box-shadow:0 8px 22px rgba(0,0,0,.16);
+  box-shadow:var(--shadow);
   position:fixed;z-index:40;
   top:max(10px,env(safe-area-inset-top));
   left:50%;transform:translateX(-50%);
@@ -73,9 +73,9 @@ button{color:inherit}
 .hamburger i{display:block;width:16px;height:2px;border-radius:99px;background:#cfd6e8}
 .backdrop{position:fixed;z-index:49;inset:0;background:rgba(2,6,14,.62)}
 .drawer{
-  background:rgba(9,18,38,.99);
+  background:#142344;
   border:1px solid var(--line);
-  box-shadow:0 14px 34px rgba(0,0,0,.22);
+  box-shadow:var(--shadow);
   position:fixed;z-index:50;top:8px;right:8px;
   width:min(340px,calc(100vw - 16px));
   height:calc(100vh - 16px);
