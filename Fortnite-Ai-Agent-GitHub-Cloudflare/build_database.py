@@ -101,7 +101,7 @@ COMMON_PREFIXES = (
     "usw_",
 )
 
-SCOPE_ORDER = ("all", "sm", "m", "meshes", "new")
+SCOPE_ORDER = ("all", "cosmetics", "sm", "m", "meshes", "new")
 
 
 def read_gzip_lines(path: Path) -> list[str]:
@@ -263,9 +263,38 @@ def is_mesh(path: str) -> bool:
     return diagnosis_scope(path) in {"staticmesh", "skeletalmesh"}
 
 
+def is_cosmetic(path: str) -> bool:
+    value = str(path or "").strip().replace("\\", "/")
+
+    cosmetic_mount = (
+        re.search(r"(?:^|/)[^/]*cosmetics[^/]*(?:/|$)", value, re.I)
+        or re.search(r"/Athena/Items/Cosmetics/", value, re.I)
+    )
+
+    if not cosmetic_mount:
+        return False
+
+    return not re.search(
+        r"/(?:Meshes?|SkeletalMeshes?|StaticMeshes?)/",
+        value,
+        re.I,
+    )
+
+
 def scope_assets(all_assets: list[str], new_assets: list[str]) -> dict[str, list[str]]:
-    scopes = {"all": all_assets, "sm": [], "m": [], "meshes": [], "new": new_assets}
+    scopes = {
+        "all": all_assets,
+        "cosmetics": [],
+        "sm": [],
+        "m": [],
+        "meshes": [],
+        "new": new_assets,
+    }
+
     for item in all_assets:
+        if is_cosmetic(item):
+            scopes["cosmetics"].append(item)
+
         kind = diagnosis_scope(item)
         if kind == "staticmesh":
             scopes["sm"].append(item)
@@ -273,6 +302,7 @@ def scope_assets(all_assets: list[str], new_assets: list[str]) -> dict[str, list
             scopes["meshes"].append(item)
         if kind == "material":
             scopes["m"].append(item)
+
     return scopes
 
 
