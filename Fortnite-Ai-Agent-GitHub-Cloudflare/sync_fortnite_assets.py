@@ -22,11 +22,14 @@ DEFAULT_DB = ROOT / "database"
 
 DEFAULT_MANIFEST_URL = (
     "https://raw.githubusercontent.com/"
-    "E8uc/NovaSparx/main/web/asset-list/manifest.json"
+    "E8uc/NovaSparx/main/web/location-index/manifest.json"
 )
 
 MAX_MANIFEST_BYTES = 1024 * 1024
 MAX_ASSET_GZIP_BYTES = 128 * 1024 * 1024
+MAX_LOCATION_SHARD_BYTES = 4 * 1024 * 1024
+MAX_LOCATION_SHARD_EXPANDED_BYTES = 32 * 1024 * 1024
+MAX_LOCATION_SHARDS = 256
 MAX_LINE_CHARS = 4096
 DEFAULT_MIN_ENTRIES = 1_000_000
 MAX_ENTRIES = 5_000_000
@@ -240,12 +243,18 @@ def load_manifest_bytes(data: bytes) -> dict:
             "NovaSparx asset manifest must be a JSON object."
         )
 
-    if (
+    schema = str(
         parsed.get("schema")
-        != "novasparx.asset-list.v1"
-    ):
+        or ""
+    ).strip()
+
+    if schema not in {
+        "novasparx.asset-list.v1",
+        "novasparx.asset-locations.v1",
+    }:
         raise SyncError(
-            "Unexpected NovaSparx asset manifest schema."
+            "Unexpected NovaSparx asset manifest schema: "
+            f"{schema or 'missing'}"
         )
 
     return parsed
@@ -476,6 +485,432 @@ def asset_source_url(
     )
 
 
+def location_shard_url(
+    manifest_url: str,
+    manifest: dict,
+    shard_index: int,
+) -> str:
+    template = str(
+        manifest.get("path")
+        or ""
+    ).strip()
+
+    if (
+        "{shard}" not in template
+        or template.startswith("/")
+        or ".." in Path(template).parts
+    ):
+        raise SyncError(
+            "NovaSparx location-index shard path is unsafe or invalid."
+        )
+
+    shard_name = f"{shard_index:02x}"
+
+    relative = template.replace(
+        "{shard}",
+        shard_name,
+    )
+
+    parsed = urllib.parse.urlparse(
+        relative
+    )
+
+    if parsed.scheme:
+        return require_https_url(
+            relative,
+            "NovaSparx location-index shard URL",
+        )
+
+    resolved = urllib.parse.urljoin(
+        manifest_url,
+        relative,
+    )
+
+    return require_https_url(
+        resolved,
+        "NovaSparx location-index shard URL",
+    )
+
+
+def parse_location_shard(
+    compressed: bytes,
+    shard_index: int,
+) -> list[str]:
+    if len(compressed) > MAX_LOCATION_SHARD_BYTES:
+        raise SyncError(
+            f"NovaSparx location shard {shard_index:02x} "
+            "exceeded the compressed byte budget."
+        )
+
+    try:
+        with gzip.GzipFile(
+            fileobj=io.BytesIO(
+                compressed
+            ),
+            mode="rb",
+        ) as archive:
+            expanded = archive.read(
+                MAX_LOCATION_SHARD_EXPANDED_BYTES
+                + 1
+            )
+    except OSError as exc:
+        raise SyncError(
+            f"NovaSparx location shard {shard_index:02x} "
+            "is not valid gzip."
+        ) from exc
+
+    if (
+        len(expanded)
+        > MAX_LOCATION_SHARD_EXPANDED_BYTES
+    ):
+        raise SyncError(
+            f"NovaSparx location shard {shard_index:02x} "
+            "exceeded the expanded byte budget."
+        )
+
+    try:
+        payload = json.loads(
+            expanded.decode(
+                "utf-8"
+            )
+        )
+    except Exception as exc:
+        raise SyncError(
+            f"NovaSparx location shard {shard_index:02x} "
+            "is not valid UTF-8 JSON."
+        ) from exc
+
+    if (
+        not isinstance(
+            payload,
+            dict,
+        )
+        or payload.get(
+            "schema"
+        )
+        != "novasparx.asset-locations.v1"
+        or payload.get(
+            "valueProperty"
+        )
+        != "toc"
+        or not isinstance(
+            payload.get("items"),
+            dict,
+        )
+    ):
+        raise SyncError(
+            f"NovaSparx location shard {shard_index:02x} "
+            "has an unexpected schema."
+        )
+
+    paths: list[str] = []
+
+    for raw_path in payload[
+        "items"
+    ].keys():
+        value = str(
+            raw_path
+            or ""
+        ).strip().replace(
+            "\\",
+            "/",
+        )
+
+        if (
+            not value
+            or "\x00" in value
+            or len(value)
+            > MAX_LINE_CHARS
+            or not value.lower().endswith(
+                ASSET_SUFFIXES
+            )
+        ):
+            raise SyncError(
+                f"NovaSparx location shard {shard_index:02x} "
+                "contains an invalid package path."
+            )
+
+        paths.append(
+            value
+        )
+
+    return paths
+
+
+def build_location_asset_payload(
+    *,
+    manifest_url: str,
+    manifest: dict,
+    min_entries: int,
+    fetcher=fetch_bounded,
+) -> bytes:
+    expected_entries = int(
+        manifest.get("entries")
+        or 0
+    )
+
+    if not (
+        min_entries
+        <= expected_entries
+        <= MAX_ENTRIES
+    ):
+        raise SyncError(
+            "NovaSparx location-index asset count is outside "
+            "the allowed range: "
+            f"{expected_entries}"
+        )
+
+    shard_count = int(
+        manifest.get("shards")
+        or 0
+    )
+
+    if not (
+        1
+        <= shard_count
+        <= MAX_LOCATION_SHARDS
+    ):
+        raise SyncError(
+            "NovaSparx location-index shard count is invalid: "
+            f"{shard_count}"
+        )
+
+    expected_source_bytes = int(
+        manifest.get("bytes")
+        or 0
+    )
+
+    if expected_source_bytes <= 0:
+        raise SyncError(
+            "NovaSparx location-index manifest is missing its byte count."
+        )
+
+    output = io.BytesIO()
+    total_entries = 0
+    total_source_bytes = 0
+
+    with gzip.GzipFile(
+        fileobj=output,
+        mode="wb",
+        compresslevel=9,
+        mtime=0,
+    ) as archive:
+        for shard_index in range(
+            shard_count
+        ):
+            shard_url = (
+                location_shard_url(
+                    manifest_url,
+                    manifest,
+                    shard_index,
+                )
+            )
+
+            compressed = fetcher(
+                shard_url,
+                MAX_LOCATION_SHARD_BYTES,
+                (
+                    "NovaSparx location-index shard "
+                    f"{shard_index:02x}"
+                ),
+            )
+
+            total_source_bytes += len(
+                compressed
+            )
+
+            paths = parse_location_shard(
+                compressed,
+                shard_index,
+            )
+
+            for value in paths:
+                archive.write(
+                    value.encode(
+                        "utf-8"
+                    )
+                    + b"\n"
+                )
+
+            total_entries += len(
+                paths
+            )
+
+            if (
+                total_entries
+                > MAX_ENTRIES
+            ):
+                raise SyncError(
+                    "NovaSparx location-index exceeded "
+                    "the maximum entry budget."
+                )
+
+    if (
+        total_source_bytes
+        != expected_source_bytes
+    ):
+        raise SyncError(
+            "NovaSparx location-index compressed byte count mismatch: "
+            f"manifest={expected_source_bytes}, "
+            f"downloaded={total_source_bytes}"
+        )
+
+    if (
+        total_entries
+        != expected_entries
+    ):
+        raise SyncError(
+            "NovaSparx location-index asset count mismatch: "
+            f"manifest={expected_entries}, "
+            f"shards={total_entries}"
+        )
+
+    return output.getvalue()
+
+
+def local_location_source_matches(
+    database_dir: Path,
+    manifest: dict,
+) -> dict | None:
+    raw_path = (
+        database_dir
+        / "fortnite_assets.gz"
+    )
+
+    metadata_path = (
+        database_dir
+        / "fortnite_assets_source.json"
+    )
+
+    if (
+        not raw_path.exists()
+        or not metadata_path.exists()
+    ):
+        return None
+
+    build = str(
+        manifest.get(
+            "fortniteVersion"
+        )
+        or ""
+    ).strip()
+
+    revision = str(
+        manifest.get(
+            "builtAt"
+        )
+        or ""
+    ).strip()
+
+    expected_entries = int(
+        manifest.get("entries")
+        or 0
+    )
+
+    expected_source_bytes = int(
+        manifest.get("bytes")
+        or 0
+    )
+
+    expected_shards = int(
+        manifest.get("shards")
+        or 0
+    )
+
+    if (
+        not build
+        or not revision
+        or expected_entries <= 0
+        or expected_source_bytes <= 0
+        or expected_shards <= 0
+    ):
+        return None
+
+    try:
+        metadata = json.loads(
+            metadata_path.read_text(
+                encoding="utf-8"
+            )
+        )
+    except Exception:
+        return None
+
+    expected_hash = str(
+        metadata.get(
+            "sha256"
+        )
+        or ""
+    ).strip().lower()
+
+    if (
+        metadata.get(
+            "sourceSchema"
+        )
+        != "novasparx.asset-locations.v1"
+        or str(
+            metadata.get(
+                "sourceRevision"
+            )
+            or ""
+        ).strip()
+        != revision
+        or str(
+            metadata.get(
+                "fortniteBuild"
+            )
+            or ""
+        ).strip()
+        != build
+        or int(
+            metadata.get(
+                "entries"
+            )
+            or 0
+        )
+        != expected_entries
+        or int(
+            metadata.get(
+                "sourceIndexBytes"
+            )
+            or 0
+        )
+        != expected_source_bytes
+        or int(
+            metadata.get(
+                "sourceIndexShards"
+            )
+            or 0
+        )
+        != expected_shards
+        or len(expected_hash)
+        != 64
+    ):
+        return None
+
+    if (
+        sha256_file(
+            raw_path
+        )
+        != expected_hash
+    ):
+        return None
+
+    return {
+        "changed":
+            False,
+        "fortniteBuild":
+            build,
+        "fortniteVersion":
+            normalize_release_version(
+                build
+            ),
+        "entries":
+            expected_entries,
+        "sha256":
+            expected_hash,
+    }
+
+
 def sync_payload(
     *,
     database_dir: Path,
@@ -483,6 +918,7 @@ def sync_payload(
     manifest: dict,
     compressed: bytes,
     min_entries: int,
+    source_metadata_extra: dict | None = None,
 ) -> dict:
     count = validate_asset_payload(
         compressed,
@@ -656,6 +1092,11 @@ def sync_payload(
             ).isoformat(),
     }
 
+    if source_metadata_extra:
+        source_metadata.update(
+            source_metadata_extra
+        )
+
     write_json_atomic(
         metadata_path,
         source_metadata,
@@ -801,6 +1242,104 @@ def sync_remote(
         raise SyncError(
             "NovaSparx asset count is outside the allowed range: "
             f"{expected_entries}"
+        )
+
+    schema = str(
+        manifest.get("schema")
+        or ""
+    ).strip()
+
+    if (
+        schema
+        == "novasparx.asset-locations.v1"
+    ):
+        unchanged = (
+            local_location_source_matches(
+                database_dir,
+                manifest,
+            )
+        )
+
+        if unchanged is not None:
+            return unchanged
+
+        compressed = (
+            build_location_asset_payload(
+                manifest_url=
+                    safe_manifest_url,
+                manifest=
+                    manifest,
+                min_entries=
+                    min_entries,
+            )
+        )
+
+        derived_manifest = {
+            "schema":
+                "novasparx.asset-list.v1",
+            "fortniteVersion":
+                manifest.get(
+                    "fortniteVersion"
+                ),
+            "entries":
+                manifest.get(
+                    "entries"
+                ),
+            "bytes":
+                len(
+                    compressed
+                ),
+            "sha256":
+                sha256_bytes(
+                    compressed
+                ),
+            "path":
+                "derived-from-location-index",
+        }
+
+        return sync_payload(
+            database_dir=
+                database_dir,
+            manifest_url=
+                safe_manifest_url,
+            manifest=
+                derived_manifest,
+            compressed=
+                compressed,
+            min_entries=
+                min_entries,
+            source_metadata_extra={
+                "sourceSchema":
+                    schema,
+                "sourceRevision":
+                    str(
+                        manifest.get(
+                            "builtAt"
+                        )
+                        or ""
+                    ).strip(),
+                "sourceIndexBytes":
+                    int(
+                        manifest.get(
+                            "bytes"
+                        )
+                        or 0
+                    ),
+                "sourceIndexShards":
+                    int(
+                        manifest.get(
+                            "shards"
+                        )
+                        or 0
+                    ),
+                "sourceIndexPath":
+                    str(
+                        manifest.get(
+                            "path"
+                        )
+                        or ""
+                    ).strip(),
+            },
         )
 
     unchanged = local_source_matches(
@@ -999,6 +1538,139 @@ def self_test() -> None:
         ):
             raise AssertionError(
                 "A no-op sync must preserve the latest new-asset diff."
+            )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        shard_assets = {
+            "00": [
+                "FortniteGame/Content/One.uasset",
+                "FortniteGame/Maps/One.umap",
+            ],
+            "01": [
+                "FortniteGame/Content/Two.uasset",
+            ],
+        }
+
+        shard_payloads: dict[str, bytes] = {}
+
+        for shard_name, assets in shard_assets.items():
+            body = json.dumps(
+                {
+                    "schema":
+                        "novasparx.asset-locations.v1",
+                    "valueProperty":
+                        "toc",
+                    "items":
+                        {
+                            asset:
+                                "FortniteGame/Content/Paks/test.utoc"
+                            for asset in assets
+                        },
+                },
+                separators=(
+                    ",",
+                    ":",
+                ),
+                sort_keys=True,
+            ).encode(
+                "utf-8"
+            )
+
+            stream = io.BytesIO()
+
+            with gzip.GzipFile(
+                fileobj=stream,
+                mode="wb",
+                compresslevel=9,
+                mtime=0,
+            ) as archive:
+                archive.write(
+                    body
+                )
+
+            shard_payloads[
+                shard_name
+            ] = stream.getvalue()
+
+        location_manifest = {
+            "schema":
+                "novasparx.asset-locations.v1",
+            "builtAt":
+                "2099-01-01T00:00:00+00:00",
+            "fortniteVersion":
+                "++Fortnite+Release-99.20-CL-456-Windows",
+            "entries":
+                sum(
+                    len(values)
+                    for values in shard_assets.values()
+                ),
+            "shards":
+                len(
+                    shard_assets
+                ),
+            "bytes":
+                sum(
+                    len(value)
+                    for value in shard_payloads.values()
+                ),
+            "path":
+                "{shard}.json.gz",
+        }
+
+        def fixture_fetcher(
+            url: str,
+            max_bytes: int,
+            label: str,
+            timeout: int = 120,
+        ) -> bytes:
+            del max_bytes, label, timeout
+
+            name = Path(
+                urllib.parse.urlparse(
+                    url
+                ).path
+            ).name
+
+            shard_name = name.split(
+                ".",
+                1,
+            )[0]
+
+            return shard_payloads[
+                shard_name
+            ]
+
+        location_payload = (
+            build_location_asset_payload(
+                manifest_url=
+                    "https://example.com/location-index/manifest.json",
+                manifest=
+                    location_manifest,
+                min_entries=
+                    1,
+                fetcher=
+                    fixture_fetcher,
+            )
+        )
+
+        location_lines = list(
+            iter_compressed_lines(
+                location_payload
+            )
+        )
+
+        expected_location_lines = [
+            *shard_assets["00"],
+            *shard_assets["01"],
+        ]
+
+        if (
+            location_lines
+            != expected_location_lines
+        ):
+            raise AssertionError(
+                "Self-test generated the wrong asset list "
+                "from the location index."
             )
 
     print(
