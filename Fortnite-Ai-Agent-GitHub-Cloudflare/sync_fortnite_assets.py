@@ -43,6 +43,25 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(
+                1024 * 1024
+            )
+
+            if not chunk:
+                break
+
+            digest.update(
+                chunk
+            )
+
+    return digest.hexdigest()
+
+
 def gzip_bytes(lines: Iterable[str]) -> bytes:
     output = io.BytesIO()
 
@@ -486,6 +505,11 @@ def sync_payload(
         / "fortnite_assets.gz"
     )
 
+    previous_path = (
+        database_dir
+        / "fortnite_assets_previous.gz"
+    )
+
     new_path = (
         database_dir
         / "fortnite_assets_new.gz"
@@ -500,18 +524,54 @@ def sync_payload(
         compressed
     )
 
+    current_bytes = (
+        raw_path.read_bytes()
+        if raw_path.exists()
+        else b""
+    )
+
     current_hash = (
         sha256_bytes(
-            raw_path.read_bytes()
+            current_bytes
         )
-        if raw_path.exists()
+        if current_bytes
         else ""
+    )
+
+    existing_metadata = {}
+
+    if metadata_path.exists():
+        try:
+            existing_metadata = json.loads(
+                metadata_path.read_text(
+                    encoding="utf-8"
+                )
+            )
+        except Exception:
+            existing_metadata = {}
+
+    metadata_matches = (
+        str(
+            existing_metadata.get(
+                "sha256"
+            )
+            or ""
+        ).strip().lower()
+        == source_hash
+        and str(
+            existing_metadata.get(
+                "fortniteBuild"
+            )
+            or ""
+        ).strip()
+        == build
     )
 
     if (
         current_hash
         and current_hash
         == source_hash
+        and metadata_matches
     ):
         return {
             "changed": False,
@@ -550,6 +610,12 @@ def sync_payload(
         parents=True,
         exist_ok=True,
     )
+
+    if current_bytes:
+        write_atomic(
+            previous_path,
+            current_bytes,
+        )
 
     write_atomic(
         raw_path,
@@ -601,6 +667,107 @@ def sync_payload(
     }
 
 
+def local_source_matches(
+    database_dir: Path,
+    manifest: dict,
+) -> dict | None:
+    raw_path = (
+        database_dir
+        / "fortnite_assets.gz"
+    )
+
+    metadata_path = (
+        database_dir
+        / "fortnite_assets_source.json"
+    )
+
+    if (
+        not raw_path.exists()
+        or not metadata_path.exists()
+    ):
+        return None
+
+    build = str(
+        manifest.get("fortniteVersion")
+        or ""
+    ).strip()
+
+    expected_hash = str(
+        manifest.get("sha256")
+        or ""
+    ).strip().lower()
+
+    expected_bytes = int(
+        manifest.get("bytes")
+        or 0
+    )
+
+    expected_entries = int(
+        manifest.get("entries")
+        or 0
+    )
+
+    if (
+        not build
+        or len(expected_hash) != 64
+        or not all(
+            character in "0123456789abcdef"
+            for character in expected_hash
+        )
+        or expected_bytes <= 0
+        or expected_entries <= 0
+    ):
+        return None
+
+    try:
+        metadata = json.loads(
+            metadata_path.read_text(
+                encoding="utf-8"
+            )
+        )
+    except Exception:
+        return None
+
+    if (
+        str(
+            metadata.get("fortniteBuild")
+            or ""
+        ).strip()
+        != build
+        or str(
+            metadata.get("sha256")
+            or ""
+        ).strip().lower()
+        != expected_hash
+        or int(
+            metadata.get("entries")
+            or 0
+        )
+        != expected_entries
+        or raw_path.stat().st_size
+        != expected_bytes
+    ):
+        return None
+
+    if sha256_file(
+        raw_path
+    ) != expected_hash:
+        return None
+
+    return {
+        "changed": False,
+        "fortniteBuild": build,
+        "fortniteVersion":
+            normalize_release_version(
+                build
+            ),
+        "entries":
+            expected_entries,
+        "sha256":
+            expected_hash,
+    }
+
+
 def sync_remote(
     database_dir: Path,
     manifest_url: str,
@@ -620,6 +787,29 @@ def sync_remote(
     manifest = load_manifest_bytes(
         manifest_bytes
     )
+
+    expected_entries = int(
+        manifest.get("entries")
+        or 0
+    )
+
+    if not (
+        min_entries
+        <= expected_entries
+        <= MAX_ENTRIES
+    ):
+        raise SyncError(
+            "NovaSparx asset count is outside the allowed range: "
+            f"{expected_entries}"
+        )
+
+    unchanged = local_source_matches(
+        database_dir,
+        manifest,
+    )
+
+    if unchanged is not None:
+        return unchanged
 
     gzip_url = asset_source_url(
         safe_manifest_url,
@@ -738,6 +928,17 @@ def self_test() -> None:
         if (
             read_gzip_lines(
                 db
+                / "fortnite_assets_previous.gz"
+            )
+            != old_assets
+        ):
+            raise AssertionError(
+                "Self-test did not preserve the previous asset database."
+            )
+
+        if (
+            read_gzip_lines(
+                db
                 / "fortnite_assets_new.gz"
             )
             != current_assets[2:]
@@ -758,6 +959,21 @@ def self_test() -> None:
         if metadata["fortniteVersion"] != "99.10":
             raise AssertionError(
                 "Self-test failed Fortnite version normalization."
+            )
+
+        local_match = (
+            local_source_matches(
+                db,
+                manifest,
+            )
+        )
+
+        if (
+            local_match is None
+            or local_match["changed"]
+        ):
+            raise AssertionError(
+                "Self-test expected the manifest-only fast path to match."
             )
 
         second = sync_payload(
