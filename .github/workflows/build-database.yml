@@ -2,13 +2,22 @@ name: Build Fortnite search database
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "27,57 * * * *"
   push:
     paths:
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/database/fortnite_assets.gz"
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/database/fortnite_assets_new.gz"
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/database/fortnite_assets_previous.gz"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/database/fortnite_assets_source.json"
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/database/json-src/**"
       - "Fortnite-Ai-Agent-GitHub-Cloudflare/build_database.py"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/sync_fortnite_assets.py"
+      - ".github/workflows/build-database.yml"
+  pull_request:
+    paths:
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/build_database.py"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/sync_fortnite_assets.py"
       - ".github/workflows/build-database.yml"
 
 permissions:
@@ -21,6 +30,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -33,30 +43,104 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Build FNAA search indexes
+      - name: Validate asset updater
         working-directory: Fortnite-Ai-Agent-GitHub-Cloudflare
-        env:
-          FNAA_FORTNITE_VERSION: "42.00"
+        run: |
+          python -m py_compile build_database.py sync_fortnite_assets.py
+          python sync_fortnite_assets.py --self-test
+
+      - name: Sync latest Fortnite assets
+        if: github.event_name != 'pull_request'
+        id: sync
+        working-directory: Fortnite-Ai-Agent-GitHub-Cloudflare
+        run: python sync_fortnite_assets.py
+
+      - name: Build FNAA search indexes
+        if: >-
+          github.event_name == 'pull_request' ||
+          github.event_name == 'workflow_dispatch' ||
+          steps.sync.outputs.changed == 'true' ||
+          (github.event_name == 'push' && github.actor != 'github-actions[bot]')
+        working-directory: Fortnite-Ai-Agent-GitHub-Cloudflare
         run: python build_database.py
 
-      - name: Commit generated indexes
+      - name: Validate generated search database
+        if: >-
+          github.event_name == 'pull_request' ||
+          github.event_name == 'workflow_dispatch' ||
+          steps.sync.outputs.changed == 'true' ||
+          (github.event_name == 'push' && github.actor != 'github-actions[bot]')
+        working-directory: Fortnite-Ai-Agent-GitHub-Cloudflare
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(
+              Path("database/index-v1/manifest.json").read_text(encoding="utf-8")
+          )
+
+          if manifest.get("schema") != "fnaa.asset-index.v1":
+              raise SystemExit("Unexpected FNAA asset-index schema.")
+
+          all_count = int(
+              manifest.get("scopes", {})
+              .get("all", {})
+              .get("count", 0)
+          )
+
+          if all_count < 1_000_000:
+              raise SystemExit(f"FNAA all-assets index is unexpectedly small: {all_count}")
+
+          print(
+              f"Validated FNAA search database: {all_count:,} assets, "
+              f"Fortnite {manifest.get('fortniteVersion', 'unknown')}"
+          )
+          PY
+
+      - name: Commit updated Fortnite database
+        if: >-
+          github.event_name != 'pull_request' &&
+          (
+            github.event_name == 'workflow_dispatch' ||
+            steps.sync.outputs.changed == 'true' ||
+            (github.event_name == 'push' && github.actor != 'github-actions[bot]')
+          )
         shell: bash
         run: |
           set -euo pipefail
+
+          root="Fortnite-Ai-Agent-GitHub-Cloudflare/database"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add \
-            Fortnite-Ai-Agent-GitHub-Cloudflare/database/index \
-            Fortnite-Ai-Agent-GitHub-Cloudflare/database/index-v1 \
-            Fortnite-Ai-Agent-GitHub-Cloudflare/database/manifest.json
+            "$root/index" \
+            "$root/index-v1" \
+            "$root/manifest.json"
+
+          for file in \
+            "$root/fortnite_assets.gz" \
+            "$root/fortnite_assets_new.gz" \
+            "$root/fortnite_assets_previous.gz" \
+            "$root/fortnite_assets_source.json"
+          do
+            if [ -e "$file" ]; then
+              git add "$file"
+            fi
+          done
 
           if git diff --cached --quiet; then
-            echo "Search indexes are already up to date."
+            echo "Fortnite asset database is already current."
             exit 0
           fi
 
-          git commit -m "Build FNAA 1.0 search indexes"
+          version="${{ steps.sync.outputs.fortnite_version }}"
+          if [ -z "$version" ]; then
+            version="unknown"
+          fi
+
+          git commit -m "Update Fortnite asset database for $version"
           git pull --rebase origin main
           git push origin HEAD:main
