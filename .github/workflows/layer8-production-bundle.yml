@@ -1,30 +1,22 @@
-name: Deploy Fortnite Ai Agent
+name: Layer 8 production bundle
 
 on:
-  push:
-    branches:
-      - main
+  pull_request:
+    paths:
+      - ".github/workflows/deploy.yml"
+      - ".github/workflows/layer8-production-bundle.yml"
+      - "Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-*.js"
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: true
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
+  build-production-bundle:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout FNAA
         uses: actions/checkout@v4
 
       - name: Check out verified NovaSparx Layer 8 runtime
@@ -49,7 +41,7 @@ jobs:
       - name: Install browser WASM workload
         run: dotnet workload install wasm-tools
 
-      - name: Build NovaSparx browser runtime
+      - name: Build exact production browser bundle
         shell: bash
         run: |
           set -euo pipefail
@@ -70,20 +62,18 @@ jobs:
           test -d "$bundle/_framework"
           test -f "$bundle/_framework/dotnet.js"
 
-          runtime_dir="Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx/runtime"
-          index_dir="Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx/location-index"
+          stage="$RUNNER_TEMP/fnaa-layer8"
+          runtime_dir="$stage/novasparx/runtime"
+          index_dir="$stage/novasparx/location-index"
 
-          rm -rf "$runtime_dir" "$index_dir"
           mkdir -p "$runtime_dir" "$index_dir"
-
           cp -a "$bundle/." "$runtime_dir/"
           cp .novasparx/tools/CUE4Parse.BrowserProbe/main.js "$runtime_dir/main.js"
           cp .novasparx/tools/CUE4Parse.BrowserProbe/worker.js "$runtime_dir/worker.js"
           cp -a .novasparx/web/location-index/. "$index_dir/"
 
-          test -f "$runtime_dir/main.js"
-          test -f "$runtime_dir/worker.js"
           test -f "$runtime_dir/_framework/dotnet.js"
+          test -f "$runtime_dir/worker.js"
           test -f "$index_dir/manifest.json"
 
           runtime_bytes="$(du -sb "$runtime_dir" | cut -f1)"
@@ -94,17 +84,4 @@ jobs:
           test "$index_bytes" -gt 1000000
           test "$index_bytes" -lt 100000000
 
-          echo "NovaSparx runtime bytes: $runtime_bytes"
-          echo "NovaSparx location index bytes: $index_bytes"
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload Fortnite Ai Agent
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: Fortnite-Ai-Agent-GitHub-Cloudflare
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          echo "PRODUCTION_LAYER8_BUNDLE_OK runtime=$runtime_bytes index=$index_bytes"
