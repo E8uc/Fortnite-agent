@@ -24,7 +24,50 @@ RAW = DB / "fortnite_assets.gz"
 NEW = DB / "fortnite_assets_new.gz"
 DEFAULT_PREVIOUS = DB / "fortnite_assets_previous.gz"
 
-FORTNITE_VERSION = os.getenv("FNAA_FORTNITE_VERSION", "42.00").strip() or "42.00"
+SOURCE_METADATA = DB / "fortnite_assets_source.json"
+
+
+def read_source_version() -> str:
+    configured = os.getenv(
+        "FNAA_FORTNITE_VERSION",
+        "",
+    ).strip()
+
+    if configured:
+        return configured
+
+    if SOURCE_METADATA.exists():
+        try:
+            payload = json.loads(
+                SOURCE_METADATA.read_text(
+                    encoding="utf-8"
+                )
+            )
+
+            value = str(
+                payload.get(
+                    "fortniteVersion"
+                )
+                or payload.get(
+                    "fortniteBuild"
+                )
+                or ""
+            ).strip()
+
+            if value:
+                return value
+        except (
+            OSError,
+            ValueError,
+            TypeError,
+            json.JSONDecodeError,
+        ):
+            pass
+
+    return "unknown"
+
+
+FORTNITE_VERSION = read_source_version()
 SHARD_KEY_LENGTH = 2
 
 LEGACY_INDEX.mkdir(parents=True, exist_ok=True)
@@ -504,6 +547,7 @@ def main() -> None:
         "sources": {
             "current": source_info(RAW),
             "new": source_info(NEW) if NEW.exists() else None,
+            "sourceMetadata": source_info(SOURCE_METADATA),
             "newDerivedFrom": (
                 new_source_name
                 if not NEW.exists()
