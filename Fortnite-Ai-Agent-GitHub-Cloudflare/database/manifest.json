@@ -1,13 +1,13 @@
 {
-  "builtAt": "2026-09-25T00:54:26.782824+00:00",
+  "builtAt": "2026-09-25T01:02:27.049228+00:00",
   "counts": {
-    "all": 1852392,
-    "m": 142883,
-    "meshes": 58942,
-    "new": 32294,
-    "sm": 53403
+    "all": 2094132,
+    "m": 146563,
+    "meshes": 67278,
+    "new": 469410,
+    "sm": 61023
   },
-  "fortniteVersion": "42.00",
+  "fortniteVersion": "42.20",
   "indexV1": "index-v1/manifest.json",
   "jsonReferences": 0,
   "schema": "fnaa.asset-index.v1",
