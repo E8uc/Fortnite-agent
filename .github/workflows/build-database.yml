@@ -49,6 +49,14 @@ jobs:
           python -m py_compile build_database.py sync_fortnite_assets.py
           python sync_fortnite_assets.py --self-test
 
+      - name: Validate live NovaSparx asset source
+        if: github.event_name == 'pull_request'
+        working-directory: Fortnite-Ai-Agent-GitHub-Cloudflare
+        run: |
+          rm -rf "$RUNNER_TEMP/fnaa-live-assets"
+          python sync_fortnite_assets.py \
+            --database-dir "$RUNNER_TEMP/fnaa-live-assets"
+
       - name: Sync latest Fortnite assets
         if: github.event_name != 'pull_request'
         id: sync
