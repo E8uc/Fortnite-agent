@@ -22,6 +22,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: fnaa-search-database
@@ -29,6 +31,8 @@ concurrency:
 
 jobs:
   build:
+    outputs:
+      should_deploy: ${{ steps.deploy_state.outputs.should_deploy }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -152,3 +156,53 @@ jobs:
           git commit -m "Update Fortnite asset database for $version"
           git pull --rebase origin main
           git push origin HEAD:main
+
+      - name: Decide whether Pages needs a fresh FNAA deploy
+        if: github.event_name != 'pull_request'
+        id: deploy_state
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          should_deploy="false"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            should_deploy="true"
+          elif [ "${{ steps.sync.outputs.changed }}" = "true" ]; then
+            should_deploy="true"
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.actor }}" != "github-actions[bot]" ]; then
+            should_deploy="true"
+          fi
+
+          echo "should_deploy=$should_deploy" >> "$GITHUB_OUTPUT"
+          echo "Pages deploy needed: $should_deploy"
+
+  deploy-fnaa-pages:
+    name: Deploy refreshed FNAA site
+    needs: build
+    if: needs.build.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout latest main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload refreshed FNAA site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: Fortnite-Ai-Agent-GitHub-Cloudflare
+
+      - name: Deploy refreshed FNAA site
+        id: deployment
+        uses: actions/deploy-pages@v4
