@@ -119,25 +119,57 @@ jobs:
           set -euo pipefail
 
           root="Fortnite-Ai-Agent-GitHub-Cloudflare/database"
+          snapshot="$RUNNER_TEMP/fnaa-database-snapshot"
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -rf "$snapshot"
+          mkdir -p "$snapshot"
 
-          git add \
+          for item in \
+            index \
+            index-v1 \
+            manifest.json \
+            fortnite_assets.gz \
+            fortnite_assets_new.gz \
+            fortnite_assets_previous.gz \
+            fortnite_assets_source.json
+          do
+            if [ -e "$root/$item" ]; then
+              cp -a "$root/$item" "$snapshot/$item"
+            fi
+          done
+
+          git fetch origin main
+          git reset --hard origin/main
+
+          rm -rf \
             "$root/index" \
-            "$root/index-v1" \
-            "$root/manifest.json"
+            "$root/index-v1"
 
-          for file in \
+          rm -f \
+            "$root/manifest.json" \
             "$root/fortnite_assets.gz" \
             "$root/fortnite_assets_new.gz" \
             "$root/fortnite_assets_previous.gz" \
             "$root/fortnite_assets_source.json"
+
+          for item in \
+            index \
+            index-v1 \
+            manifest.json \
+            fortnite_assets.gz \
+            fortnite_assets_new.gz \
+            fortnite_assets_previous.gz \
+            fortnite_assets_source.json
           do
-            if [ -e "$file" ]; then
-              git add "$file"
+            if [ -e "$snapshot/$item" ]; then
+              cp -a "$snapshot/$item" "$root/$item"
             fi
           done
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A -- "$root"
 
           if git diff --cached --quiet; then
             echo "Fortnite asset database is already current."
@@ -150,5 +182,4 @@ jobs:
           fi
 
           git commit -m "Update Fortnite asset database for $version"
-          git pull --rebase origin main
           git push origin HEAD:main
