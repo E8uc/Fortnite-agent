@@ -1,5 +1,5 @@
 {
-  "builtAt": "2026-09-25T01:02:27.049228+00:00",
+  "builtAt": "2026-09-25T01:13:08.999900+00:00",
   "fortniteVersion": "42.20",
   "jsonReferences": {
     "bytes": 20,
@@ -17729,7 +17729,7 @@
     "sourceMetadata": {
       "bytes": 491,
       "file": "fortnite_assets_source.json",
-      "sha256": "1aca266fc3086019f483028b43517a02bdb9b829dce1adeeb88678d83c6809da"
+      "sha256": "f3c988ade2e6d0135dc9099a2782d711e55d4f54abc10b9fac3f987324b812dd"
     }
   },
   "version": 1
