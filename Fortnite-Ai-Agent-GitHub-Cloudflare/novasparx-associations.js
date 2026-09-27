@@ -481,17 +481,39 @@
       audio: ["AUDIO", "SOUND"], animation: ["ANIMATION"], vfx: ["VFX"],
       cosmetic: ["COSMETIC"], data: ["DATA"], other: ["ASSET"]
     };
-    // Type eligibility is not operational readiness. References alone do not
-    // prove a Blueprint is renderable, and parser registration proves no asset.
-    const eligibleView3D = ["staticmesh", "skeletalmesh"].includes(resolvedKind);
-    const eligibleViewImage = resolvedKind === "texture";
-    const canView3D = eligibleView3D && inspection?.facts?.renderablePreview === true;
+    // Type eligibility is not operational readiness. Layer 8 image preview is
+    // operational for raw Textures and for Meshes through verified related
+    // Texture references. The 3D viewer remains intentionally unavailable
+    // until its own real browser geometry pipeline is proven end to end.
+    const eligibleView3D =
+      ["staticmesh", "skeletalmesh"]
+        .includes(resolvedKind);
+
+    const eligibleViewImage =
+      resolvedKind === "texture" ||
+      eligibleView3D;
+
+    const canViewImage =
+      eligibleViewImage;
+
+    const canView3D =
+      false;
+
     return {
       kind: resolvedKind,
-      eligibleView3D, eligibleViewImage,
-      canPreview: canView3D, canView3D, canViewImage: false,
-      previewMode: canView3D ? "3d" : "none",
-      canListen: false, canDownload: true, canExportUEFN: false,
+      eligibleView3D,
+      eligibleViewImage,
+      canPreview:
+        canViewImage,
+      canView3D,
+      canViewImage,
+      previewMode:
+        canViewImage
+          ? "image"
+          : "none",
+      canListen: false,
+      canDownload: true,
+      canExportUEFN: false,
       downloadFormats: ["json"],
       tags: (tagMap[resolvedKind] || tagMap.other).slice()
     };
