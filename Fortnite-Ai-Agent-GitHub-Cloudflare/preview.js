@@ -2211,11 +2211,136 @@
     path,
     ui,
     label =
-      "Decoded Fortnite texture • NovaSparx 1.0"
+      "Decoded Fortnite texture • NovaSparx Layer 8"
   ) {
+    const signal =
+      ui?.requestSignal ||
+      window.NovaSparxBrowserGuard
+        ?.activeSignal?.() ||
+      null;
+
+    const runtime =
+      window.NovaSparxTextureRuntime;
+
+    if (
+      typeof runtime
+        ?.resolveTexture ===
+        "function"
+    ) {
+      try {
+        const browserState =
+          window.NovaSparxBrowserGuard
+            ?.status?.() ||
+          {};
+
+        const maxSize =
+          browserState.isIOS
+            ? 512
+            : browserState.isMobile
+              ? 768
+              : 1024;
+
+        setStatus(
+          ui.status,
+          "NovaSparx Layer 8: decoding this Texture in your browser…"
+        );
+
+        const result =
+          await runtime
+            .resolveTexture(
+              path,
+              {
+                signal,
+                maxSize
+              }
+            );
+
+        throwIfAborted(
+          signal
+        );
+
+        const objectUrl =
+          URL.createObjectURL(
+            result.blob
+          );
+
+        let loaded =
+          false;
+
+        try {
+          loaded =
+            await loadImage(
+              ui.image,
+              objectUrl,
+              20_000,
+              signal
+            );
+
+          throwIfAborted(
+            signal
+          );
+
+          if (loaded) {
+            rememberObjectUrl(
+              path,
+              objectUrl
+            );
+          }
+        } finally {
+          if (!loaded) {
+            try {
+              URL.revokeObjectURL(
+                objectUrl
+              );
+            } catch {}
+          }
+        }
+
+        if (loaded) {
+          ui.image.hidden =
+            false;
+
+          ui.status.hidden =
+            true;
+
+          setMeta(
+            ui.meta,
+            (
+              label +
+              " • browser CUE4Parse" +
+              " • " +
+              result.width +
+              "×" +
+              result.height
+            ),
+            "high"
+          );
+
+          return true;
+        }
+      } catch (error) {
+        if (
+          signal?.aborted ||
+          error?.name ===
+            "AbortError"
+        ) {
+          throw abortError(
+            signal
+          );
+        }
+
+        console.warn(
+          "FNAA Layer 8 browser Texture:",
+          error
+        );
+      }
+    }
+
+    // Compatibility fallback only. The browser/WASM path above is the
+    // production Layer 8 path and does not require Back4App.
     setStatus(
       ui.status,
-      "NovaSparx: decoding texture…"
+      "NovaSparx: trying the compatibility Texture fallback…"
     );
 
     const ok =
@@ -2228,7 +2353,8 @@
         fastImageTimeout(
           12_000,
           7_000
-        )
+        ),
+        signal
       );
 
     if (!ok) {
@@ -2245,7 +2371,8 @@
 
     setMeta(
       ui.meta,
-      label,
+      label +
+        " • compatibility fallback",
       "high"
     );
 
