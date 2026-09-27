@@ -436,8 +436,10 @@ try {
             .resolveTexture(
               target.toLowerCase(),
               {
+                // Match the established 256×256 desktop/browser reference
+                // so the integration proof compares the exact same mip.
                 maxSize:
-                  512
+                  256
               }
             );
 
