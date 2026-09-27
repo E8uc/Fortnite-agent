@@ -29,6 +29,8 @@ const RELAY_ALLOWED_HOSTS =
 
 let relayRequests = 0;
 let relayBytes = 0;
+let exactImageRequests = 0;
+let legacyTextureRequests = 0;
 
 function mime(file) {
   if (file.endsWith(".html")) return "text/html; charset=utf-8";
@@ -68,6 +70,52 @@ const server =
             req.url,
             "http://127.0.0.1"
           );
+
+        if (
+          requestUrl.pathname ===
+          "/image"
+        ) {
+          exactImageRequests++;
+
+          res.writeHead(
+            404,
+            {
+              "Content-Type":
+                "text/plain; charset=utf-8",
+              "Cache-Control":
+                "no-store"
+            }
+          );
+
+          res.end(
+            "No direct image in the Layer 8 UI proof."
+          );
+
+          return;
+        }
+
+        if (
+          requestUrl.pathname ===
+          "/nova/texture"
+        ) {
+          legacyTextureRequests++;
+
+          res.writeHead(
+            500,
+            {
+              "Content-Type":
+                "text/plain; charset=utf-8",
+              "Cache-Control":
+                "no-store"
+            }
+          );
+
+          res.end(
+            "Legacy Texture fallback must not be used by the Layer 8 UI proof."
+          );
+
+          return;
+        }
 
         if (
           requestUrl.pathname ===
@@ -267,8 +315,27 @@ const server =
   window.FNAA_CONFIG = {
     apiEndpoint: location.origin
   };
+
+  window.FortniteTools = {
+    findKnownImage: async () => null
+  };
+
+  window.NovaSparxAssociations = {
+    family: () => "texture",
+    allowDirectImage: () => false,
+    allowTextureDecode: () => true
+  };
+
+  window.NovaSparxBrowserGuard = {
+    status: () => ({
+      isMobile: true,
+      isIOS: true,
+      recoveryMode: false
+    })
+  };
 </script>
-<script src="/novasparx-texture-runtime.js"></script>`;
+<script src="/novasparx-texture-runtime.js"></script>
+<script src="/preview.js"></script>`;
 
           res.writeHead(
             200,
@@ -519,14 +586,206 @@ try {
     "FNAA Layer 8 relay transferred no bytes"
   );
 
+  const uiRelayBefore = {
+    requests:
+      relayRequests,
+    bytes:
+      relayBytes
+  };
+
+  const ui =
+    await page.evaluate(
+      async target => {
+        if (
+          typeof globalThis
+            .FortnitePreview
+            ?.render !==
+            "function"
+        ) {
+          throw new Error(
+            "FortnitePreview.render is unavailable."
+          );
+        }
+
+        const host =
+          document.createElement(
+            "div"
+          );
+
+        host.id =
+          "layer8-view-image-proof";
+
+        document.body.append(
+          host
+        );
+
+        const rendered =
+          await globalThis
+            .FortnitePreview
+            .render(
+              host,
+              target.toLowerCase(),
+              null,
+              {
+                assetKind:
+                  "texture"
+              }
+            );
+
+        const image =
+          host.querySelector(
+            ".mesh-preview-image"
+          );
+
+        const meta =
+          host.querySelector(
+            ".mesh-image-meta"
+          );
+
+        const status =
+          host.querySelector(
+            ".mesh-image-status"
+          );
+
+        if (!image) {
+          throw new Error(
+            "View Image did not create its image element."
+          );
+        }
+
+        return {
+          state:
+            rendered?.state || "",
+          kind:
+            rendered?.kind || "",
+          imageHidden:
+            image.hidden,
+          imageSrc:
+            image.currentSrc ||
+            image.src ||
+            "",
+          naturalWidth:
+            image.naturalWidth,
+          naturalHeight:
+            image.naturalHeight,
+          meta:
+            meta?.textContent ||
+            "",
+          statusHidden:
+            status?.hidden ??
+            false,
+          status:
+            status?.textContent ||
+            ""
+        };
+      },
+      TARGET
+    );
+
+  const uiRelay = {
+    requests:
+      relayRequests -
+      uiRelayBefore.requests,
+    bytes:
+      relayBytes -
+      uiRelayBefore.bytes
+  };
+
+  assert.equal(
+    ui.state,
+    "ready",
+    "View Image did not reach the ready state"
+  );
+
+  assert.equal(
+    ui.kind,
+    "texture",
+    "View Image did not resolve through the Texture route"
+  );
+
+  assert.equal(
+    ui.imageHidden,
+    false,
+    "View Image kept the decoded Texture hidden"
+  );
+
+  assert.ok(
+    ui.imageSrc.startsWith(
+      "blob:"
+    ),
+    "View Image did not render the browser-decoded PNG blob"
+  );
+
+  assert.ok(
+    ui.naturalWidth >
+      0 &&
+    ui.naturalHeight >
+      0 &&
+    ui.naturalWidth <=
+      512 &&
+    ui.naturalHeight <=
+      512,
+    "View Image returned invalid browser preview dimensions"
+  );
+
+  assert.match(
+    ui.meta,
+    /browser CUE4Parse/i,
+    "View Image metadata does not identify the browser Layer 8 path"
+  );
+
+  assert.ok(
+    exactImageRequests >
+      0,
+    "View Image did not exercise the exact-image miss before Layer 8"
+  );
+
+  assert.equal(
+    legacyTextureRequests,
+    0,
+    "View Image fell back to the legacy Texture backend"
+  );
+
+  assert.ok(
+    uiRelay.requests >
+      0 &&
+    uiRelay.bytes >
+      0,
+    "View Image did not use the bounded Layer 8 relay"
+  );
+
+  console.log(
+    "FNAA_VIEW_IMAGE_LAYER8_PROVEN",
+    JSON.stringify({
+      state:
+        ui.state,
+      kind:
+        ui.kind,
+      size:
+        ui.naturalWidth +
+        "x" +
+        ui.naturalHeight,
+      meta:
+        ui.meta,
+      exactImageRequests,
+      legacyTextureRequests,
+      relay:
+        uiRelay
+    })
+  );
+
   const proof = {
     result,
+    ui,
+    exactImageRequests,
+    legacyTextureRequests,
     relay: {
       requests:
         relayRequests,
       bytes:
         relayBytes
     },
+    uiRelay,
     console:
       consoleLines.slice(
         -80
