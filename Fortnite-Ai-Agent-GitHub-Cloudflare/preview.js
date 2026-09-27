@@ -2211,7 +2211,8 @@
     path,
     ui,
     label =
-      "Decoded Fortnite texture • NovaSparx Layer 8"
+      "Decoded Fortnite texture • NovaSparx Layer 8",
+    options = {}
   ) {
     const signal =
       ui?.requestSignal ||
@@ -2336,6 +2337,13 @@
       }
     }
 
+    if (
+      options.allowCompatibilityFallback ===
+      false
+    ) {
+      return false;
+    }
+
     // Compatibility fallback only. The browser/WASM path above is the
     // production Layer 8 path and does not require Back4App.
     setStatus(
@@ -2430,6 +2438,29 @@
           "partial"
         );
 
+        return {
+          rendered:
+            true,
+          plan
+        };
+      }
+
+      throwIfAborted(
+        signal
+      );
+
+      if (
+        await tryTextureDecode(
+          previewPath,
+          ui,
+          label +
+            " • Layer 8",
+          {
+            allowCompatibilityFallback:
+              false
+          }
+        )
+      ) {
         return {
           rendered:
             true,
@@ -3265,6 +3296,16 @@
         ""
       ).toLowerCase();
 
+    const requestedMode =
+      String(
+        options.previewMode ||
+        ""
+      ).toLowerCase();
+
+    const forceImage =
+      requestedMode ===
+      "image";
+
     const browser3dReady =
       (() => {
         try {
@@ -3280,6 +3321,7 @@
       })();
 
     const force3d =
+      !forceImage &&
       browser3dReady &&
       [
         "staticmesh",
@@ -3484,8 +3526,11 @@
         }
 
         if (
-          browserState.isMobile ||
-          browserState.recoveryMode
+          !forceImage &&
+          (
+            browserState.isMobile ||
+            browserState.recoveryMode
+          )
         ) {
           const localPath =
             fastAssociation
@@ -3809,6 +3854,30 @@
             throwIfAborted(
               signal
             );
+
+            if (
+              await tryTextureDecode(
+                previewPath,
+                ui,
+                "Verified referenced texture • Layer 8",
+                {
+                  allowCompatibilityFallback:
+                    false
+                }
+              )
+            ) {
+              return {
+                state:
+                  "ready",
+                kind:
+                  "public-referenced-layer8-image",
+                publicPlan
+              };
+            }
+
+            throwIfAborted(
+              signal
+            );
           }
         } catch (error) {
           if (
@@ -3824,6 +3893,29 @@
           publicPlan =
             null;
         }
+      }
+
+      if (
+        forceImage &&
+        (
+          pathFamily ===
+            "mesh" ||
+          pathFamily ===
+            "blueprint"
+        )
+      ) {
+        setStatus(
+          ui.status,
+          "No verified Texture preview is available for this asset yet."
+        );
+
+        return {
+          state:
+            "unavailable",
+          kind:
+            "image-unavailable",
+          publicPlan
+        };
       }
 
       // 4) The NovaSparx server remains a temporary fallback while the
