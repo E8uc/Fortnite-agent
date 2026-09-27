@@ -125,7 +125,8 @@ function scorePath(value) {
 
 async function fetchJson(
   assetPath,
-  label
+  label,
+  raw = false
 ) {
   const controller =
     new AbortController();
@@ -152,7 +153,9 @@ async function fetchJson(
 
     url.searchParams.set(
       "Raw",
-      "false"
+      raw
+        ? "true"
+        : "false"
     );
 
     const response =
@@ -436,7 +439,7 @@ for (
     continue;
   }
 
-  const materials =
+  let materials =
     collectTypedPaths(
       root,
       "Material(?:InstanceConstant|InstanceDynamic|Interface)?"
@@ -452,11 +455,51 @@ for (
         6
       );
 
+  let rootSource =
+    "raw-false";
+
+  if (!materials.length) {
+    const rawRoot =
+      await fetchJson(
+        candidate.unreal,
+        "StaticMesh raw",
+        true
+      );
+
+    if (rawRoot) {
+      const rawMaterials =
+        collectTypedPaths(
+          rawRoot,
+          "Material(?:InstanceConstant|InstanceDynamic|Interface)?"
+        )
+          .filter(
+            value =>
+              value.startsWith(
+                "/"
+              )
+          )
+          .slice(
+            0,
+            6
+          );
+
+      if (rawMaterials.length) {
+        materials =
+          rawMaterials;
+
+        rootSource =
+          "raw-true";
+      }
+    }
+  }
+
   console.log(
     "MESH_DISCOVERY_ROOT",
     JSON.stringify({
       mesh:
         candidate.unreal,
+      source:
+        rootSource,
       materials
     })
   );
@@ -465,11 +508,62 @@ for (
     const material of
     materials
   ) {
-    const materialJson =
+    let materialJson =
       await fetchJson(
         material,
         "Material"
       );
+
+    let materialSource =
+      "raw-false";
+
+    let textures =
+      materialJson
+        ? collectTypedPaths(
+            materialJson,
+            "Texture(?:2D|Cube|RenderTarget2D)?"
+          )
+            .filter(
+              value =>
+                value.startsWith(
+                  "/"
+                )
+            )
+        : [];
+
+    if (!textures.length) {
+      const rawMaterial =
+        await fetchJson(
+          material,
+          "Material raw",
+          true
+        );
+
+      if (rawMaterial) {
+        const rawTextures =
+          collectTypedPaths(
+            rawMaterial,
+            "Texture(?:2D|Cube|RenderTarget2D)?"
+          )
+            .filter(
+              value =>
+                value.startsWith(
+                  "/"
+                )
+            );
+
+        if (rawTextures.length) {
+          materialJson =
+            rawMaterial;
+
+          materialSource =
+            "raw-true";
+
+          textures =
+            rawTextures;
+        }
+      }
+    }
 
     if (!materialJson) {
       console.log(
@@ -483,24 +577,14 @@ for (
       continue;
     }
 
-    const textures =
-      collectTypedPaths(
-        materialJson,
-        "Texture(?:2D|Cube|RenderTarget2D)?"
-      )
-        .filter(
-          value =>
-            value.startsWith(
-              "/"
-            )
-        );
-
     console.log(
       "MESH_DISCOVERY_MATERIAL",
       JSON.stringify({
         mesh:
           candidate.unreal,
         material,
+        source:
+          materialSource,
         textures:
           textures.slice(
             0,
