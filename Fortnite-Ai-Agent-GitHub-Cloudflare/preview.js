@@ -2493,6 +2493,7 @@
         plan
       };
     } catch (error) {
+      if (error?.code === "NOVASPARX_TEXTURE_FAILED") throw error;
       if (
         options.signal
           ?.aborted ||
@@ -3786,10 +3787,7 @@
         }
       }
 
-      // 4) The NovaSparx server remains a temporary fallback while the
-      // browser parser is being brought online. It is never the first choice.
-      // 3) The NovaSparx server can decode the asset itself when it is a real
-      // UTexture and no public still image exists.
+      // Decode real Textures on the device when no verified public image exists.
       if (
         pathFamily ===
           "texture" &&
