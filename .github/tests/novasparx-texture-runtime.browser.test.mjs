@@ -781,6 +781,63 @@ try {
     relayBytes
   };
 
+  const meshPlan =
+    await page.evaluate(
+      async target => {
+        try {
+          const plan =
+            await globalThis
+              .NovaSparxAssociations
+              ?.publicPreview?.(
+                target
+              );
+
+          return {
+            ok:
+              Boolean(plan),
+            kind:
+              plan?.kind ||
+              "",
+            type:
+              plan?.type ||
+              "",
+            previewImagePaths:
+              Array.isArray(
+                plan?.previewImagePaths
+              )
+                ? plan.previewImagePaths
+                : [],
+            meshPaths:
+              Array.isArray(
+                plan?.meshPaths
+              )
+                ? plan.meshPaths
+                : []
+          };
+        } catch (
+          error
+        ) {
+          return {
+            ok:
+              false,
+            error:
+              String(
+                error?.stack ||
+                error
+              )
+          };
+        }
+      },
+      MESH_TARGET
+    );
+
+  console.log(
+    "FNAA_MESH_PUBLIC_PREVIEW_DIAGNOSTIC",
+    JSON.stringify(
+      meshPlan
+    )
+  );
+
   const meshUi =
     await page.evaluate(
       async target => {
@@ -869,6 +926,19 @@ try {
       relayBytes -
       meshCountersBefore.relayBytes
   };
+
+  console.log(
+    "FNAA_MESH_VIEW_IMAGE_DIAGNOSTIC",
+    JSON.stringify({
+      meshPlan,
+      meshUi,
+      meshDeltas,
+      console:
+        consoleLines.slice(
+          -80
+        )
+    })
+  );
 
   assert.equal(
     meshUi.state,
