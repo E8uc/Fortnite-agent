@@ -3433,15 +3433,14 @@
                 signal
               );
 
+              ui.image.hidden = false;
+              ui.stage.dataset.previewState = "ready";
               setStatus(
                 ui.status,
                 "NovaSparx • browser Texture"
               );
 
-              if (ui.meta) {
-                ui.meta.textContent =
-                  `${width}×${height} • decoded locally`;
-              }
+              setMeta(ui.meta, `${width}×${height} • decoded locally`, "verified");
 
               return {
                 state:
