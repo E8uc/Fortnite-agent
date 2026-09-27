@@ -13,7 +13,7 @@ permissions:
 jobs:
   validate-static-site:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -88,6 +88,7 @@ jobs:
             'novasparx-browser-transport.selftest.mjs'
             'novasparx-random-access.js'
             'novasparx-local-parser.js'
+            'novasparx-texture-runtime.js'
             'novasparx-layers.js'
             'novasparx-associations.js'
             'novasparx-renderer.js'
@@ -107,6 +108,44 @@ jobs:
               exit 1
             }
           done
+
+      - name: Checkout verified NovaSparx Layer 8 runtime
+        uses: actions/checkout@v4
+        with:
+          repository: E8uc/NovaSparx
+          ref: 273178b851e535f7fa9b9434d0df1a9bd8789352
+          path: .novasparx-src
+          fetch-depth: 1
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install browser WASM workload
+        run: dotnet workload install wasm-tools
+
+      - name: Validate pinned Layer 8 browser bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          dotnet publish \
+            .novasparx-src/tools/CUE4Parse.BrowserProbe/CUE4Parse.BrowserProbe.csproj \
+            --configuration Release
+
+          output_root=".novasparx-src/tools/CUE4Parse.BrowserProbe/bin/Release/net10.0"
+          dotnet_js="$(find "$output_root" -type f -path '*/_framework/dotnet.js' -print -quit)"
+          test -n "$dotnet_js"
+
+          framework_dir="$(dirname "$dotnet_js")"
+          test -s "$framework_dir/dotnet.js"
+          test -n "$(find "$framework_dir" -type f -name '*.wasm' -print -quit)"
+          test -s .novasparx-src/tools/CUE4Parse.BrowserProbe/worker.js
+          test -s .novasparx-src/web/location-index/manifest.json
+
+          grep -q 'resolve-texture-relay' \
+            .novasparx-src/tools/CUE4Parse.BrowserProbe/worker.js
 
       - name: Verify local page assets
         shell: bash
