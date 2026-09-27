@@ -296,3 +296,7 @@ assert.deepEqual(
 console.log(
   "NovaSparx browser transport self-test passed."
 );
+
+for (const host of ['fortnite-direct.dillycdn.com', 'stormforge.dillycdn.com']) {
+  await assert.rejects(() => globalThis.NovaSparxBrowserTransport.fetchRange('https://' + host + '.evil.example/file', 0, 3), /untrusted range host/i);
+}

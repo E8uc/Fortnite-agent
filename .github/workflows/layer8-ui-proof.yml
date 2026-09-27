@@ -1,0 +1,57 @@
+name: Layer 8 native preview UI
+on:
+  pull_request:
+    paths:
+      - 'Fortnite-Ai-Agent-GitHub-Cloudflare/*.js'
+      - 'Fortnite-Ai-Agent-GitHub-Cloudflare/*.mjs'
+      - 'tools/layer8-ui.test.mjs'
+      - '.github/workflows/layer8-ui-proof.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: E8uc/NovaSparx
+          ref: f4884e0b23afa4ad3bd1110fb476249f4d17d988
+          path: .novasparx
+      - name: Check Texture request cancellation and asset identity
+        run: node Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-texture-runtime.selftest.mjs
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publish production runtime without embedded fixtures
+        run: |
+          dotnet workload install wasm-tools
+          dotnet publish .novasparx/tools/CUE4Parse.BrowserProbe/CUE4Parse.BrowserProbe.csproj --configuration Release
+      - name: Capture independent live desktop reference after publishing
+        working-directory: .novasparx
+        run: dotnet run --project tools/NovaSparx.TextureFixture/NovaSparx.TextureFixture.csproj --configuration Release -- tools/CUE4Parse.BrowserProbe/texture-fixture.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npx playwright install --with-deps chromium
+      - name: Verify button through live bytes to visible native pixels
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet_js="$(find .novasparx/tools/CUE4Parse.BrowserProbe/bin/Release/net10.0 -type f -path '*/_framework/dotnet.js' -print -quit)"
+          test -n "$dotnet_js"
+          bundle="$(dirname "$(dirname "$dotnet_js")")"
+          node tools/layer8-ui.test.mjs .novasparx "$bundle"
+      - name: Preserve UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fnaa-layer8-ui-proof
+          path: |
+            .novasparx/fnaa-layer8-ui-proof.json
+            .novasparx/fnaa-texture-*.png
