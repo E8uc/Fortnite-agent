@@ -429,6 +429,10 @@ for (
     );
 
   if (!root) {
+    console.log(
+      "MESH_DISCOVERY_ROOT_MISS",
+      candidate.unreal
+    );
     continue;
   }
 
@@ -448,6 +452,15 @@ for (
         6
       );
 
+  console.log(
+    "MESH_DISCOVERY_ROOT",
+    JSON.stringify({
+      mesh:
+        candidate.unreal,
+      materials
+    })
+  );
+
   for (
     const material of
     materials
@@ -459,6 +472,14 @@ for (
       );
 
     if (!materialJson) {
+      console.log(
+        "MESH_DISCOVERY_MATERIAL_MISS",
+        JSON.stringify({
+          mesh:
+            candidate.unreal,
+          material
+        })
+      );
       continue;
     }
 
@@ -473,6 +494,20 @@ for (
               "/"
             )
         );
+
+    console.log(
+      "MESH_DISCOVERY_MATERIAL",
+      JSON.stringify({
+        mesh:
+          candidate.unreal,
+        material,
+        textures:
+          textures.slice(
+            0,
+            8
+          )
+      })
+    );
 
     if (
       textures.length
