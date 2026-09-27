@@ -13,8 +13,28 @@ const site =
 const TARGET =
   "FortniteGame/Plugins/GameFeatures/BRCosmetics/Content/Animation/Game/MainPlayer/Emotes/FaithPerch/FX/T_Emote_FaithPerch_SoftGlow.uasset";
 
+const meshCandidatePath =
+  path.resolve(
+    "mesh-layer8-candidate.json"
+  );
+
+const meshCandidate =
+  fs.existsSync(
+    meshCandidatePath
+  )
+    ? JSON.parse(
+        fs.readFileSync(
+          meshCandidatePath,
+          "utf8"
+        )
+      )
+    : null;
+
 const MESH_TARGET =
-  "/Engine/EditorMeshes/Camera/SM_CineCam";
+  String(
+    meshCandidate?.mesh ||
+    "/Engine/EditorMeshes/Camera/SM_CineCam"
+  );
 
 const EXPECTED_SHA =
   "F2C39729F3CE99A7D5388F64A3AF4EEF7B5135C6D0276EE988AD05374760D6C7";
@@ -998,6 +1018,11 @@ try {
     JSON.stringify({
       target:
         MESH_TARGET,
+      expectedTexture:
+        String(
+          meshCandidate?.texture ||
+          ""
+        ),
       state:
         meshUi.state,
       kind:
