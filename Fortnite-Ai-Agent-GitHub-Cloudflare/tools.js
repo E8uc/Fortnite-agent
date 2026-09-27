@@ -1044,94 +1044,104 @@
           : "Asset type evidence unavailable.";
     }
 
-    const previewButton =
+    const imageButton =
       card.querySelector(
-        '[data-asset-action="preview"]'
+        '[data-asset-action="image"]'
       );
 
-    if (previewButton) {
-      if (
-        capabilities.canView3D &&
-        browserMeshParserReady()
-      ) {
-        previewButton.disabled =
-          false;
-
-        previewButton.dataset
-          .closedLabel =
-          t(
-            "view3dModel",
-            "View 3D Model"
-          );
-
-        previewButton.dataset
-          .openLabel =
-          t(
-            "hide3dModel",
-            "Hide 3D Model"
-          );
-      } else if (
-        capabilities.canViewImage
-      ) {
-        previewButton.disabled =
-          false;
-
-        previewButton.dataset
-          .closedLabel =
-          t(
-            "viewImage",
-            "View Image"
-          );
-
-        previewButton.dataset
-          .openLabel =
-          t(
-            "hideImage",
-            "Hide Image"
-          );
-      } else if (
-        capabilities.canPreview === true &&
-        !capabilities.canView3D
-      ) {
-        previewButton.disabled =
-          false;
-
-        previewButton.dataset
-          .closedLabel =
-          t(
-            "viewPreview",
-            "View Preview"
-          );
-
-        previewButton.dataset
-          .openLabel =
-          t(
-            "hidePreview",
-            "Hide Preview"
-          );
-      } else {
-        previewButton.disabled =
+    if (imageButton) {
+      const imageEligible =
+        capabilities
+          .eligibleViewImage ===
+          true ||
+        capabilities
+          .canViewImage ===
           true;
 
-        previewButton.dataset
-          .closedLabel =
-          t(
-            "noVisualPreview",
-            "No Visual Preview"
-          );
+      imageButton.hidden =
+        !imageEligible;
 
-        previewButton.dataset
-          .openLabel =
-          previewButton.dataset
-            .closedLabel;
+      imageButton.disabled =
+        capabilities.canViewImage !==
+        true;
+
+      imageButton.dataset
+        .closedLabel =
+        t(
+          "viewImage",
+          "View Image"
+        );
+
+      imageButton.dataset
+        .openLabel =
+        t(
+          "hideImage",
+          "Hide Image"
+        );
+
+      if (
+        imageButton.disabled
+      ) {
+        imageButton.title =
+          "View Image is not available for this asset yet.";
+      } else {
+        imageButton.removeAttribute(
+          "title"
+        );
       }
 
       if (
-        previewButton.dataset
+        imageButton.dataset
           .fnaaOpen !== "1"
       ) {
-        previewButton.textContent =
-          previewButton.dataset
+        imageButton.textContent =
+          imageButton.dataset
+            .closedLabel;
+      }
+    }
+
+    const view3dButton =
+      card.querySelector(
+        '[data-asset-action="view3d"]'
+      );
+
+    if (view3dButton) {
+      const eligibleView3D =
+        capabilities
+          .eligibleView3D ===
+          true;
+
+      view3dButton.hidden =
+        !eligibleView3D;
+
+      // Keep this capability visible but unavailable until the real browser
+      // geometry pipeline passes the same end-to-end bar as Layer 8 images.
+      view3dButton.disabled =
+        true;
+
+      view3dButton.dataset
+        .closedLabel =
+        t(
+          "view3dModel",
+          "View 3D Model"
+        );
+
+      view3dButton.dataset
+        .openLabel =
+        t(
+          "hide3dModel",
+          "Hide 3D Model"
+        );
+
+      view3dButton.title =
+        "Coming soon — the 3D viewer is not enabled yet.";
+
+      if (
+        view3dButton.dataset
+          .fnaaOpen !== "1"
+      ) {
+        view3dButton.textContent =
+          view3dButton.dataset
             .closedLabel;
       }
     }
@@ -1941,9 +1951,18 @@
           <button
             class="json-view-button"
             type="button"
-            data-asset-action="preview"
+            data-asset-action="image"
             disabled
-          >${escapeHtml(t("viewPreview", "View Preview"))}</button>
+            hidden
+          >${escapeHtml(t("viewImage", "View Image"))}</button>
+
+          <button
+            class="json-view-button"
+            type="button"
+            data-asset-action="view3d"
+            disabled
+            hidden
+          >${escapeHtml(t("view3dModel", "View 3D Model"))}</button>
 
           <button
             class="json-view-button"
@@ -2014,6 +2033,13 @@
         const action =
           button.dataset.assetAction;
 
+        if (
+          action ===
+            "view3d"
+        ) {
+          return;
+        }
+
         window.NovaSparxBrowserGuard
           ?.abortActive?.(
             "replaced-by-new-asset-action"
@@ -2042,6 +2068,7 @@
         }
 
         const usesGuestSlowmode =
+          action === "image" ||
           action === "preview" ||
           action === "references" ||
           action === "download" ||
@@ -2071,11 +2098,16 @@
             ?.beginGuestToolSlowmode?.();
         }
 
-        if (action === "preview") {
+        if (
+          action === "image" ||
+          action === "preview"
+        ) {
           await previewPath(
             card,
             path,
-            panelRequest.id
+            panelRequest.id,
+            action,
+            "image"
           );
           return;
         }
@@ -2143,9 +2175,20 @@
 
   function panelLabels(action) {
     const labels = {
+      image: [
+        t("viewImage", "View Image"),
+        t("hideImage", "Hide Image")
+      ],
+
+      view3d: [
+        t("view3dModel", "View 3D Model"),
+        t("hide3dModel", "Hide 3D Model")
+      ],
+
+      // Legacy alias for cards rendered by an older cached shell.
       preview: [
-        t("viewPreview", "View Preview"),
-        t("hidePreview", "Hide Preview")
+        t("viewImage", "View Image"),
+        t("hideImage", "Hide Image")
       ],
 
       uefn: [
@@ -2243,7 +2286,10 @@
 
       resetPanelButtons(card);
 
-      if (action === "preview") {
+      if (
+        action === "image" ||
+        action === "preview"
+      ) {
         window.FortnitePreview
           ?.release?.(
             card.dataset.assetPath ||
@@ -2258,8 +2304,11 @@
     }
 
     if (
-      current === "preview" &&
-      action !== "preview"
+      (
+        current === "image" ||
+        current === "preview"
+      ) &&
+      action !== current
     ) {
       window.FortnitePreview
         ?.release?.(
@@ -2298,6 +2347,8 @@
     button
   ) {
     if (
+      card.dataset.openAction ===
+        "image" ||
       card.dataset.openAction ===
         "preview"
     ) {
@@ -2515,7 +2566,11 @@
   async function previewPath(
     card,
     path,
-    requestId
+    requestId,
+    action =
+      "image",
+    previewMode =
+      "image"
   ) {
     const panel =
       card.querySelector(
@@ -2549,14 +2604,15 @@
               assetKind:
                 card.dataset
                   .assetKind ||
-                ""
+                "",
+              previewMode
             }
           );
 
         if (
           !panelRequestIsCurrent(
             card,
-            "preview",
+            action,
             requestId
           )
         ) {
@@ -7645,7 +7701,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.6.7",
+      version: "1.6.8",
       open,
       close,
       formatAssetPath,
