@@ -2329,54 +2329,14 @@
           );
         }
 
-        console.warn(
-          "FNAA Layer 8 browser Texture:",
-          error
-        );
+        error.code = "NOVASPARX_TEXTURE_FAILED";
+        throw error;
       }
     }
 
-    // Compatibility fallback only. The browser/WASM path above is the
-    // production Layer 8 path and does not require Back4App.
-    setStatus(
-      ui.status,
-      "NovaSparx: trying the compatibility Texture fallback…"
-    );
-
-    const ok =
-      await loadImage(
-        ui.image,
-        endpoint(
-          "/nova/texture",
-          path
-        ),
-        fastImageTimeout(
-          12_000,
-          7_000
-        ),
-        signal
-      );
-
-    if (!ok) {
-      ui.image
-        .removeAttribute(
-          "src"
-        );
-
-      return false;
-    }
-
-    ui.image.hidden = false;
-    ui.status.hidden = true;
-
-    setMeta(
-      ui.meta,
-      label +
-        " • compatibility fallback",
-      "high"
-    );
-
-    return true;
+    const unavailable = new Error("View Image unavailable: browser Texture runtime or image output is unavailable.");
+    unavailable.code = "NOVASPARX_TEXTURE_FAILED";
+    throw unavailable;
   }
 
   async function tryPublicRelatedImage(
@@ -4439,6 +4399,13 @@
           kind:
             "cancelled"
         };
+      }
+
+      if (error?.code === "NOVASPARX_TEXTURE_FAILED") {
+        ui.image.hidden = true;
+        ui.image.removeAttribute("src");
+        setStatus(ui.status, "View Image unavailable: " + error.message);
+        return { state: "error", kind: "texture", error: error.message };
       }
 
       console.warn(

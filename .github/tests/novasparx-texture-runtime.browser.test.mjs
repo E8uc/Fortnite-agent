@@ -774,6 +774,24 @@ try {
     })
   );
 
+  const failedPreview = await page.evaluate(async target => {
+    const original = globalThis.NovaSparxTextureRuntime;
+    globalThis.NovaSparxTextureRuntime = {
+      resolveTexture: async () => { throw new Error("forced native decode failure"); }
+    };
+    try {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const result = await globalThis.FortnitePreview.render(host, target.toLowerCase(), null, { assetKind: "texture" });
+      return { result, hidden: host.querySelector(".mesh-preview-image")?.hidden,
+        status: host.querySelector(".mesh-image-status")?.textContent };
+    } finally { globalThis.NovaSparxTextureRuntime = original; }
+  }, TARGET);
+  assert.equal(failedPreview.result.state, "error");
+  assert.equal(failedPreview.hidden, true);
+  assert.match(failedPreview.status, /forced native decode failure/);
+  assert.equal(legacyTextureRequests, 0, "Native failure must not invoke hosted Texture decoding");
+
   const proof = {
     result,
     ui,

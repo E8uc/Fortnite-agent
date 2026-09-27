@@ -71,6 +71,9 @@ jobs:
         shell: bash
         run: node Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-browser-transport.selftest.mjs
 
+      - name: Test Texture cancellation and output identity
+        run: node Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-texture-runtime.selftest.mjs
+
       - name: Verify required site files
         shell: bash
         run: |

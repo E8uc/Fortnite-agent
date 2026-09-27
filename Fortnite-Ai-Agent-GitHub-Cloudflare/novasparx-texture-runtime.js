@@ -58,6 +58,8 @@
   let activeRun =
     null;
 
+  let activeRequest = null;
+
   function abortError(
     signal,
     reason =
@@ -337,6 +339,9 @@
         packageMatch[1];
     }
 
+    // Strip Unreal object suffixes, preserving package file extensions.
+    if (!packageMatch) path = path.replace(/\.[^/.]+$/, "");
+
     if (
       /^Game\//i.test(
         path
@@ -478,6 +483,7 @@
 
     if (
       locationManifestTask &&
+      !options.signal &&
       !options.refresh
     ) {
       return await locationManifestTask;
@@ -1256,6 +1262,7 @@
 
     if (
       rawManifestTask &&
+      !options.signal &&
       !options.refresh
     ) {
       return await rawManifestTask;
@@ -1730,6 +1737,7 @@
 
         worker.onmessage =
           event => {
+            if (settled) return;
             const message =
               event.data ||
               {};
@@ -1766,6 +1774,9 @@
                 message.pixels;
 
               if (
+                pixelsResult ||
+                typeof message.path !== "string" ||
+                normalizeInput(message.path).toLowerCase() !== location.key.toLowerCase() ||
                 !Number.isInteger(
                   width
                 ) ||
@@ -1789,7 +1800,7 @@
               ) {
                 finish(
                   new Error(
-                    "NovaSparx Texture worker returned invalid RGBA pixels."
+                    "NovaSparx Texture worker returned invalid or mismatched RGBA pixels."
                   )
                 );
 
@@ -1852,7 +1863,7 @@
     );
   }
 
-  async function resolveTexture(
+  async function resolveTextureRequest(
     path,
     options = {}
   ) {
@@ -1930,7 +1941,24 @@
     };
   }
 
+  async function resolveTexture(path, options = {}) {
+    throwIfAborted(options.signal);
+    activeRequest?.abort("replaced-by-new-texture");
+    const controller = new AbortController();
+    activeRequest = controller;
+    const onAbort = () => controller.abort(options.signal?.reason);
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+    try {
+      return await resolveTextureRequest(path, { ...options, signal: controller.signal });
+    } finally {
+      controller.abort("texture-request-finished");
+      options.signal?.removeEventListener("abort", onAbort);
+      if (activeRequest === controller) activeRequest = null;
+    }
+  }
+
   function clearCaches() {
+    activeRequest?.abort("texture-cache-reset");
     locationManifest =
       null;
 

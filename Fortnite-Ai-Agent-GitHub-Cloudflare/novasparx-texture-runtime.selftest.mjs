@@ -1,0 +1,60 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+
+// Execute production request orchestration and Worker validation; replace only
+// metadata IO and PNG encoding so races are deterministic without live services.
+const workers = [], pending = new Map();
+let source = fs.readFileSync(new URL('./novasparx-texture-runtime.js', import.meta.url), 'utf8');
+source = source.replace('  function clearCaches() {', `
+  locate = globalThis.testLocate;
+  currentManifestUrl = async () => 'https://example.test/live.manifest';
+  canvasBlob = async () => new Blob(['pixels']);
+  sha256Hex = async () => 'test-hash';
+  globalThis.testNormalize = normalizeInput;
+  function clearCaches() {`);
+const context = {
+  URL, AbortController, ArrayBuffer, Uint8Array, Blob, setTimeout, clearTimeout,
+  WebAssembly, document: { baseURI: 'https://example.test/' },
+  FNAA_CONFIG: { apiEndpoint: 'https://example.test' },
+  testLocate(path, { signal }) {
+    return new Promise(resolve => pending.set(path, { signal, resolve: () => resolve({ key: path, toc: 'test.utoc', shard: '00' }) }));
+  },
+  Worker: class {
+    constructor(url) { this.path = url.searchParams.get('path'); workers.push(this); }
+    terminate() { this.terminated = true; }
+    send(data) { this.onmessage({ data }); }
+  }
+};
+vm.runInNewContext(source, context);
+const runtime = context.NovaSparxTextureRuntime;
+const tick = () => new Promise(resolve => setImmediate(resolve));
+assert.equal(context.testNormalize("Texture2D'/Game/Textures/T_Test.T_Test'"), 'FortniteGame/Content/Textures/T_Test.uasset');
+assert.equal(context.testNormalize('FortniteGame/Content/T_Test.uasset'), 'FortniteGame/Content/T_Test.uasset');
+const a = runtime.resolveTexture('a.uasset');
+const rejectedA = assert.rejects(a, { name: 'AbortError' });
+const b = runtime.resolveTexture('b.uasset');
+const rejectedB = assert.rejects(b, /mismatched/);
+assert.equal(pending.get('a.uasset').signal.aborted, true);
+pending.get('b.uasset').resolve(); await tick();
+pending.get('a.uasset').resolve(); await rejectedA;
+assert.equal(workers.length, 1, 'old metadata must not spawn or replace a Worker');
+workers[0].send({ type: 'pixels', path: 'other.uasset', width: 1, height: 1, pixels: new ArrayBuffer(4) });
+await rejectedB;
+assert.equal(workers[0].terminated, true);
+const controller = new AbortController();
+const c = runtime.resolveTexture('c.uasset', { signal: controller.signal });
+const rejectedC = assert.rejects(c, { name: 'AbortError' });
+pending.get('c.uasset').resolve(); await tick(); controller.abort(); await rejectedC;
+assert.equal(workers[1].terminated, true);
+const d = runtime.resolveTexture('d.uasset');
+const rejectedD = assert.rejects(d, { name: 'AbortError' });
+runtime.clearCaches(); assert.equal(pending.get('d.uasset').signal.aborted, true);
+pending.get('d.uasset').resolve(); await rejectedD;
+const e = runtime.resolveTexture('e.uasset');
+pending.get('e.uasset').resolve(); await tick();
+workers[2].send({ type: 'pixels', path: 'E.uasset', width: 1, height: 1, pixels: new ArrayBuffer(4) });
+workers[2].send({ type: 'done', exitCode: 0 });
+assert.equal((await e).source, 'browser-wasm');
+assert.equal(workers[2].terminated, true);
+console.log('Texture runtime: metadata race, caller abort, reset, path identity and cleanup passed.');
