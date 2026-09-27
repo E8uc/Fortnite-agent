@@ -13,6 +13,9 @@ const site =
 const TARGET =
   "FortniteGame/Plugins/GameFeatures/BRCosmetics/Content/Animation/Game/MainPlayer/Emotes/FaithPerch/FX/T_Emote_FaithPerch_SoftGlow.uasset";
 
+const MESH_TARGET =
+  "/Engine/EditorMeshes/Camera/SM_CineCam";
+
 const EXPECTED_SHA =
   "F2C39729F3CE99A7D5388F64A3AF4EEF7B5135C6D0276EE988AD05374760D6C7";
 
@@ -320,12 +323,6 @@ const server =
     findKnownImage: async () => null
   };
 
-  window.NovaSparxAssociations = {
-    family: () => "texture",
-    allowDirectImage: () => false,
-    allowTextureDecode: () => true
-  };
-
   window.NovaSparxBrowserGuard = {
     status: () => ({
       isMobile: true,
@@ -334,6 +331,9 @@ const server =
     })
   };
 </script>
+<script src="/asset-diagnosis.js"></script>
+<script src="/novasparx-core.js"></script>
+<script src="/novasparx-associations.js"></script>
 <script src="/novasparx-texture-runtime.js"></script>
 <script src="/preview.js"></script>`;
 
@@ -774,9 +774,179 @@ try {
     })
   );
 
+  const meshCountersBefore = {
+    exactImageRequests,
+    legacyTextureRequests,
+    relayRequests,
+    relayBytes
+  };
+
+  const meshUi =
+    await page.evaluate(
+      async target => {
+        const host =
+          document.createElement(
+            "div"
+          );
+
+        host.id =
+          "layer8-mesh-view-image-proof";
+
+        document.body.append(
+          host
+        );
+
+        const rendered =
+          await globalThis
+            .FortnitePreview
+            .render(
+              host,
+              target,
+              null,
+              {
+                assetKind:
+                  "staticmesh",
+                previewMode:
+                  "image"
+              }
+            );
+
+        const image =
+          host.querySelector(
+            ".mesh-preview-image"
+          );
+
+        const meta =
+          host.querySelector(
+            ".mesh-image-meta"
+          );
+
+        const status =
+          host.querySelector(
+            ".mesh-image-status"
+          );
+
+        return {
+          state:
+            rendered?.state || "",
+          kind:
+            rendered?.kind || "",
+          imageHidden:
+            image?.hidden ??
+            true,
+          imageSrc:
+            image?.currentSrc ||
+            image?.src ||
+            "",
+          naturalWidth:
+            image?.naturalWidth ||
+            0,
+          naturalHeight:
+            image?.naturalHeight ||
+            0,
+          meta:
+            meta?.textContent ||
+            "",
+          status:
+            status?.textContent ||
+            ""
+        };
+      },
+      MESH_TARGET
+    );
+
+  const meshDeltas = {
+    exactImageRequests:
+      exactImageRequests -
+      meshCountersBefore.exactImageRequests,
+    legacyTextureRequests:
+      legacyTextureRequests -
+      meshCountersBefore.legacyTextureRequests,
+    relayRequests:
+      relayRequests -
+      meshCountersBefore.relayRequests,
+    relayBytes:
+      relayBytes -
+      meshCountersBefore.relayBytes
+  };
+
+  assert.equal(
+    meshUi.state,
+    "ready",
+    "StaticMesh View Image did not reach the ready state"
+  );
+
+  assert.equal(
+    meshUi.imageHidden,
+    false,
+    "StaticMesh View Image kept the Layer 8 result hidden"
+  );
+
+  assert.ok(
+    meshUi.imageSrc.startsWith(
+      "blob:"
+    ),
+    "StaticMesh View Image did not render a browser-decoded Texture blob"
+  );
+
+  assert.ok(
+    meshUi.naturalWidth >
+      0 &&
+    meshUi.naturalHeight >
+      0,
+    "StaticMesh View Image returned invalid dimensions"
+  );
+
+  assert.match(
+    meshUi.meta,
+    /Layer 8|browser CUE4Parse/i,
+    "StaticMesh View Image metadata does not identify the Layer 8 path"
+  );
+
+  assert.ok(
+    meshDeltas.exactImageRequests >
+      0,
+    "StaticMesh View Image did not attempt its verified Texture reference"
+  );
+
+  assert.equal(
+    meshDeltas.legacyTextureRequests,
+    0,
+    "StaticMesh View Image used the legacy Texture backend"
+  );
+
+  assert.ok(
+    meshDeltas.relayRequests >
+      0 &&
+    meshDeltas.relayBytes >
+      0,
+    "StaticMesh View Image did not decode its verified Texture through the bounded Layer 8 relay"
+  );
+
+  console.log(
+    "FNAA_MESH_VIEW_IMAGE_LAYER8_PROVEN",
+    JSON.stringify({
+      target:
+        MESH_TARGET,
+      state:
+        meshUi.state,
+      kind:
+        meshUi.kind,
+      size:
+        meshUi.naturalWidth +
+        "x" +
+        meshUi.naturalHeight,
+      meta:
+        meshUi.meta,
+      network:
+        meshDeltas
+    })
+  );
+
   const proof = {
     result,
     ui,
+    meshUi,
     exactImageRequests,
     legacyTextureRequests,
     relay: {
