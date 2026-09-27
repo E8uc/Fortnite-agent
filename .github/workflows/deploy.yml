@@ -22,10 +22,58 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Checkout verified NovaSparx Layer 8 runtime
+        uses: actions/checkout@v4
+        with:
+          repository: E8uc/NovaSparx
+          ref: 273178b851e535f7fa9b9434d0df1a9bd8789352
+          path: .novasparx-src
+          fetch-depth: 1
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install browser WASM workload
+        run: dotnet workload install wasm-tools
+
+      - name: Build browser-only Layer 8 runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          dotnet publish \
+            .novasparx-src/tools/CUE4Parse.BrowserProbe/CUE4Parse.BrowserProbe.csproj \
+            --configuration Release
+
+          output_root=".novasparx-src/tools/CUE4Parse.BrowserProbe/bin/Release/net10.0"
+          dotnet_js="$(find "$output_root" -type f -path '*/_framework/dotnet.js' -print -quit)"
+          test -n "$dotnet_js"
+
+          framework_dir="$(dirname "$dotnet_js")"
+          bundle="$(dirname "$framework_dir")"
+          target="Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-runtime"
+
+          rm -rf "$target"
+          mkdir -p "$target/location-index"
+
+          cp -a "$bundle"/. "$target"/
+          cp .novasparx-src/tools/CUE4Parse.BrowserProbe/worker.js "$target/worker.js"
+          cp -a .novasparx-src/web/location-index/. "$target/location-index/"
+
+          test -s "$target/worker.js"
+          test -s "$target/_framework/dotnet.js"
+          test -n "$(find "$target/_framework" -type f -name '*.wasm' -print -quit)"
+          test -s "$target/location-index/manifest.json"
+
+          touch Fortnite-Ai-Agent-GitHub-Cloudflare/.nojekyll
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
