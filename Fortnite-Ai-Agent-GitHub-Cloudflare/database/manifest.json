@@ -1,12 +1,12 @@
 {
-  "builtAt": "2026-09-25T02:16:59.158395+00:00",
+  "builtAt": "2026-09-27T00:44:02.116512+00:00",
   "counts": {
-    "all": 2094132,
-    "cosmetics": 497859,
-    "m": 146563,
-    "meshes": 67278,
-    "new": 469410,
-    "sm": 61023
+    "all": 2098990,
+    "cosmetics": 501517,
+    "m": 147162,
+    "meshes": 67341,
+    "new": 4858,
+    "sm": 61042
   },
   "fortniteVersion": "42.20",
   "indexV1": "index-v1/manifest.json",
