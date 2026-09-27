@@ -161,6 +161,13 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Discover real Fortnite Mesh Layer 8 candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node .github/tests/discover-mesh-layer8-candidate.mjs \
+            Fortnite-Ai-Agent-GitHub-Cloudflare
+
       - name: Install Layer 8 Chromium runtime
         shell: bash
         run: |
