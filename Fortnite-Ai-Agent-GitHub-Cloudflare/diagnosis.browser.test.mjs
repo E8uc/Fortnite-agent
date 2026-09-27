@@ -59,20 +59,109 @@ try {
   await page.locator('#assetQuery').fill('diagnosis');
   await page.locator('#assetSearch').click();
   await page.waitForFunction(n => document.querySelectorAll('.asset-result-card[data-asset-classified="1"]').length === n, cases.length);
-  const results = await page.locator('.asset-result-card').evaluateAll(cards => cards.map(card => ({
-    path:card.dataset.assetPath,kind:card.dataset.assetKind,
-    tags:[...card.querySelectorAll('[data-asset-tags] span')].map(x=>x.textContent),
-    previewDisabled:card.querySelector('[data-asset-action="preview"]').disabled,
-    exportDisabled:card.querySelector('[data-asset-action="uefn"]').disabled
-  })));
+  const results = await page.locator('.asset-result-card').evaluateAll(cards => cards.map(card => {
+    const image = card.querySelector('[data-asset-action="image"]');
+    const view3d = card.querySelector('[data-asset-action="view3d"]');
+    return {
+      path:card.dataset.assetPath,
+      kind:card.dataset.assetKind,
+      tags:[...card.querySelectorAll('[data-asset-tags] span')].map(x=>x.textContent),
+      imageText:image?.textContent || '',
+      imageHidden:image?.hidden ?? true,
+      imageDisabled:image?.disabled ?? true,
+      view3dText:view3d?.textContent || '',
+      view3dHidden:view3d?.hidden ?? true,
+      view3dDisabled:view3d?.disabled ?? true,
+      exportDisabled:card.querySelector('[data-asset-action="uefn"]').disabled
+    };
+  }));
+
+  const imageKinds = new Set(['staticmesh','skeletalmesh','texture']);
+  const threeDimensionalKinds = new Set(['staticmesh','skeletalmesh']);
+
   for (let i=0;i<cases.length;i++) {
     const expected = await page.evaluate(type => window.FNAAAssetDiagnosis.kindFromType(type), cases[i].expected);
     assert.equal(results[i].kind, expected, cases[i].path);
-    assert.ok(results[i].previewDisabled, cases[i].path);
+
+    assert.equal(
+      results[i].imageHidden,
+      !imageKinds.has(expected),
+      `View Image visibility: ${cases[i].path}`
+    );
+
+    assert.equal(
+      results[i].imageDisabled,
+      !imageKinds.has(expected),
+      `View Image readiness: ${cases[i].path}`
+    );
+
+    if (imageKinds.has(expected)) {
+      assert.equal(results[i].imageText, 'View Image', cases[i].path);
+    }
+
+    assert.equal(
+      results[i].view3dHidden,
+      !threeDimensionalKinds.has(expected),
+      `View 3D Model visibility: ${cases[i].path}`
+    );
+
+    assert.equal(
+      results[i].view3dDisabled,
+      true,
+      `View 3D Model must remain disabled: ${cases[i].path}`
+    );
+
+    if (threeDimensionalKinds.has(expected)) {
+      assert.equal(results[i].view3dText, 'View 3D Model', cases[i].path);
+    }
+
     assert.ok(results[i].exportDisabled, cases[i].path);
     assert.ok(!results[i].tags.some(x=>['VISUAL','IMAGE','LOGIC'].includes(x)));
     if (expected === 'other') assert.deepEqual(results[i].tags,['ASSET']);
   }
+
+  const imageAction = await page.evaluate(async () => {
+    const card =
+      [...document.querySelectorAll('.asset-result-card')]
+        .find(item => {
+          const button = item.querySelector('[data-asset-action="image"]');
+          return button && !button.hidden && !button.disabled;
+        });
+
+    if (!card) {
+      throw new Error('No enabled View Image card was rendered.');
+    }
+
+    let call = null;
+
+    window.FortnitePreview = {
+      toggle: async (host, path, button, options) => {
+        call = {
+          path,
+          assetKind:options?.assetKind || '',
+          previewMode:options?.previewMode || ''
+        };
+        return {state:'ready',kind:'test-image'};
+      },
+      release: () => {}
+    };
+
+    card.querySelector('[data-asset-action="image"]').click();
+
+    const deadline = Date.now() + 3000;
+    while (!call && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+
+    if (!call) {
+      throw new Error('View Image click did not reach FortnitePreview.toggle.');
+    }
+
+    return call;
+  });
+
+  assert.equal(imageAction.previewMode,'image','View Image must force image preview mode');
+  assert.ok(imageKinds.has(imageAction.assetKind), imageAction.assetKind);
   const generated = await page.evaluate(() => ({
     kind:window.FNAAAssetDiagnosis.diagnosePath('/CRD_AnimatedMesh/Device_AnimatedMesh.Device_AnimatedMesh_C').kind,
     compatible:window.FortniteTools.isClassCompatibleAsset("StaticMesh'/Game/BP_Test.BP_Test'")
