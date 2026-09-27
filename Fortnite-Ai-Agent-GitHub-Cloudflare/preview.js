@@ -2329,8 +2329,9 @@
           );
         }
 
-        error.code = "NOVASPARX_TEXTURE_FAILED";
-        throw error;
+        const failure = new Error(error?.message || String(error), { cause: error });
+        failure.code = "NOVASPARX_TEXTURE_FAILED";
+        throw failure;
       }
     }
 

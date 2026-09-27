@@ -777,7 +777,7 @@ try {
   const failedPreview = await page.evaluate(async target => {
     const original = globalThis.NovaSparxTextureRuntime;
     globalThis.NovaSparxTextureRuntime = {
-      resolveTexture: async () => { throw new Error("forced native decode failure"); }
+      resolveTexture: async () => { throw new DOMException("forced native decode failure", "NotSupportedError"); }
     };
     try {
       const host = document.createElement("div");
