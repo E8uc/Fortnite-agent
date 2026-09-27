@@ -362,17 +362,64 @@ assert.equal((await associations.classify(target, {
 assert.equal((await associations.classify("/Game/BP_Test.uasset", {
   data: [{ Type: "BlueprintGeneratedClass", Name: "BP_Test_C" }]
 })).source, "export-json", "Package requests match their generated root export");
+const imageKinds = new Set(["staticmesh", "skeletalmesh", "texture"]);
+const threeDimensionalKinds = new Set(["staticmesh", "skeletalmesh"]);
+
 for (const kind of ["staticmesh", "skeletalmesh", "blueprint", "texture", "audio", "animation", "vfx", "data", "other"]) {
   const caps = associations.capabilityProfile(kind, { Properties: { Mesh: "StaticMesh'/Game/SM_X.SM_X'" } });
-  assert.equal(caps.canPreview, false, kind);
+
+  assert.equal(
+    caps.eligibleViewImage,
+    imageKinds.has(kind),
+    `eligibleViewImage: ${kind}`
+  );
+
+  assert.equal(
+    caps.canViewImage,
+    imageKinds.has(kind),
+    `canViewImage: ${kind}`
+  );
+
+  assert.equal(
+    caps.canPreview,
+    imageKinds.has(kind),
+    `canPreview: ${kind}`
+  );
+
+  assert.equal(
+    caps.previewMode,
+    imageKinds.has(kind) ? "image" : "none",
+    `previewMode: ${kind}`
+  );
+
+  assert.equal(
+    caps.eligibleView3D,
+    threeDimensionalKinds.has(kind),
+    `eligibleView3D: ${kind}`
+  );
+
+  // 3D stays visibly eligible for Meshes but operationally disabled until
+  // its own browser geometry path is proven end to end.
+  assert.equal(caps.canView3D, false, `canView3D: ${kind}`);
   assert.equal(caps.canExportUEFN, false, kind);
   assert.equal(caps.canListen, false, kind);
   assert.deepEqual(caps.downloadFormats, ["json"]);
   assert.ok(!caps.tags.some(tag => ["VISUAL", "IMAGE", "LOGIC"].includes(tag)));
 }
+
 assert.deepEqual(associations.capabilityProfile("blueprint").tags, ["BLUEPRINT"]);
-assert.equal(associations.capabilityProfile("staticmesh", null, {facts:{renderablePreview:true}}).canView3D, true);
-assert.equal(associations.capabilityProfile("audio", null, {facts:{renderablePreview:true}}).canView3D, false);
+assert.equal(
+  associations.capabilityProfile("staticmesh", null, {facts:{renderablePreview:true}}).eligibleView3D,
+  true
+);
+assert.equal(
+  associations.capabilityProfile("staticmesh", null, {facts:{renderablePreview:true}}).canView3D,
+  false
+);
+assert.equal(
+  associations.capabilityProfile("audio", null, {facts:{renderablePreview:true}}).eligibleView3D,
+  false
+);
 // Database indexing is tested against the same expected classifications.
 const allCases = [...corpus.cases, ...cases.map(([path, expectedKind]) => ({path, expectedKind}))];
 assert.equal(globalThis.NovaSparx.cleanPath("MetaSoundSource'/Game/Test.Test'"), "/Game/Test");
