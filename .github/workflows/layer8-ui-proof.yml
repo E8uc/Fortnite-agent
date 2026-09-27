@@ -20,6 +20,8 @@ jobs:
           repository: E8uc/NovaSparx
           ref: f4884e0b23afa4ad3bd1110fb476249f4d17d988
           path: .novasparx
+      - name: Check Texture request cancellation and asset identity
+        run: node Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-texture-runtime.selftest.mjs
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'

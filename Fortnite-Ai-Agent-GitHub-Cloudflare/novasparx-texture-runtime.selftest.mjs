@@ -66,3 +66,14 @@ assert.equal((await resetRequest).name, 'AbortError');
 assert.equal(workers.length, 1);
 assert.ok(manifestCalls >= 2);
 console.log('Texture runtime: delayed A cannot replace B; AbortSignal and reset terminate workers and metadata requests.');
+
+// Even valid RGBA must not be accepted for another asset.
+pending.clear();
+const wrongAsset = runtime.resolveTexture(b, { parserState: state }).catch(e => e);
+await until(() => pending.has(shard(b) + '.json.gz'));
+release(b);
+await until(() => workers.length === 2);
+workers[1].onmessage({ data: { type: 'pixels', path: a, width: 1, height: 1, pixels: new ArrayBuffer(4) } });
+assert.equal((await wrongAsset).code, 'NOVASPARX_TEXTURE_PIXELS_INVALID');
+assert.ok(workers[1].terminated > 0);
+console.log('Texture runtime rejects correctly sized pixels belonging to another asset.');

@@ -1200,6 +1200,10 @@
                 message;
 
               if (
+                pixelsResult ||
+                normalizePath(returnedPath) !== location.path ||
+                !Number.isInteger(width) ||
+                !Number.isInteger(height) ||
                 !(
                   pixels instanceof
                   ArrayBuffer
