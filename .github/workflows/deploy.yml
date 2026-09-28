@@ -62,17 +62,76 @@ jobs:
           target="Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-runtime"
 
           rm -rf "$target"
-          mkdir -p "$target/location-index" "$target/package-id-index"
+          mkdir -p "$target/location-index" "$target/package-id-index" "$target/mappings"
 
           cp -a "$bundle"/. "$target"/
           cp .novasparx-src/tools/CUE4Parse.BrowserProbe/worker.js "$target/worker.js"
           cp -a .novasparx-src/web/location-index/. "$target/location-index/"
           cp -a .novasparx-src/web/package-id-index/. "$target/package-id-index/"
 
+          mappings_meta="$(mktemp)"
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://api.fortniteapi.com/v1/mappings" \
+            -o "$mappings_meta"
+
+          mapping_url="$(
+            python3 - "$mappings_meta" <<'PY'
+import json
+import sys
+from datetime import datetime
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    data = json.load(handle)
+
+if not isinstance(data, list):
+    raise SystemExit("Mappings metadata is not a list")
+
+candidates = []
+for item in data:
+    if not isinstance(item, dict):
+        continue
+    url = str(item.get("url") or "")
+    platform = str((item.get("meta") or {}).get("platform") or "")
+    filename = str(item.get("fileName") or "")
+    if url.startswith("https://") and "usmap" in url.lower() and platform.lower() == "windows":
+        candidates.append((str(item.get("uploadedAt") or ""), filename, url))
+
+if not candidates:
+    raise SystemExit("No live Windows Fortnite mappings URL found")
+
+candidates.sort(reverse=True)
+print(candidates[0][2])
+PY
+          )"
+
+          test -n "$mapping_url"
+          curl --fail --silent --show-error --location --retry 3 \
+            "$mapping_url" \
+            -o "$target/mappings/current.usmap"
+
+          mapping_size="$(wc -c < "$target/mappings/current.usmap" | tr -d ' ')"
+          test "$mapping_size" -ge 32
+          test "$mapping_size" -le 33554432
+
+          python3 - "$target/mappings/current.usmap" <<'PY'
+from pathlib import Path
+import sys
+
+head = Path(sys.argv[1]).read_bytes()[:4]
+if head == bytes.fromhex("28b52ffd"):
+    raise SystemExit("Outer Zstandard-compressed mappings are not browser-compatible")
+PY
+
+          sha256sum "$target/mappings/current.usmap" \
+            > "$target/mappings/current.usmap.sha256"
+
+
           test -s "$target/worker.js"
           test -s "$target/_framework/dotnet.js"
           test -n "$(find "$target/_framework" -type f -name '*.wasm' -print -quit)"
           test -s "$target/location-index/manifest.json"
+          test -s "$target/mappings/current.usmap"
+          test -s "$target/mappings/current.usmap.sha256"
 
           touch Fortnite-Ai-Agent-GitHub-Cloudflare/.nojekyll
 
