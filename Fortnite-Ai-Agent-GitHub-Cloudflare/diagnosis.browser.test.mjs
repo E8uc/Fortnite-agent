@@ -46,6 +46,7 @@ try {
   const cases = [
     ...fixtures.map(x => ({path:x.physicalPath, expected:x.rootTypes[0]})),
     {path:"StaticMesh'/Game/Audio/SW_NotActuallySound.SW_NotActuallySound'",expected:'StaticMesh'},
+    {path:"Texture2D'/Game/Test/T_Layer8_Probe.T_Layer8_Probe'",expected:'Texture2D'},
     {path:'/CRD_AnimatedMesh/Device_AnimatedMesh.Device_AnimatedMesh_C',expected:'Blueprint'},
     {path:'/Game/S_Ambiguous.S_Ambiguous',expected:'Unknown'}
   ];
