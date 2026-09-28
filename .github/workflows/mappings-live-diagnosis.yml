@@ -25,14 +25,19 @@ jobs:
           function walk(v,d=0){if(d>8||urls.length>16)return;if(typeof v==='string'&&v.startsWith('https:')&&v.includes('usmap'))urls.push(v);else if(v&&typeof v==='object')for(const x of Object.values(v))walk(x,d+1);}
           walk(JSON.parse(body));
           for(const target of [...new Set(urls)].slice(0,3)){
-            for(const relay of [false,true]){
-              const u=relay?new URL('https://fortnite-ai-agent-api.a39328122.workers.dev/nova-edge/range'):new URL(target);
-              if(relay){u.searchParams.set('url',target);u.searchParams.set('start','0');u.searchParams.set('end','255');}
+            for(const redirect of ['manual','follow']){
               try{
-                const r=await fetch(u,{headers:{Origin:origin,...(!relay?{Range:'bytes=0-255'}:{})},signal:AbortSignal.timeout(20000)});
-                const reader=r.body.getReader();const first=await reader.read();await reader.cancel();
-                console.log('MAPPINGS',JSON.stringify({target,relay,status:r.status,cors:r.headers.get('access-control-allow-origin'),range:r.headers.get('content-range'),bytes:first.value?.length,body:r.ok?null:new TextDecoder().decode(first.value).slice(0,1200)}));
-              }catch(e){console.log('MAPPINGS_ERROR',relay,target,e.message);}
+                const r=await fetch(target,{redirect,headers:{Origin:origin,Range:'bytes=0-255'},signal:AbortSignal.timeout(20000)});
+                const reader=r.body?.getReader?.();const first=reader?await reader.read():{value:null};if(reader)await reader.cancel();
+                console.log('DIRECT_REDIRECT',JSON.stringify({target,redirect,status:r.status,url:r.url,redirected:r.redirected,location:r.headers.get('location'),range:r.headers.get('content-range'),bytes:first.value?.length}));
+              }catch(e){console.log('DIRECT_REDIRECT_ERROR',redirect,target,e.message);}
             }
+            const u=new URL('https://fortnite-ai-agent-api.a39328122.workers.dev/nova-edge/range');
+            u.searchParams.set('url',target);u.searchParams.set('start','0');u.searchParams.set('end','255');
+            try{
+              const r=await fetch(u,{headers:{Origin:origin},signal:AbortSignal.timeout(20000)});
+              const reader=r.body.getReader();const first=await reader.read();await reader.cancel();
+              console.log('MAPPINGS_RELAY',JSON.stringify({target,status:r.status,cors:r.headers.get('access-control-allow-origin'),range:r.headers.get('content-range'),bytes:first.value?.length,body:r.ok?null:new TextDecoder().decode(first.value).slice(0,1200)}));
+            }catch(e){console.log('MAPPINGS_RELAY_ERROR',target,e.message);}
           }
           JS
