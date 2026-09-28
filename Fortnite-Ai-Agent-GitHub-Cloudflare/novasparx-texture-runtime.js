@@ -23,7 +23,10 @@
     "https://egdownload.fastly-edge.com/Builds/Fortnite/CloudDir/";
 
   const MAPPINGS_API =
-    "https://api.fortniteapi.com/v1/mappings";
+    new URL(
+      "mappings/current.usmap",
+      RUNTIME_BASE
+    ).href;
 
   const AES_API =
     "https://export-service-new.dillyapis.com/v1/aes";
