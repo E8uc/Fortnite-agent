@@ -972,6 +972,51 @@ try {
   fs.writeFileSync('fnaa-mesh-proof.json',JSON.stringify({path:meshPath,...meshUi},null,2));
   console.log('FNAA_REAL_MESH_BUTTON_IMAGE_PROVEN',JSON.stringify(meshUi));
 
+  const lazyMeshPath = "StaticMesh'FortniteGame/Content/Environments/Apollo/Props/LazyLakeSign/Mesh/SM_LazyLakeLodge_Sign.uasset'";
+  await page.evaluate(meshPath => {
+    window.FortniteAgent.searchDatabase = async () => ({results:[{path:meshPath,source:'lazy-lake-proof',match:'exact'}],total:1});
+    window.FortniteTools.open('assets');
+    document.querySelector('#assetQuery').value='SM_LazyLakeLodge_Sign';
+    document.querySelector('#assetSearch').click();
+  },lazyMeshPath);
+  await page.waitForFunction(expected=>{
+    const card=document.querySelector('.asset-result-card');
+    return card?.dataset.assetPath===expected &&
+      card?.dataset.assetKind==='staticmesh' &&
+      !card.querySelector('[data-asset-action="preview"]').disabled;
+  },lazyMeshPath,{timeout:30000});
+  const lazyMeshButton=page.locator('.asset-result-card [data-asset-action="preview"]');
+  assert.equal(await lazyMeshButton.textContent(),'View Image');
+  await lazyMeshButton.click();
+  await page.waitForFunction(()=>{
+    const card=document.querySelector('.asset-result-card');
+    const image=card?.querySelector('.mesh-preview-image');
+    const status=card?.querySelector('.mesh-image-status')?.textContent || '';
+    return (image && !image.hidden && image.complete && image.naturalWidth>0) ||
+      /unavailable|error|exceeded|failed/i.test(status);
+  },null,{timeout:300000});
+  const lazyMeshUi=await page.evaluate(()=>{
+    const card=document.querySelector('.asset-result-card');
+    const image=card?.querySelector('.mesh-preview-image');
+    return {
+      width:image?.naturalWidth || 0,
+      height:image?.naturalHeight || 0,
+      src:image?.src || '',
+      hidden:image?.hidden ?? true,
+      meta:card?.querySelector('.mesh-image-meta')?.textContent || '',
+      status:card?.querySelector('.mesh-image-status')?.textContent || ''
+    };
+  });
+  assert.equal(lazyMeshUi.status,'',lazyMeshUi.status || 'Lazy Lake Mesh preview failed');
+  assert.equal(lazyMeshUi.hidden,false);
+  assert.ok(lazyMeshUi.src.startsWith('blob:'));
+  assert.equal(lazyMeshUi.width,512);
+  assert.equal(lazyMeshUi.height,512);
+  assert.equal(legacyTextureRequests,0);
+  await page.locator('.asset-result-card .mesh-preview-image').screenshot({path:'fnaa-lazy-lake-mesh.png'});
+  fs.writeFileSync('fnaa-lazy-lake-mesh-proof.json',JSON.stringify({path:lazyMeshPath,...lazyMeshUi},null,2));
+  console.log('FNAA_LAZY_LAKE_MESH_IMAGE_PROVEN',JSON.stringify(lazyMeshUi));
+
   const failedPreview = await page.evaluate(async target => {
     const original = globalThis.NovaSparxTextureRuntime;
     globalThis.NovaSparxTextureRuntime = {
