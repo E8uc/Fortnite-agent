@@ -158,35 +158,7 @@ jobs:
             "https://api.fortniteapi.com/v1/mappings" \
             -o "$mappings_meta"
 
-          mapping_url="$(
-            python3 - "$mappings_meta" <<'PY'
-import json
-import sys
-from datetime import datetime
-
-with open(sys.argv[1], "r", encoding="utf-8") as handle:
-    data = json.load(handle)
-
-if not isinstance(data, list):
-    raise SystemExit("Mappings metadata is not a list")
-
-candidates = []
-for item in data:
-    if not isinstance(item, dict):
-        continue
-    url = str(item.get("url") or "")
-    platform = str((item.get("meta") or {}).get("platform") or "")
-    filename = str(item.get("fileName") or "")
-    if url.startswith("https://") and "usmap" in url.lower() and platform.lower() == "windows":
-        candidates.append((str(item.get("uploadedAt") or ""), filename, url))
-
-if not candidates:
-    raise SystemExit("No live Windows Fortnite mappings URL found")
-
-candidates.sort(reverse=True)
-print(candidates[0][2])
-PY
-          )"
+          mapping_url="$(python3 -c 'import json,sys; data=json.load(open(sys.argv[1], encoding="utf-8")); candidates=[(str(item.get("uploadedAt") or ""), str(item.get("url") or "")) for item in data if isinstance(item,dict) and str((item.get("meta") or {}).get("platform") or "").lower()=="windows" and str(item.get("url") or "").startswith("https://") and "usmap" in str(item.get("url") or "").lower()]; candidates.sort(reverse=True); print(candidates[0][1] if candidates else ""); sys.exit(0 if candidates else 2)' "$mappings_meta")"
 
           test -n "$mapping_url"
           curl --fail --silent --show-error --location --retry 3 \
@@ -197,14 +169,7 @@ PY
           test "$mapping_size" -ge 32
           test "$mapping_size" -le 33554432
 
-          python3 - "$target/mappings/current.usmap" <<'PY'
-from pathlib import Path
-import sys
-
-head = Path(sys.argv[1]).read_bytes()[:4]
-if head == bytes.fromhex("28b52ffd"):
-    raise SystemExit("Outer Zstandard-compressed mappings are not browser-compatible")
-PY
+          python3 -c 'from pathlib import Path; import sys; head=Path(sys.argv[1]).read_bytes()[:4]; sys.exit("Outer Zstandard-compressed mappings are not browser-compatible" if head == bytes.fromhex("28b52ffd") else 0)' "$target/mappings/current.usmap"
 
           sha256sum "$target/mappings/current.usmap" \
             > "$target/mappings/current.usmap.sha256"
