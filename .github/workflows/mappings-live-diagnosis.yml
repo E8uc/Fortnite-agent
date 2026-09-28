@@ -1,0 +1,38 @@
+name: Live mappings relay diagnosis
+on:
+  push:
+    branches: ["diagnostic/mappings-relay"]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Check actual production mappings transport
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          const origin='https://e8uc.github.io';
+          const endpoint='https://api.fortniteapi.com/v1/mappings';
+          const response=await fetch(endpoint,{headers:{Origin:origin},signal:AbortSignal.timeout(20000)});
+          const body=await response.text();
+          console.log('METADATA',response.status,response.headers.get('access-control-allow-origin'),body.slice(0,1400));
+          const urls=[];
+          function walk(v,d=0){if(d>8||urls.length>16)return;if(typeof v==='string'&&v.startsWith('https:')&&v.includes('usmap'))urls.push(v);else if(v&&typeof v==='object')for(const x of Object.values(v))walk(x,d+1);}
+          walk(JSON.parse(body));
+          for(const target of [...new Set(urls)].slice(0,3)){
+            for(const relay of [false,true]){
+              const u=relay?new URL('https://fortnite-ai-agent-api.a39328122.workers.dev/nova-edge/range'):new URL(target);
+              if(relay){u.searchParams.set('url',target);u.searchParams.set('start','0');u.searchParams.set('end','255');}
+              try{
+                const r=await fetch(u,{headers:{Origin:origin,...(!relay?{Range:'bytes=0-255'}:{})},signal:AbortSignal.timeout(20000)});
+                const reader=r.body.getReader();const first=await reader.read();await reader.cancel();
+                console.log('MAPPINGS',JSON.stringify({target,relay,status:r.status,cors:r.headers.get('access-control-allow-origin'),range:r.headers.get('content-range'),bytes:first.value?.length,body:r.ok?null:new TextDecoder().decode(first.value).slice(0,1200)}));
+              }catch(e){console.log('MAPPINGS_ERROR',relay,target,e.message);}
+            }
+          }
+          JS
