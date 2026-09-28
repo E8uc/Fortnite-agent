@@ -311,17 +311,50 @@ const server =
             `<!doctype html>
 <meta charset="utf-8">
 <title>FNAA Layer 8 integration proof</title>
+<div id="toolsOverlay" hidden aria-hidden="true">
+  <button id="toolsBackBtn" type="button">Back</button>
+  <div id="toolsTabs"></div>
+  <div id="toolsContent"></div>
+</div>
+<div id="guestLoginBanner" hidden></div>
+<button id="guestLoginBtn" type="button" hidden>Login</button>
 <script>
   window.FNAA_CONFIG = {
     apiEndpoint: location.origin
   };
 
-  window.FortniteTools = {
-    findKnownImage: async () => null
+  const textureCapabilities = {
+    kind: "texture",
+    eligibleView3D: false,
+    eligibleViewImage: true,
+    canPreview: true,
+    canView3D: false,
+    canViewImage: true,
+    previewMode: "image",
+    canListen: false,
+    canDownload: true,
+    canExportUEFN: false,
+    downloadFormats: ["json"],
+    tags: ["TEXTURE"]
   };
 
   window.NovaSparxAssociations = {
+    diagnosePath: () => ({
+      family: "texture",
+      kind: "texture",
+      source: "typed-path",
+      confidence: 100
+    }),
     family: () => "texture",
+    capabilityProfile: () => ({ ...textureCapabilities }),
+    classify: async () => ({
+      family: "texture",
+      kind: "texture",
+      source: "typed-path",
+      confidence: 100,
+      capabilities: { ...textureCapabilities },
+      tags: ["TEXTURE"]
+    }),
     allowDirectImage: () => false,
     allowTextureDecode: () => true
   };
@@ -333,9 +366,12 @@ const server =
       recoveryMode: false
     })
   };
+
+  window.requestIdleCallback = () => 0;
 </script>
 <script src="/novasparx-texture-runtime.js"></script>
-<script src="/preview.js"></script>`;
+<script src="/preview.js"></script>
+<script src="/tools.js"></script>`;
 
           res.writeHead(
             200,
@@ -774,6 +810,134 @@ try {
     })
   );
 
+  const cardCountersBefore = {
+    relayRequests,
+    relayBytes,
+    exactImageRequests,
+    legacyTextureRequests
+  };
+
+  const cardStart = await page.evaluate(async target => {
+    window.FortniteAgent = {
+      searchDatabase: async () => ({
+        results: [
+          {
+            path: target,
+            source: "layer8-proof",
+            match: "exact"
+          }
+        ],
+        total: 1,
+        source: "layer8-proof"
+      }),
+      isSignedIn: () => true,
+      beginGuestToolSlowmode: () => {}
+    };
+
+    window.FortniteTools.open("assets");
+
+    const input = document.querySelector("#assetQuery");
+    const search = document.querySelector("#assetSearch");
+
+    if (!input || !search) {
+      throw new Error("FNAA asset search UI did not render.");
+    }
+
+    input.value = "layer8-proof";
+    search.click();
+
+    const deadline = Date.now() + 5000;
+
+    while (Date.now() < deadline) {
+      const card = document.querySelector(".asset-result-card");
+      const button = card?.querySelector('[data-asset-action="preview"]');
+
+      if (
+        card?.dataset.assetClassified === "1" &&
+        button &&
+        !button.disabled
+      ) {
+        const initialLabel = button.textContent || "";
+        button.click();
+
+        return {
+          initialLabel,
+          assetKind: card.dataset.assetKind || "",
+          path: card.dataset.assetPath || ""
+        };
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+
+    throw new Error("Texture View Image card never became actionable.");
+  }, TARGET);
+
+  await page.waitForFunction(() => {
+    const card = document.querySelector(".asset-result-card");
+    const image = card?.querySelector(".mesh-preview-image");
+
+    return Boolean(
+      image &&
+      !image.hidden &&
+      (image.currentSrc || image.src || "").startsWith("blob:") &&
+      image.naturalWidth > 0 &&
+      image.naturalHeight > 0
+    );
+  });
+
+  const cardUi = await page.evaluate(() => {
+    const card = document.querySelector(".asset-result-card");
+    const button = card?.querySelector('[data-asset-action="preview"]');
+    const image = card?.querySelector(".mesh-preview-image");
+    const meta = card?.querySelector(".mesh-image-meta");
+    const status = card?.querySelector(".mesh-image-status");
+    const panel = card?.querySelector("[data-asset-panel]");
+
+    return {
+      buttonLabel: button?.textContent || "",
+      panelHidden: panel?.hidden ?? true,
+      imageHidden: image?.hidden ?? true,
+      imageSrc: image?.currentSrc || image?.src || "",
+      naturalWidth: image?.naturalWidth || 0,
+      naturalHeight: image?.naturalHeight || 0,
+      meta: meta?.textContent || "",
+      status: status?.textContent || ""
+    };
+  });
+
+  const cardNetwork = {
+    relayRequests: relayRequests - cardCountersBefore.relayRequests,
+    relayBytes: relayBytes - cardCountersBefore.relayBytes,
+    exactImageRequests: exactImageRequests - cardCountersBefore.exactImageRequests,
+    legacyTextureRequests: legacyTextureRequests - cardCountersBefore.legacyTextureRequests
+  };
+
+  assert.equal(cardStart.initialLabel, "View Image");
+  assert.equal(cardStart.assetKind, "texture");
+  assert.equal(cardStart.path, TARGET);
+  assert.equal(cardUi.panelHidden, false);
+  assert.equal(cardUi.imageHidden, false);
+  assert.ok(cardUi.imageSrc.startsWith("blob:"));
+  assert.ok(cardUi.naturalWidth > 0 && cardUi.naturalHeight > 0);
+  assert.match(cardUi.meta, /browser CUE4Parse/i);
+  assert.ok(cardNetwork.exactImageRequests > 0);
+  assert.equal(cardNetwork.legacyTextureRequests, 0);
+  assert.ok(cardNetwork.relayRequests > 0 && cardNetwork.relayBytes > 0);
+
+  console.log(
+    "FNAA_TEXTURE_CARD_LAYER8_PROVEN",
+    JSON.stringify({
+      cardStart,
+      cardUi: {
+        buttonLabel: cardUi.buttonLabel,
+        size: cardUi.naturalWidth + "x" + cardUi.naturalHeight,
+        meta: cardUi.meta
+      },
+      network: cardNetwork
+    })
+  );
+
   const failedPreview = await page.evaluate(async target => {
     const original = globalThis.NovaSparxTextureRuntime;
     globalThis.NovaSparxTextureRuntime = {
@@ -795,6 +959,9 @@ try {
   const proof = {
     result,
     ui,
+    cardStart,
+    cardUi,
+    cardNetwork,
     exactImageRequests,
     legacyTextureRequests,
     relay: {

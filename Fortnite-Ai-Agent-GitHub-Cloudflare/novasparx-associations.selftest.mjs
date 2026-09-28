@@ -364,7 +364,11 @@ assert.equal((await associations.classify("/Game/BP_Test.uasset", {
 })).source, "export-json", "Package requests match their generated root export");
 for (const kind of ["staticmesh", "skeletalmesh", "blueprint", "texture", "audio", "animation", "vfx", "data", "other"]) {
   const caps = associations.capabilityProfile(kind, { Properties: { Mesh: "StaticMesh'/Game/SM_X.SM_X'" } });
-  assert.equal(caps.canPreview, false, kind);
+  const isTexture = kind === "texture";
+  assert.equal(caps.eligibleViewImage, isTexture, `eligibleViewImage: ${kind}`);
+  assert.equal(caps.canViewImage, isTexture, `canViewImage: ${kind}`);
+  assert.equal(caps.canPreview, isTexture, `canPreview: ${kind}`);
+  assert.equal(caps.previewMode, isTexture ? "image" : "none", `previewMode: ${kind}`);
   assert.equal(caps.canExportUEFN, false, kind);
   assert.equal(caps.canListen, false, kind);
   assert.deepEqual(caps.downloadFormats, ["json"]);

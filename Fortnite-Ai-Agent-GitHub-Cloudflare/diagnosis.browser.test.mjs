@@ -46,6 +46,7 @@ try {
   const cases = [
     ...fixtures.map(x => ({path:x.physicalPath, expected:x.rootTypes[0]})),
     {path:"StaticMesh'/Game/Audio/SW_NotActuallySound.SW_NotActuallySound'",expected:'StaticMesh'},
+    {path:"Texture2D'/Game/Test/T_Layer8_Probe.T_Layer8_Probe'",expected:'Texture2D'},
     {path:'/CRD_AnimatedMesh/Device_AnimatedMesh.Device_AnimatedMesh_C',expected:'Blueprint'},
     {path:'/Game/S_Ambiguous.S_Ambiguous',expected:'Unknown'}
   ];
@@ -60,19 +61,90 @@ try {
   await page.locator('#assetSearch').click();
   await page.waitForFunction(n => document.querySelectorAll('.asset-result-card[data-asset-classified="1"]').length === n, cases.length);
   const results = await page.locator('.asset-result-card').evaluateAll(cards => cards.map(card => ({
-    path:card.dataset.assetPath,kind:card.dataset.assetKind,
+    path:card.dataset.assetPath,
+    kind:card.dataset.assetKind,
     tags:[...card.querySelectorAll('[data-asset-tags] span')].map(x=>x.textContent),
+    previewText:card.querySelector('[data-asset-action="preview"]').textContent,
     previewDisabled:card.querySelector('[data-asset-action="preview"]').disabled,
     exportDisabled:card.querySelector('[data-asset-action="uefn"]').disabled
   })));
+
+  let textureIndex = -1;
+
   for (let i=0;i<cases.length;i++) {
     const expected = await page.evaluate(type => window.FNAAAssetDiagnosis.kindFromType(type), cases[i].expected);
     assert.equal(results[i].kind, expected, cases[i].path);
-    assert.ok(results[i].previewDisabled, cases[i].path);
+
+    if (expected === 'texture') {
+      textureIndex = i;
+      assert.equal(results[i].previewDisabled, false, cases[i].path);
+      assert.equal(results[i].previewText, 'View Image', cases[i].path);
+    } else {
+      assert.ok(results[i].previewDisabled, cases[i].path);
+    }
+
     assert.ok(results[i].exportDisabled, cases[i].path);
     assert.ok(!results[i].tags.some(x=>['VISUAL','IMAGE','LOGIC'].includes(x)));
     if (expected === 'other') assert.deepEqual(results[i].tags,['ASSET']);
   }
+
+  assert.ok(textureIndex >= 0, 'Diagnosis fixtures contain no Texture case for View Image regression.');
+
+  const clickProof = await page.evaluate(async textureIndex => {
+    const cards = [...document.querySelectorAll('.asset-result-card')];
+    const card = cards[textureIndex];
+    const button = card?.querySelector('[data-asset-action="preview"]');
+
+    if (!card || !button || button.disabled) {
+      throw new Error('Texture View Image button is not actionable.');
+    }
+
+    let call = null;
+
+    window.FortnitePreview = {
+      toggle: async (host, path, _button, options) => {
+        call = {
+          path,
+          assetKind:options?.assetKind || ''
+        };
+
+        host.innerHTML = '<img data-proof-image alt="proof" />';
+
+        return {
+          state:'ready',
+          kind:'texture'
+        };
+      },
+      release: () => {}
+    };
+
+    button.click();
+
+    const deadline = Date.now() + 3000;
+
+    while (!call && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+
+    if (!call) {
+      throw new Error('Texture View Image click never reached FortnitePreview.toggle().');
+    }
+
+    return {
+      call,
+      panelVisible:card.querySelector('[data-asset-panel]')?.hidden === false,
+      label:button.textContent
+    };
+  }, textureIndex);
+
+  assert.equal(clickProof.call.assetKind, 'texture');
+  assert.ok(clickProof.call.path);
+  assert.equal(clickProof.panelVisible, true);
+
+  console.log(
+    'FNAA_TEXTURE_VIEW_IMAGE_CLICK_PROVEN',
+    JSON.stringify(clickProof)
+  );
   const generated = await page.evaluate(() => ({
     kind:window.FNAAAssetDiagnosis.diagnosePath('/CRD_AnimatedMesh/Device_AnimatedMesh.Device_AnimatedMesh_C').kind,
     compatible:window.FortniteTools.isClassCompatibleAsset("StaticMesh'/Game/BP_Test.BP_Test'")
