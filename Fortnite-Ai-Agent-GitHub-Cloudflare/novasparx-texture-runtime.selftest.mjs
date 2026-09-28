@@ -14,7 +14,7 @@ source = source.replace('  function clearCaches() {', `
   globalThis.testNormalize = normalizeInput;
   function clearCaches() {`);
 const context = {
-  URL, AbortController, ArrayBuffer, Uint8Array, Blob, setTimeout, clearTimeout,
+  URL, AbortController, ArrayBuffer, Uint8Array, Float32Array, Uint32Array, Blob, setTimeout, clearTimeout,
   WebAssembly, document: { baseURI: 'https://example.test/' },
   FNAA_CONFIG: { apiEndpoint: 'https://example.test' },
   testLocate(path, { signal }) {
@@ -58,3 +58,11 @@ workers[2].send({ type: 'done', exitCode: 0 });
 assert.equal((await e).source, 'browser-wasm');
 assert.equal(workers[2].terminated, true);
 console.log('Texture runtime: metadata race, caller abort, reset, path identity and cleanup passed.');
+
+// A Mesh request cannot accept a Texture frame, and must release its Worker.
+context.NovaSparxRenderer = {render:async()=>({blob:new Blob(['mesh']),triangleCount:1})};
+const meshRequest=runtime.resolveMeshImage('mesh.uasset');
+const meshRejected=assert.rejects(meshRequest,/unrelated pixels/);
+pending.get('mesh.uasset').resolve();await tick();
+workers.at(-1).send({type:'pixels',path:'mesh.uasset',width:1,height:1,pixels:new ArrayBuffer(4)});
+await meshRejected;assert.equal(workers.at(-1).terminated,true);

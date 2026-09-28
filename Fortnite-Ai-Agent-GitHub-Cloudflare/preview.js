@@ -3322,6 +3322,25 @@
       throwIfAborted(
         signal
       );
+      if (requestedKind === "staticmesh") {
+        setStatus(ui.status, "Reading and rendering this Mesh in your browser…");
+        try {
+          const result = await window.NovaSparxTextureRuntime.resolveMeshImage(clean, {signal});
+          throwIfAborted(signal);
+          const url = URL.createObjectURL(result.blob);
+          let loaded = false;
+          try { loaded = await loadImage(ui.image, url, 20000, signal); throwIfAborted(signal); }
+          finally { if (!loaded || signal?.aborted) URL.revokeObjectURL(url); }
+          if (!loaded) throw new Error("Mesh image could not be displayed");
+          rememberObjectUrl(clean, url);
+          ui.image.hidden = false; ui.status.hidden = true;
+          setMeta(ui.meta, `Browser CUE4Parse Mesh • ${result.triangleCount} triangles • ${result.missingMaterials.length ? "Materials partially unsupported; geometry shown" : "Base color preview"}`, "high");
+          return {state:"ready",kind:"staticmesh",materialFidelity:result.materialFidelity};
+        } catch (error) {
+          const failure = new Error(error?.message || String(error), {cause:error});
+          failure.code = "NOVASPARX_MESH_FAILED"; throw failure;
+        }
+      }
       let pathFamily =
         window.NovaSparxAssociations
           ?.family?.(
@@ -4400,7 +4419,7 @@
         };
       }
 
-      if (error?.code === "NOVASPARX_TEXTURE_FAILED") {
+      if (["NOVASPARX_TEXTURE_FAILED", "NOVASPARX_MESH_FAILED"].includes(error?.code)) {
         ui.image.hidden = true;
         ui.image.removeAttribute("src");
         setStatus(ui.status, "View Image unavailable: " + error.message);

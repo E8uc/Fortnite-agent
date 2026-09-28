@@ -371,16 +371,16 @@
         float ao = 1.0;
 
         if (uHasPacked == 1) {
-          vec4 packed = texture2D(uPackedMap, vUV);
+          vec4 packedSample = texture2D(uPackedMap, vUV);
 
           if (uRoughnessChannel >= 0) {
-            roughness = channelValue(packed, uRoughnessChannel);
+            roughness = channelValue(packedSample, uRoughnessChannel);
           }
           if (uMetallicChannel >= 0) {
-            metallic = channelValue(packed, uMetallicChannel);
+            metallic = channelValue(packedSample, uMetallicChannel);
           }
           if (uAOChannel >= 0) {
-            ao = channelValue(packed, uAOChannel);
+            ao = channelValue(packedSample, uAOChannel);
           }
         }
 

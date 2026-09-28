@@ -1342,7 +1342,8 @@
   function workerUrl(
     location,
     manifest,
-    maxSize
+    maxSize,
+    mode = "texture"
   ) {
     const url =
       new URL(
@@ -1352,7 +1353,7 @@
 
     url.searchParams.set(
       "test",
-      "resolve-texture-relay"
+      mode === "mesh" ? "resolve-mesh-relay" : "resolve-texture-relay"
     );
 
     url.searchParams.set(
@@ -1610,7 +1611,8 @@
         workerUrl(
           location,
           manifest,
-          maxSize
+          maxSize,
+          options.mode
         ),
         {
           type:
@@ -1756,6 +1758,24 @@
               return;
             }
 
+            if (message.type === "mesh" && options.mode === "mesh") {
+              const count = message.positions?.byteLength / 12;
+              if (pixelsResult || normalizeInput(message.path).toLowerCase() !== location.key.toLowerCase() ||
+                  !(message.positions instanceof ArrayBuffer) || !(message.indices instanceof ArrayBuffer) ||
+                  !(message.uv0 instanceof ArrayBuffer) || !Number.isInteger(count) || count < 3 || count > 250000 ||
+                  message.indices.byteLength < 12 || message.indices.byteLength > 6000000 || message.indices.byteLength % 12 ||
+                  message.uv0.byteLength !== count * 8 || !Array.isArray(message.sections) || message.sections.length > 64 ||
+                  !Array.isArray(message.materialMetadata) || message.materialMetadata.length > 24) {
+                finish(new Error("Invalid or mismatched Mesh output")); return;
+              }
+              const positions = new Float32Array(message.positions), indices = new Uint32Array(message.indices), uv0 = new Float32Array(message.uv0);
+              if (positions.some(v => !Number.isFinite(v)) || uv0.some(v => !Number.isFinite(v)) || indices.some(v => v >= count) ||
+                  message.sections.some(s => !Number.isInteger(s.firstIndex) || !Number.isInteger(s.numTriangles) || s.firstIndex < 0 || s.numTriangles < 0 || s.firstIndex+s.numTriangles*3>indices.length)) {
+                finish(new Error("Mesh geometry bounds are invalid")); return;
+              }
+              pixelsResult = message; return;
+            }
+            if (message.type === "pixels" && options.mode === "mesh") { finish(new Error("Mesh request returned unrelated pixels")); return; }
             if (
               message.type ===
               "pixels"
@@ -1957,6 +1977,75 @@
     }
   }
 
+  async function locatePackage(id, options) {
+    const key = String(id || '').toLowerCase();
+    if (!/^[a-f0-9]{16}$/.test(key)) throw new Error('Invalid material Texture package ID');
+    const base = new URL('package-id-index/', RUNTIME_BASE);
+    const [meta, paths] = await Promise.all([
+      fetchJson(new URL('manifest.json', base), 128*1024, 'Package ID manifest', options), getLocationManifest(options)
+    ]);
+    if (meta.schema !== 'novasparx.package-locations.v1' || meta.hash !== 'package-id-low-byte' ||
+        meta.valueProperty !== 'path-tab-toc' || meta.fortniteVersion !== paths.fortniteVersion)
+      throw new Error('Material index build or schema mismatch');
+    const compressed = await fetchBytes(new URL(key.slice(-2)+'.json.gz', base), MAX_SHARD_GZIP_BYTES, 'Package ID shard', options);
+    const expanded = await readBounded(new Response(new Response(compressed).body.pipeThrough(new DecompressionStream('gzip'))), MAX_SHARD_JSON_BYTES, 'Expanded package ID shard', options.signal);
+    const data = JSON.parse(new TextDecoder().decode(expanded));
+    if (data.schema !== meta.schema || data.valueProperty !== meta.valueProperty) throw new Error('Invalid package ID shard');
+    const value = data.items?.[key];
+    if (typeof value !== 'string') throw new Error('Material Texture is absent from package index');
+    const [path, toc, extra] = value.split('\t');
+    if (extra || !path?.endsWith('.uasset') || !toc?.endsWith('.utoc') || path.includes('..') || toc.includes('..')) throw new Error('Invalid material Texture location');
+    return {key:path, toc};
+  }
+
+  function baseColorParameter(material) {
+    // Never map LUTs, normals, masks, decorator/UDIM layers or an arbitrary first texture onto base color.
+    const candidates = (material?.textureParameters || []).filter(p => /^(base[ _]?colou?r|diffuse|albedo)([ _]?texture)?$/i.test(String(p.name || '')));
+    return candidates.length === 1 ? candidates[0] : null;
+  }
+
+  async function resolveMeshImage(path, options = {}) {
+    throwIfAborted(options.signal);
+    activeRequest?.abort('replaced-by-new-mesh');
+    const controller = new AbortController();
+    activeRequest = controller;
+    const onAbort = () => controller.abort(options.signal?.reason);
+    options.signal?.addEventListener('abort', onAbort, {once:true});
+    const request = {...options, signal:controller.signal};
+    const urls = [];
+    try {
+      const [location, manifest] = await Promise.all([locate(path, request), currentManifestUrl(request)]);
+      throwIfAborted(request.signal);
+      const mesh = await runWorker(location, manifest, {...request, mode:'mesh'});
+      const materials = [], missingMaterials = [];
+      for (let i=0;i<mesh.materialMetadata.length;i++) {
+        throwIfAborted(request.signal);
+        const material = mesh.materialMetadata[i], parameter = baseColorParameter(material);
+        if (!parameter?.packageId) { materials.push({}); missingMaterials.push(i); continue; }
+        const textureLocation = await locatePackage(parameter.packageId, request);
+        const texture = await runWorker(textureLocation, manifest, {...request, mode:'texture',maxSize:512});
+        const blob = await canvasBlob(texture.width, texture.height, texture.pixels);
+        throwIfAborted(request.signal);
+        const url = URL.createObjectURL(blob); urls.push(url);
+        materials.push({baseColorTexture:url});
+      }
+      throwIfAborted(request.signal);
+      if (!globalThis.NovaSparxRenderer?.render) throw new Error('Mesh image renderer is unavailable');
+      const rendered = await globalThis.NovaSparxRenderer.render({
+        geometry:{positions:new Float32Array(mesh.positions),indices:new Uint32Array(mesh.indices),uv0:new Float32Array(mesh.uv0)},
+        sections:mesh.sections.map(s=>({...s,indexCount:s.numTriangles*3})), materials,
+        metadata:{materialFidelity:missingMaterials.length ? 'geometry-only-or-partial' : 'base-color-preview'}
+      },{signal:request.signal,size:512});
+      throwIfAborted(request.signal);
+      return {...rendered,path:mesh.path,source:'browser-wasm',missingMaterials};
+    } finally {
+      for (const url of urls) URL.revokeObjectURL(url);
+      controller.abort('mesh-request-finished');
+      options.signal?.removeEventListener('abort', onAbort);
+      if (activeRequest === controller) activeRequest = null;
+    }
+  }
+
   function clearCaches() {
     activeRequest?.abort("texture-cache-reset");
     locationManifest =
@@ -2011,6 +2100,7 @@
       version:
         VERSION,
       resolveTexture,
+      resolveMeshImage,
       locate,
       status,
       clearCaches

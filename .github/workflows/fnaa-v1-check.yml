@@ -116,7 +116,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: E8uc/NovaSparx
-          ref: 273178b851e535f7fa9b9434d0df1a9bd8789352
+          ref: 5719077ef13a6be4f59278d1b136ea7920013117
           path: .novasparx-src
           fetch-depth: 1
 
@@ -146,11 +146,12 @@ jobs:
           target="Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-runtime"
 
           rm -rf "$target"
-          mkdir -p "$target/location-index"
+          mkdir -p "$target/location-index" "$target/package-id-index"
 
           cp -a "$bundle"/. "$target"/
           cp .novasparx-src/tools/CUE4Parse.BrowserProbe/worker.js "$target/worker.js"
           cp -a .novasparx-src/web/location-index/. "$target/location-index/"
+          cp -a .novasparx-src/web/package-id-index/. "$target/package-id-index/"
 
           test -s "$target/worker.js"
           test -s "$target/_framework/dotnet.js"
@@ -183,7 +184,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fnaa-layer8-browser-proof
-          path: fnaa-layer8-browser-proof.json
+          path: |
+            fnaa-layer8-browser-proof.json
+            fnaa-mesh-proof.json
+            fnaa-real-mesh.png
           if-no-files-found: ignore
 
       - name: Verify local page assets

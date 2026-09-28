@@ -938,6 +938,40 @@ try {
     })
   );
 
+  await page.addScriptTag({url:'/novasparx-renderer.js'});
+  await page.addScriptTag({url:'/asset-diagnosis.js'});
+  await page.addScriptTag({url:'/novasparx-associations.js'});
+  const meshPath = "StaticMesh'FortniteGame/Plugins/GameFeatures/Juno/FigureCosmetics/Content/Props/Emote/CallWaiting/Mesh/SM_CallWaiting.uasset'";
+  await page.evaluate(meshPath => {
+    window.FortniteAgent.searchDatabase = async () => ({results:[{path:meshPath,source:'live-mesh-proof',match:'exact'}],total:1});
+    window.FortniteTools.open('assets');
+    document.querySelector('#assetQuery').value='CallWaiting';
+    document.querySelector('#assetSearch').click();
+  },meshPath);
+  const meshButton=page.locator('.asset-result-card [data-asset-action="preview"]');
+  await page.waitForFunction(()=>{
+    const c=document.querySelector('.asset-result-card');
+    return c?.dataset.assetKind==='staticmesh' && !c.querySelector('[data-asset-action="preview"]').disabled;
+  });
+  assert.equal(await meshButton.textContent(),'View Image');
+  await meshButton.click();
+  await page.waitForFunction(()=>{
+    const image=document.querySelector('.asset-result-card .mesh-preview-image');
+    return image && !image.hidden && image.complete && image.naturalWidth>0;
+  },null,{timeout:240000});
+  const meshUi=await page.evaluate(()=>{
+    const card=document.querySelector('.asset-result-card'),image=card.querySelector('.mesh-preview-image');
+    return {width:image.naturalWidth,height:image.naturalHeight,src:image.src,meta:card.querySelector('.mesh-image-meta')?.textContent};
+  });
+  assert.ok(meshUi.src.startsWith('blob:'));
+  assert.equal(meshUi.width,512);assert.equal(meshUi.height,512);
+  assert.match(meshUi.meta,/44 triangles/);
+  assert.match(meshUi.meta,/unsupported/,'Unsupported LEGO decorators must not be treated as base color');
+  assert.equal(legacyTextureRequests,0);
+  await page.locator('.asset-result-card .mesh-preview-image').screenshot({path:'fnaa-real-mesh.png'});
+  fs.writeFileSync('fnaa-mesh-proof.json',JSON.stringify({path:meshPath,...meshUi},null,2));
+  console.log('FNAA_REAL_MESH_BUTTON_IMAGE_PROVEN',JSON.stringify(meshUi));
+
   const failedPreview = await page.evaluate(async target => {
     const original = globalThis.NovaSparxTextureRuntime;
     globalThis.NovaSparxTextureRuntime = {

@@ -1050,7 +1050,12 @@
       );
 
     if (previewButton) {
-      if (
+      if (kind === "staticmesh" && typeof window.NovaSparxTextureRuntime?.resolveMeshImage === "function" &&
+          ["typed-path", "export-json", "inspection"].includes(classification.source)) {
+        previewButton.disabled = false;
+        previewButton.dataset.closedLabel = t("viewImage", "View Image");
+        previewButton.dataset.openLabel = t("hideImage", "Hide Image");
+      } else if (
         capabilities.canView3D &&
         browserMeshParserReady()
       ) {

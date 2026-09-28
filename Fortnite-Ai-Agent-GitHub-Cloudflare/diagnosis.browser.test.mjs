@@ -75,8 +75,8 @@ try {
     const expected = await page.evaluate(type => window.FNAAAssetDiagnosis.kindFromType(type), cases[i].expected);
     assert.equal(results[i].kind, expected, cases[i].path);
 
-    if (expected === 'texture') {
-      textureIndex = i;
+    if (expected === 'texture' || expected === 'staticmesh') {
+      if (expected === 'texture') textureIndex = i;
       assert.equal(results[i].previewDisabled, false, cases[i].path);
       assert.equal(results[i].previewText, 'View Image', cases[i].path);
     } else {
