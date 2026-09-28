@@ -1049,90 +1049,32 @@
         '[data-asset-action="preview"]'
       );
 
+    const isMesh = ["staticmesh", "skeletalmesh"].includes(kind);
+    const modelButton = card.querySelector('[data-asset-action="model"]');
+    if (modelButton) {
+      modelButton.hidden = !isMesh;
+      modelButton.disabled = true;
+      modelButton.dataset.closedLabel = t("view3dModel", "View 3D Model");
+      modelButton.textContent = modelButton.dataset.closedLabel;
+      modelButton.title = "Interactive browser Mesh rendering is not available yet.";
+    }
+
     if (previewButton) {
-      if (
-        capabilities.canView3D &&
-        browserMeshParserReady()
-      ) {
-        previewButton.disabled =
-          false;
-
-        previewButton.dataset
-          .closedLabel =
-          t(
-            "view3dModel",
-            "View 3D Model"
-          );
-
-        previewButton.dataset
-          .openLabel =
-          t(
-            "hide3dModel",
-            "Hide 3D Model"
-          );
-      } else if (
-        capabilities.canViewImage
-      ) {
-        previewButton.disabled =
-          false;
-
-        previewButton.dataset
-          .closedLabel =
-          t(
-            "viewImage",
-            "View Image"
-          );
-
-        previewButton.dataset
-          .openLabel =
-          t(
-            "hideImage",
-            "Hide Image"
-          );
-      } else if (
-        capabilities.canPreview === true &&
-        !capabilities.canView3D
-      ) {
-        previewButton.disabled =
-          false;
-
-        previewButton.dataset
-          .closedLabel =
-          t(
-            "viewPreview",
-            "View Preview"
-          );
-
-        previewButton.dataset
-          .openLabel =
-          t(
-            "hidePreview",
-            "Hide Preview"
-          );
-      } else {
-        previewButton.disabled =
-          true;
-
-        previewButton.dataset
-          .closedLabel =
-          t(
-            "noVisualPreview",
-            "No Visual Preview"
-          );
-
-        previewButton.dataset
-          .openLabel =
-          previewButton.dataset
-            .closedLabel;
-      }
-
-      if (
-        previewButton.dataset
-          .fnaaOpen !== "1"
-      ) {
-        previewButton.textContent =
-          previewButton.dataset
-            .closedLabel;
+      const runtime = window.NovaSparxTextureRuntime;
+      const state = runtime?.status?.() || {};
+      const verifiedTexture = kind === "texture" &&
+        ["typed-path", "export-json", "inspection"].includes(classification.source);
+      const nativeImage = verifiedTexture && typeof runtime?.resolveTexture === "function" &&
+        state.worker === true && state.webAssembly === true && state.gzip === true;
+      previewButton.disabled = !(capabilities.canViewImage === true || nativeImage);
+      previewButton.dataset.closedLabel = t("viewImage", "View Image");
+      previewButton.dataset.openLabel = t("hideImage", "Hide Image");
+      previewButton.title = previewButton.disabled
+        ? isMesh ? "Mesh image preview is not available yet: geometry and materials must be resolved first."
+          : "No verified image route is available for this asset."
+        : "Decode this Texture in your browser.";
+      if (previewButton.dataset.fnaaOpen !== "1") {
+        previewButton.textContent = previewButton.dataset.closedLabel;
       }
     }
 
@@ -1948,6 +1890,13 @@
           <button
             class="json-view-button"
             type="button"
+            data-asset-action="model"
+            hidden disabled
+          >${escapeHtml(t("view3dModel", "View 3D Model"))}</button>
+
+          <button
+            class="json-view-button"
+            type="button"
             data-asset-action="uefn"
             disabled
           >${escapeHtml(t("exportUEFN", "Export to UEFN"))}</button>
@@ -1999,7 +1948,7 @@
             "[data-asset-action]"
           );
 
-        if (!button) return;
+        if (!button || button.disabled) return;
 
         const card =
           button.closest(

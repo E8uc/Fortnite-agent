@@ -74,6 +74,9 @@ jobs:
       - name: Test Texture cancellation and output identity
         run: node Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-texture-runtime.selftest.mjs
 
+      - name: Test independent image and model controls
+        run: node Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-image-button.selftest.mjs
+
       - name: Verify required site files
         shell: bash
         run: |
@@ -183,7 +186,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fnaa-layer8-browser-proof
-          path: fnaa-layer8-browser-proof.json
+          path: |
+            fnaa-layer8-browser-proof.json
+            fnaa-view-image-action.png
           if-no-files-found: ignore
 
       - name: Verify local page assets

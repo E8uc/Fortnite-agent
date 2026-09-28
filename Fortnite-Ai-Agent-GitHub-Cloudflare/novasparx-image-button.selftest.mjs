@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const source = fs.readFileSync(new URL('./tools.js', import.meta.url), 'utf8');
+const start = source.indexOf('  function applyAssetClassification(');
+const end = source.indexOf('  function hydrateAssetCards(', start);
+const preview = { dataset: {}, disabled: true }, model = { dataset: {}, disabled: true };
+const card = { dataset: {}, querySelector: selector => selector.includes('"preview"') ? preview : selector.includes('"model"') ? model : null };
+const context = { window: { NovaSparxTextureRuntime: { resolveTexture() {}, status: () => ({ worker: true, webAssembly: true, gzip: true }) } },
+  evidenceRank: () => 0, setAssetTags() {}, browserMeshParserReady: () => false, t: (_, text) => text };
+vm.createContext(context); vm.runInContext(source.slice(start, end), context);
+context.applyAssetClassification(card, { kind: 'texture', source: 'typed-path', capabilities: { canViewImage: false } });
+assert.equal(preview.disabled, false, 'Verified Texture must have an actionable View Image route when the browser runtime exists');
+assert.equal(preview.dataset.closedLabel, 'View Image');
+assert.equal(model.disabled, true, 'Texture support must not enable 3D');
+context.applyAssetClassification(card, { kind: 'staticmesh', source: 'typed-path', capabilities: {} });
+assert.equal(preview.disabled, true, 'Unimplemented Mesh rendering must not be advertised');
+assert.equal(preview.dataset.closedLabel, 'View Image');
+assert.equal(model.hidden, false, 'Mesh must keep its separate 3D control');
+assert.equal(model.disabled, true);
+console.log('Independent image/model controls and Texture runtime eligibility passed.');

@@ -792,7 +792,47 @@ try {
   assert.match(failedPreview.status, /forced native decode failure/);
   assert.equal(legacyTextureRequests, 0, "Native failure must not invoke hosted Texture decoding");
 
+  // Exercise the actual search-card action, not a direct render() call.
+  await page.evaluate(target => {
+    document.body.insertAdjacentHTML("beforeend", '<section id="toolsOverlay"><button id="toolsBackBtn">Back</button><div id="toolsTabs"></div><div id="toolsContent"></div></section>');
+    globalThis.FortniteAgent = {
+      isSignedIn: () => true,
+      searchDatabase: async () => ({ results: [
+        { path: "Texture2D'" + target + "'" },
+        { path: "StaticMesh'FortniteGame/Plugins/GameFeatures/Juno/FigureCosmetics/Content/Props/Emote/CallWaiting/Mesh/SM_CallWaiting.uasset'" }
+      ] })
+    };
+  }, TARGET);
+  await page.addScriptTag({ url: '/asset-diagnosis.js' });
+  await page.addScriptTag({ url: '/novasparx-associations.js' });
+  await page.addScriptTag({ url: '/tools.js' });
+  await page.evaluate(() => globalThis.FortniteTools.open('assets'));
+  await page.locator('#assetQuery').fill('FaithPerch');
+  await page.locator('#assetSearch').click();
+  const textureCard = page.locator('.asset-result-card[data-asset-kind="texture"]');
+  const meshCard = page.locator('.asset-result-card[data-asset-kind="staticmesh"]');
+  await page.waitForFunction(() => {
+    const button = document.querySelector('.asset-result-card[data-asset-kind="texture"] [data-asset-action="preview"]');
+    return button && !button.disabled;
+  });
+  assert.equal(await textureCard.locator('[data-asset-action="preview"]').innerText(), 'View Image');
+  assert.equal(await meshCard.locator('[data-asset-action="model"]').isDisabled(), true);
+  assert.equal(await meshCard.locator('[data-asset-action="model"]').isVisible(), true);
+  assert.equal(await meshCard.locator('[data-asset-action="preview"]').innerText(), 'View Image');
+  await textureCard.locator('[data-asset-action="preview"]').click();
+  await page.waitForFunction(() => {
+    const image = document.querySelector('.asset-result-card[data-asset-kind="texture"] .mesh-preview-image');
+    return image && !image.hidden && image.complete && image.naturalWidth > 0;
+  }, null, { timeout: 150_000 });
+  const actionImage = textureCard.locator('.mesh-preview-image');
+  const actionProof = await actionImage.evaluate(image => ({ width: image.naturalWidth, height: image.naturalHeight, src: image.currentSrc }));
+  assert.ok(actionProof.src.startsWith('blob:'), 'Search action must display native browser output');
+  assert.equal(legacyTextureRequests, 0);
+  await actionImage.screenshot({ path: 'fnaa-view-image-action.png' });
+  console.log('FNAA_SEARCH_BUTTON_IMAGE_PROVEN', JSON.stringify(actionProof));
+
   const proof = {
+    actionProof,
     result,
     ui,
     exactImageRequests,
