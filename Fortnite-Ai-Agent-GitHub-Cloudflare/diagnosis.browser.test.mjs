@@ -19,7 +19,7 @@ const server = http.createServer((req, res) => {
     if (target.endsWith('index.html')) {
       // Keep the production DOM and load only this phase's production modules.
       data = data.toString().replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
-      data = data.replace('</body>', ['asset-diagnosis.js', 'novasparx-core.js', 'novasparx-browser-guard.js', 'novasparx-associations.js', 'preview.js', 'tools.js'].map(s => `<script src="${s}"></script>`).join('\n') + '</body>');
+      data = data.replace('</body>', ['asset-diagnosis.js', 'novasparx-core.js', 'novasparx-browser-guard.js', 'novasparx-associations.js', 'novasparx-texture-runtime.js', 'preview.js', 'tools.js'].map(s => `<script src="${s}"></script>`).join('\n') + '</body>');
     }
     res.setHeader('content-type', target.endsWith('.js') ? 'application/javascript' : target.endsWith('.html') ? 'text/html' : target.endsWith('.css') ? 'text/css' : 'application/octet-stream');
     res.end(data);
