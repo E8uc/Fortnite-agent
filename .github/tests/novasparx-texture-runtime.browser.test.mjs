@@ -27,13 +27,11 @@ const MOBILE_PROFILE =
 const PAGE_OPTIONS =
   MOBILE_PROFILE === "ios"
     ? {
-        ...devices["iPhone 13"],
-        browserName: undefined
+        ...devices["iPhone 13"]
       }
     : MOBILE_PROFILE === "android"
       ? {
-          ...devices["Pixel 5"],
-          browserName: undefined
+          ...devices["Pixel 5"]
         }
       : {};
 
