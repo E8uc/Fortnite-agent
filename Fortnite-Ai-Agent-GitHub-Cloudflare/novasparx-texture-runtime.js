@@ -2400,19 +2400,17 @@
       options.signal
     );
 
-    const [
-      location,
-      manifest
-    ] =
-      await Promise.all([
-        locate(
-          path,
-          options
-        ),
-        currentManifestUrl(
-          options
-        )
-      ]);
+    const location =
+      await locate(
+        path,
+        options
+      );
+
+    const manifest =
+      await manifestForLocation(
+        location,
+        options
+      );
 
     throwIfAborted(
       options.signal
@@ -2764,7 +2762,6 @@
 
       const materialPromise =
         (async () => {
-          const objectUrls = [];
           const resolvedByPackage =
             new Map();
 
@@ -2883,29 +2880,15 @@
                   request.signal
                 );
 
-                const blob =
-                  await canvasBlob(
-                    texture.width,
-                    texture.height,
-                    texture.pixels
-                  );
-
-                throwIfAborted(
-                  request.signal
-                );
-
-                const url =
-                  URL.createObjectURL(
-                    blob
-                  );
-
-                objectUrls.push(
-                  url
-                );
-
                 material = {
-                  baseColorTexture:
-                    url
+                  baseColorFrame: {
+                    width:
+                      texture.width,
+                    height:
+                      texture.height,
+                    pixels:
+                      texture.pixels
+                  }
                 };
 
                 resolvedByPackage
@@ -2966,17 +2949,6 @@
                   : 'base-color-preview'
             };
           } finally {
-            for (
-              const url of
-              objectUrls
-            ) {
-              try {
-                URL.revokeObjectURL(
-                  url
-                );
-              } catch {}
-            }
-
             finishRequest(
               'mesh-materials-finished'
             );
