@@ -62,10 +62,12 @@ const MAX_ASSET_PATH = 2400;
 const ABUSE_WINDOW_MS = 60_000;
 const ABUSE_MAX_PER_WINDOW = 90;
 const ASSET_ABUSE_MAX_PER_WINDOW = 180;
+const BUILDPATCH_CHUNK_MAX_PER_WINDOW = 900;
 
 const FALLBACK_GUEST_TIMES = new Map();
 const ABUSE_BUCKETS = new Map();
 const ASSET_ABUSE_BUCKETS = new Map();
+const BUILDPATCH_CHUNK_BUCKETS = new Map();
 
 const STATELESS_AUTH_VERSION = 1;
 const STATELESS_AUTH_AAD =
@@ -1662,7 +1664,8 @@ async function handleNovaEdgeManifest(
 async function handleNovaEdgeBuildPatchChunk(
   request,
   env,
-  url
+  url,
+  ctx
 ) {
   if (
     !isAllowedNovaEdgeOrigin(
@@ -1726,6 +1729,31 @@ async function handleNovaEdgeBuildPatchChunk(
       },
       400
     );
+  }
+
+  const cache =
+    globalThis.caches
+      ?.default ||
+    null;
+
+  const cacheKey =
+    new Request(
+      url.toString(),
+      {
+        method:
+          "GET"
+      }
+    );
+
+  if (cache) {
+    const cached =
+      await cache.match(
+        cacheKey
+      );
+
+    if (cached) {
+      return cached;
+    }
   }
 
   let upstream;
@@ -1839,25 +1867,40 @@ async function handleNovaEdgeBuildPatchChunk(
     );
   }
 
-  return new Response(
-    bytes,
-    {
-      status:
-        200,
-      headers: {
-        ...publicBinaryHeaders(
-          "application/octet-stream",
-          "public, max-age=86400, immutable"
-        ),
-        "Content-Length":
-          String(
-            bytes.byteLength
+  const response =
+    new Response(
+      bytes,
+      {
+        status:
+          200,
+        headers: {
+          ...publicBinaryHeaders(
+            "application/octet-stream",
+            "public, max-age=604800, immutable"
           ),
-        "X-FNAA-Nova-Source":
-          "buildpatch-chunk-relay"
+          "Content-Length":
+            String(
+              bytes.byteLength
+            ),
+          "X-FNAA-Nova-Source":
+            "buildpatch-chunk-relay"
+        }
       }
-    }
-  );
+    );
+
+  if (
+    cache &&
+    ctx?.waitUntil
+  ) {
+    ctx.waitUntil(
+      cache.put(
+        cacheKey,
+        response.clone()
+      )
+    );
+  }
+
+  return response;
 }
 
 async function handleNovaEdgeRange(
@@ -2709,6 +2752,16 @@ function allowByAssetLimit(
     request,
     ASSET_ABUSE_BUCKETS,
     ASSET_ABUSE_MAX_PER_WINDOW
+  );
+}
+
+function allowByBuildPatchChunkLimit(
+  request
+) {
+  return allowByWindowLimit(
+    request,
+    BUILDPATCH_CHUNK_BUCKETS,
+    BUILDPATCH_CHUNK_MAX_PER_WINDOW
   );
 }
 
@@ -7968,7 +8021,11 @@ export default {
         "/nova-edge/chunk/"
       )
     ) {
-      if (!allowByAssetLimit(request)) {
+      if (
+        !allowByBuildPatchChunkLimit(
+          request
+        )
+      ) {
         return assetRateLimitResponse(
           request,
           env
@@ -7978,7 +8035,8 @@ export default {
       return handleNovaEdgeBuildPatchChunk(
         request,
         env,
-        url
+        url,
+        ctx
       );
     }
 
