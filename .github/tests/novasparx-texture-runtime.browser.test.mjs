@@ -846,6 +846,42 @@ try {
         "function"
   );
 
+  if (MOBILE_PROFILE) {
+    const guardStatus =
+      await page.evaluate(
+        () =>
+          globalThis
+            .NovaSparxBrowserGuard
+            ?.status?.() ||
+          null
+      );
+
+    assert.ok(
+      guardStatus,
+      "mobile profile must load NovaSparxBrowserGuard"
+    );
+
+    assert.equal(
+      guardStatus.previewTimeoutMs,
+      250_000,
+      "mobile Layer 8 must not be killed by the old 16–20 second operation timeout"
+    );
+
+    if (MOBILE_PROFILE === "ios") {
+      assert.equal(
+        guardStatus.isIOS,
+        true,
+        "iPhone WebKit profile was not detected as iOS"
+      );
+    } else {
+      assert.equal(
+        guardStatus.isAndroid,
+        true,
+        "Android Chromium profile was not detected as Android"
+      );
+    }
+  }
+
   const result =
     await page.evaluate(
       async target => {
