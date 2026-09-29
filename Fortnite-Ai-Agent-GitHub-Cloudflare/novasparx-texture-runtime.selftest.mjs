@@ -75,3 +75,50 @@ const meshRejected=assert.rejects(meshRequest,/unrelated pixels/);
 pending.get('mesh.uasset').resolve();await tick();
 workers.at(-1).send({type:'pixels',path:'mesh.uasset',width:1,height:1,pixels:new ArrayBuffer(4)});
 await meshRejected;assert.equal(workers.at(-1).terminated,true);
+
+
+// A successful Mesh View Image must stop after the verified geometry worker.
+// Material metadata may advertise a base-color Texture, but first-image latency
+// must never launch serial Texture workers.
+const beforeFastMeshWorkers = workers.length;
+const fastMesh = runtime.resolveMeshImage('mesh2.uasset');
+pending.get('mesh2.uasset').resolve();
+await tick();
+const fastMeshWorker = workers.at(-1);
+fastMeshWorker.send({
+  type: 'mesh',
+  path: 'mesh2.uasset',
+  positions: new Float32Array([
+    0, 0, 0,
+    1, 0, 0,
+    0, 1, 0
+  ]).buffer,
+  indices: new Uint32Array([0, 1, 2]).buffer,
+  uv0: new Float32Array([
+    0, 0,
+    1, 0,
+    0, 1
+  ]).buffer,
+  sections: [{
+    firstIndex: 0,
+    numTriangles: 1,
+    materialIndex: 0
+  }],
+  materialMetadata: [{
+    textureParameters: [{
+      name: 'BaseColor',
+      packageId: '0123456789abcdef'
+    }]
+  }]
+});
+fastMeshWorker.send({ type: 'done', exitCode: 0 });
+const fastMeshResult = await fastMesh;
+assert.equal(
+  workers.length,
+  beforeFastMeshWorkers + 1,
+  'Mesh View Image must not launch a second Worker for material Textures'
+);
+assert.equal(fastMeshResult.previewMode, 'geometry-first');
+assert.equal(fastMeshResult.missingMaterials.length, 1);
+assert.equal(fastMeshWorker.terminated, true);
+console.log('Mesh View Image: geometry-first result uses one Worker and does not block on material Textures.');
