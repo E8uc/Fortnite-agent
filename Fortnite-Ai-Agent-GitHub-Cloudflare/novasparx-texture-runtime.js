@@ -1342,6 +1342,30 @@
     );
   }
 
+  function manifestRelayUrl(
+    manifest
+  ) {
+    const base =
+      apiBase();
+
+    if (!base) {
+      return manifest;
+    }
+
+    const url =
+      new URL(
+        base +
+        "/nova-edge/manifest"
+      );
+
+    url.searchParams.set(
+      "url",
+      manifest
+    );
+
+    return url.href;
+  }
+
   function workerUrl(
     location,
     manifest,
@@ -1371,7 +1395,9 @@
 
     url.searchParams.set(
       "manifest",
-      manifest
+      manifestRelayUrl(
+        manifest
+      )
     );
 
     url.searchParams.set(
