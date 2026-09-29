@@ -140,7 +140,7 @@ progressiveMeshWorker.send({
 
 const firstFrame = await progressiveMesh;
 assert.equal(firstFrame.previewMode, 'geometry-first');
-assert.ok(firstFrame.materialPromise instanceof Promise);
+assert.equal(typeof firstFrame.materialPromise?.then, 'function');
 assert.equal(
   workers.length,
   beforeProgressiveWorkers + 2,
