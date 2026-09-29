@@ -631,6 +631,20 @@
       signal
     );
 
+    const rawPixels =
+      url &&
+      typeof url === "object" &&
+      Number.isInteger(url.width) &&
+      Number.isInteger(url.height) &&
+      url.width > 0 &&
+      url.height > 0 &&
+      (
+        url.pixels instanceof Uint8Array ||
+        url.pixels instanceof Uint8ClampedArray
+      )
+        ? url
+        : null;
+
     let bitmap =
       null;
 
@@ -780,6 +794,131 @@
     try {
       let source =
         null;
+
+      if (rawPixels) {
+        const expected =
+          rawPixels.width *
+          rawPixels.height *
+          4;
+
+        if (
+          rawPixels.width > 2048 ||
+          rawPixels.height > 2048 ||
+          rawPixels.pixels.byteLength !== expected
+        ) {
+          throw new Error(
+            "Decoded material RGBA frame is outside the renderer budget."
+          );
+        }
+
+        texture =
+          gl.createTexture();
+
+        if (!texture) {
+          throw new Error(
+            "WebGL could not allocate a texture."
+          );
+        }
+
+        gl.bindTexture(
+          gl.TEXTURE_2D,
+          texture
+        );
+
+        // Worker RGBA uses top-left image order. Flip rows once so it matches
+        // the previous DOM-image upload orientation used by Fortnite UVs.
+        const rowBytes =
+          rawPixels.width * 4;
+        const flipped =
+          new Uint8Array(
+            rawPixels.pixels.byteLength
+          );
+
+        for (
+          let row = 0;
+          row < rawPixels.height;
+          row++
+        ) {
+          const sourceOffset =
+            row * rowBytes;
+          const targetOffset =
+            (
+              rawPixels.height -
+              1 -
+              row
+            ) *
+            rowBytes;
+
+          flipped.set(
+            rawPixels.pixels.subarray(
+              sourceOffset,
+              sourceOffset +
+                rowBytes
+            ),
+            targetOffset
+          );
+        }
+
+        gl.pixelStorei(
+          gl.UNPACK_FLIP_Y_WEBGL,
+          0
+        );
+
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.RGBA,
+          rawPixels.width,
+          rawPixels.height,
+          0,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          flipped
+        );
+
+        gl.texParameteri(
+          gl.TEXTURE_2D,
+          gl.TEXTURE_MIN_FILTER,
+          options.mipmaps === false
+            ? gl.LINEAR
+            : gl.LINEAR_MIPMAP_LINEAR
+        );
+        gl.texParameteri(
+          gl.TEXTURE_2D,
+          gl.TEXTURE_MAG_FILTER,
+          gl.LINEAR
+        );
+        gl.texParameteri(
+          gl.TEXTURE_2D,
+          gl.TEXTURE_WRAP_S,
+          gl.REPEAT
+        );
+        gl.texParameteri(
+          gl.TEXTURE_2D,
+          gl.TEXTURE_WRAP_T,
+          gl.REPEAT
+        );
+
+        if (
+          options.mipmaps !== false
+        ) {
+          gl.generateMipmap(
+            gl.TEXTURE_2D
+          );
+        }
+
+        throwIfAborted(
+          signal
+        );
+
+        return {
+          texture,
+          loaded:
+            true,
+          decoder:
+            "raw-rgba"
+        };
+      }
 
       const sourceUrl =
         String(
@@ -1362,7 +1501,7 @@
       );
 
       const maps = await Promise.all([
-        guardedTexture("base", material.baseColorTexture, white),
+        guardedTexture("base", material.baseColorPixels || material.baseColorTexture, white),
         guardedTexture("normal", material.normalTexture, flatNormal),
         guardedTexture("emissive", material.emissiveTexture, black),
         guardedTexture("opacity", material.opacityTexture, white),
