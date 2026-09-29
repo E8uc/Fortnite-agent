@@ -2144,19 +2144,18 @@
       options.signal
     );
 
-    const [
-      location,
-      manifest
-    ] =
-      await Promise.all([
-        locate(
-          path,
-          options
-        ),
-        currentManifestUrl(
-          options
-        )
-      ]);
+    const location =
+      await locate(
+        path,
+        options
+      );
+
+    const manifest =
+      await currentManifestUrl({
+        ...options,
+        family:
+          location.manifestFamily
+      });
 
     throwIfAborted(
       options.signal
@@ -2248,7 +2247,13 @@
     if (typeof value !== 'string') throw new Error('Material Texture is absent from package index');
     const [path, toc, extra] = value.split('\t');
     if (extra || !path?.endsWith('.uasset') || !toc?.endsWith('.utoc') || path.includes('..') || toc.includes('..')) throw new Error('Invalid material Texture location');
-    return {key:path, toc};
+    return {
+      key:
+        path,
+      toc,
+      manifestFamily:
+        "live"
+    };
   }
 
   function baseColorParameter(material) {
@@ -2396,19 +2401,18 @@
       };
 
     try {
-      const [
-        location,
-        manifest
-      ] =
-        await Promise.all([
-          locate(
-            path,
-            request
-          ),
-          currentManifestUrl(
-            request
-          )
-        ]);
+      const location =
+        await locate(
+          path,
+          request
+        );
+
+      const manifest =
+        await currentManifestUrl({
+          ...request,
+          family:
+            location.manifestFamily
+        });
 
       throwIfAborted(
         request.signal
@@ -2594,22 +2598,33 @@
 
               if (!material) {
                 const textureLocation =
-                  /^[a-f0-9]{16}$/.test(
-                    packageId
-                  )
-                    ? await locatePackage(
-                        packageId,
-                        request
-                      )
-                    : await locate(
+                  texturePath
+                    ? await locate(
                         texturePath,
                         request
+                      )
+                    : await locatePackage(
+                        packageId,
+                        request
                       );
+
+                const textureManifest =
+                  textureLocation
+                    .manifestFamily ===
+                    location
+                      .manifestFamily
+                    ? manifest
+                    : await currentManifestUrl({
+                        ...request,
+                        family:
+                          textureLocation
+                            .manifestFamily
+                      });
 
                 const texture =
                   await runWorker(
                     textureLocation,
-                    manifest,
+                    textureManifest,
                     {
                       ...request,
                       mode:
@@ -2751,12 +2766,26 @@
     locationManifestTask =
       null;
 
+    studioLocationManifest =
+      null;
+
+    studioLocationManifestTask =
+      null;
+
     shardCache.clear();
+
+    studioShardCache.clear();
 
     rawManifestCache =
       null;
 
     rawManifestTask =
+      null;
+
+    studioRawManifestCache =
+      null;
+
+    studioRawManifestTask =
       null;
   }
 
@@ -2784,6 +2813,14 @@
       rawManifestCached:
         Boolean(
           rawManifestCache
+        ),
+      studioLocationManifestCached:
+        Boolean(
+          studioLocationManifest
+        ),
+      studioRawManifestCached:
+        Boolean(
+          studioRawManifestCache
         ),
       runtimeBase:
         RUNTIME_BASE
