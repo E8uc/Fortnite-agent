@@ -8,6 +8,7 @@ const workers = [], pending = new Map();
 let source = fs.readFileSync(new URL('./novasparx-texture-runtime.js', import.meta.url), 'utf8');
 source = source.replace('  function clearCaches() {', `
   locate = globalThis.testLocate;
+  locatePackage = globalThis.testLocatePackage;
   currentManifestUrl = async () => 'https://example.test/live.manifest';
   canvasBlob = async () => new Blob(['pixels']);
   sha256Hex = async () => 'test-hash';
@@ -19,6 +20,13 @@ const context = {
   FNAA_CONFIG: { apiEndpoint: 'https://example.test' },
   testLocate(path, { signal }) {
     return new Promise(resolve => pending.set(path, { signal, resolve: () => resolve({ key: path, toc: 'test.utoc', shard: '00' }) }));
+  },
+  async testLocatePackage(id) {
+    return {
+      key: 'material-' + String(id).toLowerCase() + '.uasset',
+      toc: 'test.utoc',
+      shard: '00'
+    };
   },
   Worker: class {
     constructor(url) {
@@ -77,15 +85,29 @@ workers.at(-1).send({type:'pixels',path:'mesh.uasset',width:1,height:1,pixels:ne
 await meshRejected;assert.equal(workers.at(-1).terminated,true);
 
 
-// A successful Mesh View Image must stop after the verified geometry worker.
-// Material metadata may advertise a base-color Texture, but first-image latency
-// must never launch serial Texture workers.
-const beforeFastMeshWorkers = workers.length;
-const fastMesh = runtime.resolveMeshImage('mesh2.uasset');
+// A successful Mesh View Image must become visible after the Mesh worker,
+// then upgrade the same preview with Texture + Material through the existing
+// browser Texture runtime. One BaseColor package should produce one extra
+// Texture worker and one final textured render.
+const renderCalls = [];
+context.NovaSparxRenderer = {
+  render: async manifest => {
+    renderCalls.push(manifest);
+    return {
+      blob: new Blob(['mesh']),
+      triangleCount: 1,
+      materialFidelity: manifest.metadata?.materialFidelity || 'unknown'
+    };
+  }
+};
+
+const beforeProgressiveWorkers = workers.length;
+const progressiveMesh = runtime.resolveMeshImage('mesh2.uasset');
 pending.get('mesh2.uasset').resolve();
 await tick();
-const fastMeshWorker = workers.at(-1);
-fastMeshWorker.send({
+
+const progressiveMeshWorker = workers.at(-1);
+progressiveMeshWorker.send({
   type: 'mesh',
   path: 'mesh2.uasset',
   positions: new Float32Array([
@@ -111,14 +133,47 @@ fastMeshWorker.send({
     }]
   }]
 });
-fastMeshWorker.send({ type: 'done', exitCode: 0 });
-const fastMeshResult = await fastMesh;
+progressiveMeshWorker.send({
+  type: 'done',
+  exitCode: 0
+});
+
+const firstFrame = await progressiveMesh;
+assert.equal(firstFrame.previewMode, 'geometry-first');
+assert.equal(typeof firstFrame.materialPromise?.then, 'function');
+await tick();
 assert.equal(
   workers.length,
-  beforeFastMeshWorkers + 1,
-  'Mesh View Image must not launch a second Worker for material Textures'
+  beforeProgressiveWorkers + 2,
+  'Texture + Material upgrade should reuse the existing Texture engine in one bounded follow-up worker'
 );
-assert.equal(fastMeshResult.previewMode, 'geometry-first');
-assert.equal(fastMeshResult.missingMaterials.length, 1);
-assert.equal(fastMeshWorker.terminated, true);
-console.log('Mesh View Image: geometry-first result uses one Worker and does not block on material Textures.');
+
+const materialWorker = workers.at(-1);
+assert.equal(
+  materialWorker.path,
+  'material-0123456789abcdef.uasset'
+);
+
+materialWorker.send({
+  type: 'pixels',
+  path: 'material-0123456789abcdef.uasset',
+  width: 1,
+  height: 1,
+  pixels: new ArrayBuffer(4)
+});
+materialWorker.send({
+  type: 'done',
+  exitCode: 0
+});
+
+const finalFrame = await firstFrame.materialPromise;
+assert.equal(finalFrame.previewMode, 'base-color-preview');
+assert.equal(finalFrame.missingMaterials.length, 0);
+assert.equal(renderCalls.length >= 2, true);
+assert.equal(
+  typeof renderCalls.at(-1).materials[0].baseColorTexture,
+  'string'
+);
+assert.equal(progressiveMeshWorker.terminated, true);
+assert.equal(materialWorker.terminated, true);
+console.log('Mesh View Image: geometry appears first, then the existing Texture runtime applies Texture + Material.');
