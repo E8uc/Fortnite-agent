@@ -944,7 +944,8 @@
   }
 
   function collectManifestCandidates(
-    root
+    root,
+    family = "live"
   ) {
     const urls =
       new Map();
@@ -1099,16 +1100,27 @@
             40;
         }
 
-        if (
+        const studioCandidate =
           objectText.includes(
             "studio"
           ) ||
           objectText.includes(
             "uefn"
-          )
+          );
+
+        if (
+          family ===
+            "studio"
+        ) {
+          baseScore +=
+            studioCandidate
+              ? 140
+              : -120;
+        } else if (
+          studioCandidate
         ) {
           baseScore -=
-            15;
+            80;
         }
 
         for (
@@ -1251,7 +1263,8 @@
     options = {},
     visited =
       new Set(),
-    depth = 0
+    depth = 0,
+    family = "live"
   ) {
     throwIfAborted(
       options.signal
@@ -1309,7 +1322,8 @@
 
     const candidates =
       collectManifestCandidates(
-        data
+        data,
+        family
       );
 
     for (
@@ -1342,7 +1356,8 @@
           candidate.url,
           options,
           visited,
-          depth + 1
+          depth + 1,
+          family
         );
       } catch (
         error
@@ -1375,7 +1390,8 @@
           ),
           options,
           visited,
-          depth + 1
+          depth + 1,
+          family
         );
       } catch (
         error
@@ -1397,26 +1413,45 @@
   async function currentManifestUrl(
     options = {}
   ) {
+    const family =
+      options.family ===
+        "studio"
+        ? "studio"
+        : "live";
+
+    const studio =
+      family ===
+        "studio";
+
     const now =
       Date.now();
 
+    const cached =
+      studio
+        ? studioRawManifestCache
+        : rawManifestCache;
+
+    const pending =
+      studio
+        ? studioRawManifestTask
+        : rawManifestTask;
+
     if (
-      rawManifestCache &&
+      cached &&
       !options.refresh &&
       now -
-        rawManifestCache.at <
+        cached.at <
         MANIFEST_TTL_MS
     ) {
-      return rawManifestCache
-        .url;
+      return cached.url;
     }
 
     if (
-      rawManifestTask &&
+      pending &&
       !options.signal &&
       !options.refresh
     ) {
-      return await rawManifestTask;
+      return await pending;
     }
 
     const request =
@@ -1424,27 +1459,53 @@
         const url =
           await resolveRawManifestUrl(
             MANIFEST_ENDPOINT,
-            options
+            options,
+            new Set(),
+            0,
+            family
           );
 
-        rawManifestCache = {
+        const value = {
           at:
             Date.now(),
           url
         };
 
+        if (studio) {
+          studioRawManifestCache =
+            value;
+        } else {
+          rawManifestCache =
+            value;
+        }
+
         return url;
       })();
 
-    rawManifestTask =
-      request;
+    if (studio) {
+      studioRawManifestTask =
+        request;
+    } else {
+      rawManifestTask =
+        request;
+    }
 
     try {
       return await request;
     } finally {
       if (
+        studio &&
+        studioRawManifestTask ===
+          request
+      ) {
+        studioRawManifestTask =
+          null;
+      }
+
+      if (
+        !studio &&
         rawManifestTask ===
-        request
+          request
       ) {
         rawManifestTask =
           null;
