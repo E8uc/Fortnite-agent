@@ -1738,7 +1738,7 @@ async function handleNovaEdgeBuildPatchChunk(
           method:
             "GET",
           redirect:
-            "error",
+            "follow",
           headers: {
             Accept:
               "application/octet-stream,*/*;q=0.8"
