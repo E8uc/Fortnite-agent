@@ -16,7 +16,12 @@ source = source.replace('  function clearCaches() {', `
   function clearCaches() {`);
 const context = {
   URL, AbortController, ArrayBuffer, Uint8Array, Float32Array, Uint32Array, Blob, setTimeout, clearTimeout,
-  WebAssembly, document: { baseURI: 'https://example.test/' },
+  WebAssembly, document: {
+    baseURI: 'https://example.test/',
+    currentScript: {
+      src: 'https://example.test/novasparx-texture-runtime.js?v=104'
+    }
+  },
   FNAA_CONFIG: { apiEndpoint: 'https://example.test' },
   testLocate(path, { signal }) {
     return new Promise(resolve => pending.set(path, { signal, resolve: () => resolve({ key: path, toc: 'test.utoc', shard: '00' }) }));
@@ -55,6 +60,11 @@ assert.equal(
   workers[0].url.searchParams.get('chunkBase'),
   'https://example.test/nova-edge/chunk/',
   'browser runtime must keep Epic BuildPatch chunk fetches on the controlled Nova edge'
+);
+assert.equal(
+  workers[0].url.searchParams.get('runtimeRevision'),
+  '104',
+  'browser runtime must version the Worker URL with the deployed script revision'
 );
 workers[0].send({ type: 'pixels', path: 'other.uasset', width: 1, height: 1, pixels: new ArrayBuffer(4) });
 await rejectedB;
