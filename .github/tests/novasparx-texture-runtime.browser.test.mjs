@@ -1233,6 +1233,41 @@ try {
   await page.addScriptTag({url:'/novasparx-renderer.js'});
   await page.addScriptTag({url:'/asset-diagnosis.js'});
   await page.addScriptTag({url:'/novasparx-associations.js'});
+
+  await page.evaluate(() => {
+    const nativeFetch =
+      globalThis.fetch.bind(
+        globalThis
+      );
+
+    globalThis.fetch =
+      (input, init) => {
+        const value =
+          typeof input ===
+            "string"
+            ? input
+            : (
+                input?.url ||
+                String(input || "")
+              );
+
+        if (
+          /^blob:/i.test(
+            value
+          )
+        ) {
+          throw new TypeError(
+            "Simulated production CSP: connect-src blocked blob fetch"
+          );
+        }
+
+        return nativeFetch(
+          input,
+          init
+        );
+      };
+  });
+
   const meshPath = "StaticMesh'FortniteGame/Plugins/GameFeatures/Juno/FigureCosmetics/Content/Props/Emote/CallWaiting/Mesh/SM_CallWaiting.uasset'";
   await page.evaluate(meshPath => {
     window.FortniteAgent.searchDatabase = async () => ({results:[{path:meshPath,source:'live-mesh-proof',match:'exact'}],total:1});

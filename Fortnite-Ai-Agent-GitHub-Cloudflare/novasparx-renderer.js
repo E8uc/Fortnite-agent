@@ -640,100 +640,17 @@
     let imageUrl =
       null;
 
+    let ownsImageUrl =
+      false;
+
     let texture =
       null;
 
     let decoder =
       "none";
 
-    try {
-      const response =
-        await fetch(
-          url,
-          {
-            cache:
-              "force-cache",
-            signal:
-              signal ||
-              undefined
-          }
-        );
-
-      if (!response.ok) {
-        throw new Error(
-          `Texture HTTP ${response.status}`
-        );
-      }
-
-      const guard =
-        window.NovaSparxBrowserGuard;
-
-      const budget =
-        guard
-          ?.assertResponseBudget?.(
-            response,
-            "texture"
-          );
-
-      const guardState =
-        guard
-          ?.status?.() || {};
-
-      const maxTextureBytes =
-        Math.min(
-          Number(
-            budget?.limit ||
-            guardState
-              .packageLimitBytes ||
-            16 * 1024 * 1024
-          ),
-          guardState.isMobile
-            ? 6 * 1024 * 1024
-            : 16 * 1024 * 1024
-        );
-
-      const blob =
-        await readTextureBlobBounded(
-          response,
-          maxTextureBytes,
-          signal
-        );
-
-      throwIfAborted(
-        signal
-      );
-
-      let source =
-        null;
-
-      if (
-        typeof globalThis
-          .createImageBitmap ===
-        "function"
-      ) {
-        try {
-          bitmap =
-            await globalThis
-              .createImageBitmap(
-                blob,
-                {
-                  premultiplyAlpha:
-                    "none"
-                }
-              );
-
-          source =
-            bitmap;
-
-          decoder =
-            "image-bitmap";
-        } catch {
-          bitmap =
-            null;
-        }
-      }
-
-      if (!source) {
+    const loadHtmlImage =
+      async sourceUrl => {
         if (
           typeof Image !==
           "function"
@@ -742,11 +659,6 @@
             "Browser image decoding is unavailable."
           );
         }
-
-        imageUrl =
-          URL.createObjectURL(
-            blob
-          );
 
         imageElement =
           new Image();
@@ -854,7 +766,7 @@
               );
 
             imageElement.src =
-              imageUrl;
+              sourceUrl;
           }
         );
 
@@ -862,11 +774,139 @@
           signal
         );
 
+        return imageElement;
+      };
+
+    try {
+      let source =
+        null;
+
+      const sourceUrl =
+        String(
+          url
+        );
+
+      const directObjectUrl =
+        sourceUrl.startsWith(
+          "blob:"
+        ) ||
+        sourceUrl.startsWith(
+          "data:"
+        );
+
+      if (directObjectUrl) {
+        // Mesh material Textures are already decoded to a bounded PNG Blob by
+        // the browser Texture runtime. Loading that Blob through fetch() can be
+        // blocked by production connect-src/CSP even though img-src blob: is
+        // allowed. Feed the object URL straight to the image decoder instead.
         source =
-          imageElement;
+          await loadHtmlImage(
+            sourceUrl
+          );
 
         decoder =
-          "html-image";
+          "html-image-direct";
+      } else {
+        const response =
+          await fetch(
+            sourceUrl,
+            {
+              cache:
+                "force-cache",
+              signal:
+                signal ||
+                undefined
+            }
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            `Texture HTTP ${response.status}`
+          );
+        }
+
+        const guard =
+          window.NovaSparxBrowserGuard;
+
+        const budget =
+          guard
+            ?.assertResponseBudget?.(
+              response,
+              "texture"
+            );
+
+        const guardState =
+          guard
+            ?.status?.() || {};
+
+        const maxTextureBytes =
+          Math.min(
+            Number(
+              budget?.limit ||
+              guardState
+                .packageLimitBytes ||
+              16 * 1024 * 1024
+            ),
+            guardState.isMobile
+              ? 6 * 1024 * 1024
+              : 16 * 1024 * 1024
+          );
+
+        const blob =
+          await readTextureBlobBounded(
+            response,
+            maxTextureBytes,
+            signal
+          );
+
+        throwIfAborted(
+          signal
+        );
+
+        if (
+          typeof globalThis
+            .createImageBitmap ===
+          "function"
+        ) {
+          try {
+            bitmap =
+              await globalThis
+                .createImageBitmap(
+                  blob,
+                  {
+                    premultiplyAlpha:
+                      "none"
+                  }
+                );
+
+            source =
+              bitmap;
+
+            decoder =
+              "image-bitmap";
+          } catch {
+            bitmap =
+              null;
+          }
+        }
+
+        if (!source) {
+          imageUrl =
+            URL.createObjectURL(
+              blob
+            );
+
+          ownsImageUrl =
+            true;
+
+          source =
+            await loadHtmlImage(
+              imageUrl
+            );
+
+          decoder =
+            "html-image";
+        }
       }
 
       texture =
@@ -999,6 +1039,7 @@
       }
 
       if (
+        ownsImageUrl &&
         imageUrl
       ) {
         try {
