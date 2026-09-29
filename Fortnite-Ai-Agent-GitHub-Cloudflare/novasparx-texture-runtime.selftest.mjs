@@ -23,7 +23,7 @@ const context = {
   WebAssembly, document: {
     baseURI: 'https://example.test/',
     currentScript: {
-      src: 'https://example.test/novasparx-texture-runtime.js?v=106'
+      src: 'https://example.test/novasparx-texture-runtime.js?v=107'
     }
   },
   FNAA_CONFIG: { apiEndpoint: 'https://example.test' },
@@ -67,7 +67,7 @@ assert.equal(
 );
 assert.equal(
   workers[0].url.searchParams.get('runtimeRevision'),
-  '106',
+  '107',
   'browser runtime must version the Worker URL with the deployed script revision'
 );
 workers[0].send({ type: 'pixels', path: 'other.uasset', width: 1, height: 1, pixels: new ArrayBuffer(4) });
@@ -196,10 +196,25 @@ const finalFrame = await firstFrame.materialPromise;
 assert.equal(finalFrame.previewMode, 'base-color-preview');
 assert.equal(finalFrame.missingMaterials.length, 0);
 assert.equal(renderCalls.length >= 2, true);
+const finalMaterial =
+  renderCalls.at(-1).materials[0];
+
 assert.equal(
-  typeof renderCalls.at(-1).materials[0].baseColorTexture,
-  'string'
+  finalMaterial.baseColorPixels.width,
+  1
+);
+assert.equal(
+  finalMaterial.baseColorPixels.height,
+  1
+);
+assert.equal(
+  finalMaterial.baseColorPixels.pixels.byteLength,
+  4
+);
+assert.equal(
+  finalMaterial.baseColorTexture,
+  undefined
 );
 assert.equal(progressiveMeshWorker.terminated, true);
 assert.equal(materialWorker.terminated, true);
-console.log('Mesh View Image: FModel-style PM_Diffuse parent Texture path resolves through the existing Texture runtime.');
+console.log('Mesh View Image: PM_Diffuse RGBA reaches the renderer directly without PNG/blob re-decode.');
