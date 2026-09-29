@@ -23,7 +23,7 @@ const context = {
   WebAssembly, document: {
     baseURI: 'https://example.test/',
     currentScript: {
-      src: 'https://example.test/novasparx-texture-runtime.js?v=106'
+      src: 'https://example.test/novasparx-texture-runtime.js?v=107'
     }
   },
   FNAA_CONFIG: { apiEndpoint: 'https://example.test' },
@@ -67,7 +67,7 @@ assert.equal(
 );
 assert.equal(
   workers[0].url.searchParams.get('runtimeRevision'),
-  '106',
+  '107',
   'browser runtime must version the Worker URL with the deployed script revision'
 );
 workers[0].send({ type: 'pixels', path: 'other.uasset', width: 1, height: 1, pixels: new ArrayBuffer(4) });
@@ -197,8 +197,16 @@ assert.equal(finalFrame.previewMode, 'base-color-preview');
 assert.equal(finalFrame.missingMaterials.length, 0);
 assert.equal(renderCalls.length >= 2, true);
 assert.equal(
-  typeof renderCalls.at(-1).materials[0].baseColorTexture,
-  'string'
+  renderCalls.at(-1).materials[0].baseColorFrame.width,
+  1
+);
+assert.equal(
+  renderCalls.at(-1).materials[0].baseColorFrame.height,
+  1
+);
+assert.ok(
+  renderCalls.at(-1).materials[0].baseColorFrame.pixels instanceof ArrayBuffer,
+  'Mesh material must pass decoded RGBA pixels directly to the renderer'
 );
 assert.equal(progressiveMeshWorker.terminated, true);
 assert.equal(materialWorker.terminated, true);
