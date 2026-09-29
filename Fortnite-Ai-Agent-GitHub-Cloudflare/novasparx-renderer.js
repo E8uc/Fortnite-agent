@@ -3962,7 +3962,7 @@
   }
 
   window.NovaSparxRenderer = Object.freeze({
-    version: "1.5.0",
+    version: "1.5.1",
     render,
     mount
   });
