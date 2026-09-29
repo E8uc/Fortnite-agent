@@ -631,6 +631,235 @@
       signal
     );
 
+    if (
+      url &&
+      typeof url ===
+        "object" &&
+      Number.isInteger(
+        Number(
+          url.width
+        )
+      ) &&
+      Number.isInteger(
+        Number(
+          url.height
+        )
+      ) &&
+      (
+        url.pixels instanceof
+          ArrayBuffer ||
+        ArrayBuffer.isView(
+          url.pixels
+        )
+      )
+    ) {
+      const width =
+        Number(
+          url.width
+        );
+
+      const height =
+        Number(
+          url.height
+        );
+
+      const sourcePixels =
+        url.pixels instanceof
+          ArrayBuffer
+          ? new Uint8Array(
+              url.pixels
+            )
+          : new Uint8Array(
+              url.pixels.buffer,
+              url.pixels.byteOffset,
+              url.pixels.byteLength
+            );
+
+      if (
+        width <= 0 ||
+        height <= 0 ||
+        width > 2048 ||
+        height > 2048 ||
+        sourcePixels.byteLength !==
+          width *
+          height *
+          4
+      ) {
+        return {
+          texture:
+            fallbackTexture,
+          loaded:
+            false,
+          decoder:
+            "rgba-invalid",
+          error:
+            "Decoded RGBA frame is invalid."
+        };
+      }
+
+      let directTexture =
+        null;
+
+      try {
+        // PNG/Image uploads used UNPACK_FLIP_Y_WEBGL. Typed-array uploads do
+        // not consistently honor that flag across WebKit/WebGL versions, so
+        // flip rows explicitly and upload the already-decoded RGBA bytes.
+        const stride =
+          width *
+          4;
+
+        const flipped =
+          new Uint8Array(
+            sourcePixels.byteLength
+          );
+
+        for (
+          let row = 0;
+          row < height;
+          row++
+        ) {
+          throwIfAborted(
+            signal
+          );
+
+          const sourceOffset =
+            row *
+            stride;
+
+          const targetOffset =
+            (
+              height -
+              row -
+              1
+            ) *
+            stride;
+
+          flipped.set(
+            sourcePixels.subarray(
+              sourceOffset,
+              sourceOffset +
+                stride
+            ),
+            targetOffset
+          );
+        }
+
+        directTexture =
+          gl.createTexture();
+
+        if (!directTexture) {
+          throw new Error(
+            "WebGL could not allocate the decoded material Texture."
+          );
+        }
+
+        gl.bindTexture(
+          gl.TEXTURE_2D,
+          directTexture
+        );
+
+        gl.pixelStorei(
+          gl.UNPACK_FLIP_Y_WEBGL,
+          0
+        );
+
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.RGBA,
+          width,
+          height,
+          0,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          flipped
+        );
+
+        // LINEAR + CLAMP_TO_EDGE is valid for NPOT textures in WebGL1 and
+        // avoids browser-dependent mipmap/image-decoder behavior on phones.
+        gl.texParameteri(
+          gl.TEXTURE_2D,
+          gl.TEXTURE_MIN_FILTER,
+          gl.LINEAR
+        );
+
+        gl.texParameteri(
+          gl.TEXTURE_2D,
+          gl.TEXTURE_MAG_FILTER,
+          gl.LINEAR
+        );
+
+        gl.texParameteri(
+          gl.TEXTURE_2D,
+          gl.TEXTURE_WRAP_S,
+          gl.CLAMP_TO_EDGE
+        );
+
+        gl.texParameteri(
+          gl.TEXTURE_2D,
+          gl.TEXTURE_WRAP_T,
+          gl.CLAMP_TO_EDGE
+        );
+
+        const uploadError =
+          gl.getError();
+
+        if (
+          uploadError !==
+            gl.NO_ERROR
+        ) {
+          throw new Error(
+            "WebGL rejected the decoded RGBA material Texture (" +
+            uploadError +
+            ")."
+          );
+        }
+
+        return {
+          texture:
+            directTexture,
+          loaded:
+            true,
+          decoder:
+            "rgba-direct"
+        };
+      } catch (error) {
+        if (
+          directTexture
+        ) {
+          try {
+            gl.deleteTexture(
+              directTexture
+            );
+          } catch {}
+        }
+
+        if (
+          signal?.aborted ||
+          error?.name ===
+            "AbortError"
+        ) {
+          throw abortError(
+            signal
+          );
+        }
+
+        return {
+          texture:
+            fallbackTexture,
+          loaded:
+            false,
+          decoder:
+            "rgba-fallback",
+          error:
+            String(
+              error?.message ||
+              error
+            )
+        };
+      }
+    }
+
     let bitmap =
       null;
 
@@ -1362,7 +1591,12 @@
       );
 
       const maps = await Promise.all([
-        guardedTexture("base", material.baseColorTexture, white),
+        guardedTexture(
+          "base",
+          material.baseColorFrame ||
+            material.baseColorTexture,
+          white
+        ),
         guardedTexture("normal", material.normalTexture, flatNormal),
         guardedTexture("emissive", material.emissiveTexture, black),
         guardedTexture("opacity", material.opacityTexture, white),
@@ -3077,6 +3311,8 @@
             [
               guardedTexture(
                 "base",
+                material
+                  .baseColorFrame ||
                 material
                   .baseColorTexture,
                 white
