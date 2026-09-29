@@ -196,10 +196,25 @@ const finalFrame = await firstFrame.materialPromise;
 assert.equal(finalFrame.previewMode, 'base-color-preview');
 assert.equal(finalFrame.missingMaterials.length, 0);
 assert.equal(renderCalls.length >= 2, true);
+const finalMaterial =
+  renderCalls.at(-1).materials[0];
+
 assert.equal(
-  typeof renderCalls.at(-1).materials[0].baseColorTexture,
-  'string'
+  finalMaterial.baseColorPixels.width,
+  1
+);
+assert.equal(
+  finalMaterial.baseColorPixels.height,
+  1
+);
+assert.equal(
+  finalMaterial.baseColorPixels.pixels.byteLength,
+  4
+);
+assert.equal(
+  finalMaterial.baseColorTexture,
+  undefined
 );
 assert.equal(progressiveMeshWorker.terminated, true);
 assert.equal(materialWorker.terminated, true);
-console.log('Mesh View Image: FModel-style PM_Diffuse parent Texture path resolves through the existing Texture runtime.');
+console.log('Mesh View Image: PM_Diffuse RGBA reaches the renderer directly without PNG/blob re-decode.');
