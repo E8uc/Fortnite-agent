@@ -1,13 +1,13 @@
 {
-  "bytes": 13834794,
-  "entries": 2098990,
+  "bytes": 12677932,
+  "entries": 1790995,
   "fortniteBuild": "++Fortnite+Release-42.20-CL-58011042-Windows",
   "fortniteVersion": "42.20",
-  "newAssets": 4858,
-  "removedAssets": 0,
+  "newAssets": 0,
+  "removedAssets": 307995,
   "schema": "fnaa.asset-source.v1",
-  "sha256": "67661664298f38efdcfcf7e48a4bf13d2e29f0be7f937e19cb99f1b5c7398634",
+  "sha256": "8c28ae9bd2fb68824d7724376cf64a53507eb94a6d30b0b5b81ae3a6558abaca",
   "source": "NovaSparx",
   "sourceManifest": "https://raw.githubusercontent.com/E8uc/NovaSparx/main/web/asset-list/manifest.json",
-  "updatedAt": "2026-09-27T00:42:55.327544+00:00"
+  "updatedAt": "2026-09-29T06:17:31.568399+00:00"
 }
