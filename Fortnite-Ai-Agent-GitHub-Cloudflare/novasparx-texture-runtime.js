@@ -2436,29 +2436,21 @@
                   request.signal
                 );
 
-                const blob =
-                  await canvasBlob(
-                    texture.width,
-                    texture.height,
-                    texture.pixels
-                  );
-
-                throwIfAborted(
-                  request.signal
-                );
-
-                const url =
-                  URL.createObjectURL(
-                    blob
-                  );
-
-                objectUrls.push(
-                  url
-                );
-
+                // The Texture Worker already returned validated RGBA.
+                // Keep it raw so the renderer can upload it straight to WebGL;
+                // PNG/blob/Image re-decoding was the failure point on a subset
+                // of iOS/Android devices.
                 material = {
-                  baseColorTexture:
-                    url
+                  baseColorPixels: {
+                    width:
+                      texture.width,
+                    height:
+                      texture.height,
+                    pixels:
+                      new Uint8Array(
+                        texture.pixels
+                      )
+                  }
                 };
 
                 resolvedByPackage
