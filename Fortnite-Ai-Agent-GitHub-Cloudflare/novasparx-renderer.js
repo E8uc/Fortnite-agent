@@ -1333,6 +1333,125 @@
     );
   }
 
+  function compactMaterialSlots(
+    manifest,
+    indexCount,
+    maxMaterials
+  ) {
+    const sourceMaterials =
+      manifest.materials?.length
+        ? manifest.materials
+        : [{}];
+
+    const sourceSections =
+      manifest.sections?.length
+        ? manifest.sections
+        : [
+            {
+              firstIndex: 0,
+              indexCount,
+              materialIndex: 0
+            }
+          ];
+
+    const referencedSlots = [];
+    const seen = new Set();
+
+    for (const section of sourceSections) {
+      let slot =
+        Number(
+          section?.materialIndex ??
+          0
+        );
+
+      if (
+        !Number.isInteger(slot) ||
+        slot < 0
+      ) {
+        slot = 0;
+      }
+
+      if (!seen.has(slot)) {
+        seen.add(slot);
+        referencedSlots.push(slot);
+      }
+    }
+
+    if (!referencedSlots.length) {
+      referencedSlots.push(0);
+    }
+
+    const limit =
+      Math.max(
+        1,
+        Number(maxMaterials) ||
+        24
+      );
+
+    const selectedMaterialSlots =
+      referencedSlots.slice(
+        0,
+        limit
+      );
+
+    const localBySource =
+      new Map(
+        selectedMaterialSlots.map(
+          (slot, index) => [
+            slot,
+            index
+          ]
+        )
+      );
+
+    const materials =
+      selectedMaterialSlots.map(
+        slot =>
+          sourceMaterials[slot] ||
+          {}
+      );
+
+    const sections =
+      sourceSections.map(
+        section => {
+          let sourceSlot =
+            Number(
+              section?.materialIndex ??
+              0
+            );
+
+          if (
+            !Number.isInteger(sourceSlot) ||
+            sourceSlot < 0
+          ) {
+            sourceSlot = 0;
+          }
+
+          return {
+            ...section,
+            materialIndex:
+              localBySource.get(
+                sourceSlot
+              ) ??
+              0
+          };
+        }
+      );
+
+    return {
+      materials:
+        materials.length
+          ? materials
+          : [{}],
+      sections,
+      selectedMaterialSlots,
+      omittedMaterialSlots:
+        referencedSlots.slice(
+          selectedMaterialSlots.length
+        )
+    };
+  }
+
   async function render(manifest, options = {}) {
     if (!manifest?.geometry) throw new Error("NovaSparx manifest has no geometry.");
 
@@ -1524,16 +1643,18 @@
     const flatNormal = createSolidTexture(gl, [128, 128, 255, 255]);
     const black = createSolidTexture(gl, [0, 0, 0, 255]);
 
-    const materials =
-      (
-        manifest.materials?.length
-          ? manifest.materials
-          : [{}]
-      ).slice(
-        0,
-        Number(policy.maxMaterials) ||
-        24
+    const compactedMaterials =
+      compactMaterialSlots(
+        manifest,
+        indices.length,
+        policy.maxMaterials
       );
+
+    const materials =
+      compactedMaterials.materials;
+
+    const sections =
+      compactedMaterials.sections;
 
     const loadedMaterials = [];
 
@@ -1629,14 +1750,6 @@
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-    const sections = manifest.sections?.length
-      ? manifest.sections
-      : [{
-          firstIndex: 0,
-          indexCount: indices.length,
-          materialIndex: 0
-        }];
 
     for (const section of sections) {
       throwIfAborted(
@@ -1861,6 +1974,10 @@
       textured,
       normalMapped,
       bounds,
+      selectedMaterialSlots:
+        compactedMaterials.selectedMaterialSlots,
+      omittedMaterialSlots:
+        compactedMaterials.omittedMaterialSlots,
       materialFidelity: manifest.metadata?.materialFidelity || "unknown"
     };
     } catch (error) {
@@ -2293,34 +2410,18 @@
       ...state
     };
 
-    const materials =
-      (
-        manifest.materials?.length
-          ? manifest.materials
-          : [{}]
-      ).slice(
-        0,
-        Number(
-          policy.maxMaterials
-        ) ||
-        24
+    const compactedMaterials =
+      compactMaterialSlots(
+        manifest,
+        indices.length,
+        policy.maxMaterials
       );
 
+    const materials =
+      compactedMaterials.materials;
+
     const sections =
-      manifest.sections?.length
-        ? manifest.sections
-        : [
-            {
-              firstIndex:
-                0,
-
-              indexCount:
-                indices.length,
-
-              materialIndex:
-                0
-            }
-          ];
+      compactedMaterials.sections;
 
     const background =
       Array.isArray(
@@ -3726,6 +3827,12 @@
         normalMapped,
 
         bounds,
+
+        selectedMaterialSlots:
+          compactedMaterials.selectedMaterialSlots,
+
+        omittedMaterialSlots:
+          compactedMaterials.omittedMaterialSlots,
 
         materialFidelity:
           manifest.metadata
