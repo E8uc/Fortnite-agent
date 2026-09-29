@@ -38,6 +38,12 @@
       RUNTIME_BASE
     );
 
+  const STUDIO_LOCATION_BASE =
+    new URL(
+      "studio-location-index/",
+      RUNTIME_BASE
+    );
+
   const MANIFEST_ENDPOINT =
     "https://export-service-new.dillyapis.com/v1/manifests";
 
@@ -71,6 +77,12 @@
   let locationManifestTask =
     null;
 
+  let studioLocationManifest =
+    null;
+
+  let studioLocationManifestTask =
+    null;
+
   const shardCache =
     new Map();
 
@@ -78,6 +90,12 @@
     null;
 
   let rawManifestTask =
+    null;
+
+  let studioRawManifestCache =
+    null;
+
+  let studioRawManifestTask =
     null;
 
   let activeRun =
@@ -567,6 +585,197 @@
     }
   }
 
+  async function getStudioLocationManifest(
+    options = {}
+  ) {
+    if (
+      studioLocationManifest &&
+      !options.refresh
+    ) {
+      return studioLocationManifest;
+    }
+
+    if (
+      studioLocationManifestTask &&
+      !options.signal &&
+      !options.refresh
+    ) {
+      return await studioLocationManifestTask;
+    }
+
+    const request =
+      (async () => {
+        const data =
+          await fetchJson(
+            new URL(
+              "manifest.json",
+              STUDIO_LOCATION_BASE
+            ),
+            128 * 1024,
+            "NovaSparx Studio asset location manifest",
+            {
+              signal:
+                options.signal,
+              cache:
+                options.refresh
+                  ? "no-store"
+                  : "force-cache"
+            }
+          );
+
+        if (
+          data?.schema !==
+            "novasparx.asset-locations.v1" ||
+          data?.hash !==
+            "fnv1a32-low-byte"
+        ) {
+          throw new Error(
+            "NovaSparx Studio asset location index is incompatible with this runtime."
+          );
+        }
+
+        studioLocationManifest =
+          data;
+
+        return data;
+      })();
+
+    studioLocationManifestTask =
+      request;
+
+    try {
+      return await request;
+    } finally {
+      if (
+        studioLocationManifestTask ===
+        request
+      ) {
+        studioLocationManifestTask =
+          null;
+      }
+    }
+  }
+
+  async function getStudioShard(
+    shard,
+    options = {}
+  ) {
+    const cacheKey =
+      "studio:" +
+      shard;
+
+    if (
+      shardCache.has(
+        cacheKey
+      ) &&
+      !options.refresh
+    ) {
+      const value =
+        shardCache.get(
+          cacheKey
+        );
+
+      shardCache.delete(
+        cacheKey
+      );
+
+      shardCache.set(
+        cacheKey,
+        value
+      );
+
+      return value;
+    }
+
+    if (
+      typeof DecompressionStream !==
+      "function"
+    ) {
+      const error =
+        new Error(
+          "This browser does not support the gzip stream required by NovaSparx Layer 8."
+        );
+
+      error.code =
+        "NOVASPARX_GZIP_UNSUPPORTED";
+
+      throw error;
+    }
+
+    const compressed =
+      await fetchBytes(
+        new URL(
+          shard +
+          ".json.gz",
+          STUDIO_LOCATION_BASE
+        ),
+        MAX_SHARD_GZIP_BYTES,
+        "NovaSparx Studio asset location shard",
+        {
+          signal:
+            options.signal,
+          cache:
+            options.refresh
+              ? "no-store"
+              : "force-cache",
+          accept:
+            "application/gzip,application/octet-stream,*/*;q=0.8"
+        }
+      );
+
+    const stream =
+      new Response(
+        compressed
+      )
+        .body
+        .pipeThrough(
+          new DecompressionStream(
+            "gzip"
+          )
+        );
+
+    const expanded =
+      await readBounded(
+        new Response(
+          stream
+        ),
+        MAX_SHARD_JSON_BYTES,
+        "NovaSparx expanded Studio asset location shard",
+        options.signal
+      );
+
+    const data =
+      JSON.parse(
+        new TextDecoder()
+          .decode(
+            expanded
+          )
+      );
+
+    if (
+      data?.schema !==
+        "novasparx.asset-locations.v1" ||
+      data?.valueProperty !==
+        "toc" ||
+      !data?.items ||
+      typeof data.items !==
+        "object"
+    ) {
+      throw new Error(
+        "NovaSparx Studio asset location shard is invalid."
+      );
+    }
+
+    shardCache.set(
+      cacheKey,
+      data
+    );
+
+    trimShardCache();
+
+    return data;
+  }
+
   function trimShardCache() {
     const state =
       globalThis
@@ -605,23 +814,27 @@
     shard,
     options = {}
   ) {
+    const cacheKey =
+      "live:" +
+      shard;
+
     if (
       shardCache.has(
-        shard
+        cacheKey
       ) &&
       !options.refresh
     ) {
       const value =
         shardCache.get(
-          shard
+          cacheKey
         );
 
       shardCache.delete(
-        shard
+        cacheKey
       );
 
       shardCache.set(
-        shard,
+        cacheKey,
         value
       );
 
@@ -720,7 +933,7 @@
     }
 
     shardCache.set(
-      shard,
+      cacheKey,
       data
     );
 
@@ -741,11 +954,14 @@
       options
     );
 
-    for (
-      const candidate of
+    const candidates =
       lookupCandidates(
         path
-      )
+      );
+
+    for (
+      const candidate of
+      candidates
     ) {
       const key =
         candidate
@@ -761,10 +977,6 @@
           shard,
           options
         );
-
-      throwIfAborted(
-        options.signal
-      );
 
       if (
         !Object.hasOwn(
@@ -802,13 +1014,92 @@
             /\\/g,
             "/"
           ),
-        shard
+        shard,
+        manifestKind:
+          "live"
       };
+    }
+
+    // Current NovaSparx also indexes Fortnite_Studio BuildPatch containers.
+    // Use it only after the normal Live-Windows index misses so existing
+    // Fortnite routes remain unchanged.
+    try {
+      await getStudioLocationManifest(
+        options
+      );
+
+      for (
+        const candidate of
+        candidates
+      ) {
+        const key =
+          candidate
+            .toLowerCase();
+
+        const shard =
+          fnvShard(
+            key
+          );
+
+        const data =
+          await getStudioShard(
+            shard,
+            options
+          );
+
+        if (
+          !Object.hasOwn(
+            data.items,
+            key
+          )
+        ) {
+          continue;
+        }
+
+        const toc =
+          data.items[
+            key
+          ];
+
+        if (
+          typeof toc !==
+            "string" ||
+          !/\.utoc$/i.test(
+            toc
+          ) ||
+          toc.includes(
+            ".."
+          )
+        ) {
+          throw new Error(
+            "NovaSparx Studio asset location entry is invalid."
+          );
+        }
+
+        return {
+          key,
+          toc:
+            toc.replace(
+              /\\/g,
+              "/"
+            ),
+          shard,
+          manifestKind:
+            "studio"
+        };
+      }
+    } catch (error) {
+      if (
+        error?.name ===
+          "AbortError"
+      ) {
+        throw error;
+      }
     }
 
     const error =
       new Error(
-        "This Fortnite asset is not present in the current NovaSparx location index."
+        "This Fortnite asset is not present in the current NovaSparx Live or Studio location index."
       );
 
     error.code =
@@ -1266,6 +1557,158 @@
     throw new Error(
       "NovaSparx could not resolve the current raw Fortnite manifest."
     );
+  }
+
+  async function studioManifestUrl(
+    options = {}
+  ) {
+    const now =
+      Date.now();
+
+    if (
+      studioRawManifestCache &&
+      !options.refresh &&
+      now -
+        studioRawManifestCache.at <
+        MANIFEST_TTL_MS
+    ) {
+      return studioRawManifestCache
+        .url;
+    }
+
+    if (
+      studioRawManifestTask &&
+      !options.signal &&
+      !options.refresh
+    ) {
+      return await studioRawManifestTask;
+    }
+
+    const request =
+      (async () => {
+        const data =
+          await fetchJson(
+            MANIFEST_ENDPOINT,
+            MAX_METADATA_BYTES,
+            "NovaSparx manifest metadata",
+            {
+              signal:
+                options.signal,
+              cache:
+                "no-store"
+            }
+          );
+
+        const records =
+          Array.isArray(
+            data
+          )
+            ? data
+            : [];
+
+        const matches =
+          records
+            .filter(
+              item =>
+                String(
+                  item?.appName ||
+                  ""
+                )
+                  .toLowerCase() ===
+                  "fortnite_studio" &&
+                String(
+                  item?.labelName ||
+                  ""
+                )
+                  .toLowerCase() ===
+                  "live-windows" &&
+                /^https:\/\//i.test(
+                  String(
+                    item?.downloadUrl ||
+                    ""
+                  )
+                )
+            )
+            .sort(
+              (
+                a,
+                b
+              ) =>
+                Number(
+                  Boolean(
+                    a?.isBugBuild
+                  )
+                ) -
+                Number(
+                  Boolean(
+                    b?.isBugBuild
+                  )
+                ) ||
+                String(
+                  b?.discoveredAt ||
+                  ""
+                )
+                  .localeCompare(
+                    String(
+                      a?.discoveredAt ||
+                      ""
+                    )
+                  )
+            );
+
+        const url =
+          String(
+            matches[0]
+              ?.downloadUrl ||
+            ""
+          );
+
+        if (
+          !url
+        ) {
+          throw new Error(
+            "NovaSparx could not resolve the current Fortnite_Studio manifest."
+          );
+        }
+
+        studioRawManifestCache = {
+          at:
+            Date.now(),
+          url
+        };
+
+        return url;
+      })();
+
+    studioRawManifestTask =
+      request;
+
+    try {
+      return await request;
+    } finally {
+      if (
+        studioRawManifestTask ===
+        request
+      ) {
+        studioRawManifestTask =
+          null;
+      }
+    }
+  }
+
+  async function manifestForLocation(
+    location,
+    options = {}
+  ) {
+    return location
+      ?.manifestKind ===
+        "studio"
+      ? await studioManifestUrl(
+          options
+        )
+      : await currentManifestUrl(
+          options
+        );
   }
 
   async function currentManifestUrl(
@@ -2209,19 +2652,17 @@
       };
 
     try {
-      const [
-        location,
-        manifest
-      ] =
-        await Promise.all([
-          locate(
-            path,
-            request
-          ),
-          currentManifestUrl(
-            request
-          )
-        ]);
+      const location =
+        await locate(
+          path,
+          request
+        );
+
+      const manifest =
+        await manifestForLocation(
+          location,
+          request
+        );
 
       throwIfAborted(
         request.signal
@@ -2419,10 +2860,16 @@
                         request
                       );
 
+                const textureManifest =
+                  await manifestForLocation(
+                    textureLocation,
+                    request
+                  );
+
                 const texture =
                   await runWorker(
                     textureLocation,
-                    manifest,
+                    textureManifest,
                     {
                       ...request,
                       mode:
@@ -2572,12 +3019,24 @@
     locationManifestTask =
       null;
 
+    studioLocationManifest =
+      null;
+
+    studioLocationManifestTask =
+      null;
+
     shardCache.clear();
 
     rawManifestCache =
       null;
 
     rawManifestTask =
+      null;
+
+    studioRawManifestCache =
+      null;
+
+    studioRawManifestTask =
       null;
   }
 
@@ -2602,9 +3061,17 @@
         Boolean(
           locationManifest
         ),
+      studioLocationManifestCached:
+        Boolean(
+          studioLocationManifest
+        ),
       rawManifestCached:
         Boolean(
           rawManifestCache
+        ),
+      studioRawManifestCached:
+        Boolean(
+          studioRawManifestCache
         ),
       runtimeBase:
         RUNTIME_BASE
