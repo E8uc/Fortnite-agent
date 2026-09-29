@@ -40,6 +40,7 @@ let relayRequests = 0;
 let relayBytes = 0;
 let chunkRelayRequests = 0;
 let chunkRelayBytes = 0;
+const chunkRelayPaths = [];
 let manifestRelayRequests = 0;
 let manifestRelayBytes = 0;
 let exactImageRequests = 0;
@@ -360,6 +361,9 @@ const server =
           chunkRelayRequests++;
           chunkRelayBytes +=
             bytes.byteLength;
+          if (!chunkRelayPaths.includes(relative)) {
+            chunkRelayPaths.push(relative);
+          }
 
           res.writeHead(
             200,
@@ -895,6 +899,59 @@ try {
     manifestRelayBytes >
       0,
     "FNAA Layer 8 did not fetch the Fortnite manifest through the metadata relay"
+  );
+
+  assert.ok(
+    chunkRelayPaths.length > 0,
+    "FNAA Layer 8 did not expose a real BuildPatch chunk path for production probing"
+  );
+
+  const productionChunkUrl =
+    "https://fortnite-ai-agent-api.a39328122.workers.dev/nova-edge/chunk/" +
+    chunkRelayPaths[0];
+
+  const productionChunkResponse =
+    await fetch(
+      productionChunkUrl,
+      {
+        headers: {
+          Origin:
+            "https://e8uc.github.io"
+        }
+      }
+    );
+
+  if (!productionChunkResponse.ok) {
+    const body =
+      await productionChunkResponse.text();
+
+    throw new Error(
+      "Production BuildPatch chunk relay returned HTTP " +
+      productionChunkResponse.status +
+      " for " +
+      chunkRelayPaths[0] +
+      ": " +
+      body.slice(0, 500)
+    );
+  }
+
+  const productionChunkBytes =
+    new Uint8Array(
+      await productionChunkResponse.arrayBuffer()
+    );
+
+  assert.ok(
+    productionChunkBytes.byteLength > 32,
+    "Production BuildPatch chunk relay returned an invalid payload"
+  );
+
+  console.log(
+    "FNAA_PRODUCTION_CHUNK_RELAY_PROVEN",
+    JSON.stringify({
+      path: chunkRelayPaths[0],
+      bytes: productionChunkBytes.byteLength,
+      status: productionChunkResponse.status
+    })
   );
 
   const uiChunkBefore = {
