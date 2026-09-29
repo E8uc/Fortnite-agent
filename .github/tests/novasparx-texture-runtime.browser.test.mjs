@@ -19,6 +19,14 @@ const EXPECTED_SHA =
 const RELAY_MAX_RANGE_BYTES =
   4 * 1024 * 1024;
 
+const BUILDPATCH_MAX_CHUNK_BYTES =
+  8 * 1024 * 1024;
+
+const BUILDPATCH_CHUNK_BASE =
+  new URL(
+    "https://egdownload.fastly-edge.com/Builds/Fortnite/CloudDir/"
+  );
+
 const RELAY_ALLOWED_HOSTS =
   new Set([
     "egdownload.fastly-edge.com",
@@ -30,6 +38,8 @@ const RELAY_ALLOWED_HOSTS =
 
 let relayRequests = 0;
 let relayBytes = 0;
+let chunkRelayRequests = 0;
+let chunkRelayBytes = 0;
 let manifestRelayRequests = 0;
 let manifestRelayBytes = 0;
 let exactImageRequests = 0;
@@ -213,6 +223,142 @@ const server =
 
           manifestRelayRequests++;
           manifestRelayBytes +=
+            bytes.byteLength;
+
+          res.writeHead(
+            200,
+            {
+              "Content-Type":
+                "application/octet-stream",
+              "Content-Length":
+                String(
+                  bytes.byteLength
+                ),
+              "Cache-Control":
+                "no-store"
+            }
+          );
+
+          res.end(
+            Buffer.from(
+              bytes
+            )
+          );
+
+          return;
+        }
+
+        if (
+          requestUrl.pathname.startsWith(
+            "/nova-edge/chunk/"
+          )
+        ) {
+          let relative;
+
+          try {
+            relative =
+              decodeURIComponent(
+                requestUrl.pathname.slice(
+                  "/nova-edge/chunk/".length
+                )
+              );
+          } catch {
+            res.writeHead(400);
+            res.end(
+              "Invalid BuildPatch chunk path"
+            );
+            return;
+          }
+
+          if (
+            !relative ||
+            relative.includes("..") ||
+            relative.includes("\\") ||
+            !relative
+              .toLowerCase()
+              .endsWith(
+                ".chunk"
+              )
+          ) {
+            res.writeHead(400);
+            res.end(
+              "Invalid BuildPatch chunk path"
+            );
+            return;
+          }
+
+          const target =
+            new URL(
+              relative,
+              BUILDPATCH_CHUNK_BASE
+            );
+
+          if (
+            !target
+              .toString()
+              .startsWith(
+                BUILDPATCH_CHUNK_BASE
+                  .toString()
+              )
+          ) {
+            res.writeHead(400);
+            res.end(
+              "Invalid BuildPatch chunk target"
+            );
+            return;
+          }
+
+          const upstream =
+            await fetch(
+              target,
+              {
+                method:
+                  "GET",
+                redirect:
+                  "error",
+                headers: {
+                  accept:
+                    "application/octet-stream,*/*;q=0.8"
+                }
+              }
+            );
+
+          if (
+            ![
+              200,
+              206
+            ].includes(
+              upstream.status
+            )
+          ) {
+            res.writeHead(502);
+            res.end(
+              "BuildPatch chunk upstream HTTP " +
+              upstream.status
+            );
+            return;
+          }
+
+          const bytes =
+            new Uint8Array(
+              await upstream
+                .arrayBuffer()
+            );
+
+          if (
+            bytes.byteLength < 32 ||
+            bytes.byteLength >
+              BUILDPATCH_MAX_CHUNK_BYTES
+          ) {
+            res.writeHead(502);
+            res.end(
+              "BuildPatch chunk exceeded byte budget"
+            );
+            return;
+          }
+
+          chunkRelayRequests++;
+          chunkRelayBytes +=
             bytes.byteLength;
 
           res.writeHead(
@@ -732,15 +878,15 @@ try {
   );
 
   assert.ok(
-    relayRequests >
+    chunkRelayRequests >
       0,
-    "FNAA Layer 8 never used the bounded range relay"
+    "FNAA Layer 8 never used the controlled BuildPatch chunk relay"
   );
 
   assert.ok(
-    relayBytes >
+    chunkRelayBytes >
       0,
-    "FNAA Layer 8 relay transferred no bytes"
+    "FNAA Layer 8 BuildPatch chunk relay transferred no bytes"
   );
 
   assert.ok(
@@ -751,11 +897,11 @@ try {
     "FNAA Layer 8 did not fetch the Fortnite manifest through the metadata relay"
   );
 
-  const uiRelayBefore = {
+  const uiChunkBefore = {
     requests:
-      relayRequests,
+      chunkRelayRequests,
     bytes:
-      relayBytes
+      chunkRelayBytes
   };
 
   const ui =
@@ -847,13 +993,13 @@ try {
       TARGET
     );
 
-  const uiRelay = {
+  const uiChunk = {
     requests:
-      relayRequests -
-      uiRelayBefore.requests,
+      chunkRelayRequests -
+      uiChunkBefore.requests,
     bytes:
-      relayBytes -
-      uiRelayBefore.bytes
+      chunkRelayBytes -
+      uiChunkBefore.bytes
   };
 
   assert.equal(
@@ -912,11 +1058,11 @@ try {
   );
 
   assert.ok(
-    uiRelay.requests >
+    uiChunk.requests >
       0 &&
-    uiRelay.bytes >
+    uiChunk.bytes >
       0,
-    "View Image did not use the bounded Layer 8 relay"
+    "View Image did not use the controlled BuildPatch chunk relay"
   );
 
   console.log(
@@ -934,14 +1080,16 @@ try {
         ui.meta,
       exactImageRequests,
       legacyTextureRequests,
-      relay:
-        uiRelay
+      chunkRelay:
+        uiChunk
     })
   );
 
   const cardCountersBefore = {
     relayRequests,
     relayBytes,
+    chunkRelayRequests,
+    chunkRelayBytes,
     exactImageRequests,
     legacyTextureRequests
   };
@@ -1038,6 +1186,8 @@ try {
   const cardNetwork = {
     relayRequests: relayRequests - cardCountersBefore.relayRequests,
     relayBytes: relayBytes - cardCountersBefore.relayBytes,
+    chunkRelayRequests: chunkRelayRequests - cardCountersBefore.chunkRelayRequests,
+    chunkRelayBytes: chunkRelayBytes - cardCountersBefore.chunkRelayBytes,
     exactImageRequests: exactImageRequests - cardCountersBefore.exactImageRequests,
     legacyTextureRequests: legacyTextureRequests - cardCountersBefore.legacyTextureRequests
   };
@@ -1052,7 +1202,7 @@ try {
   assert.match(cardUi.meta, /browser CUE4Parse/i);
   assert.ok(cardNetwork.exactImageRequests > 0);
   assert.equal(cardNetwork.legacyTextureRequests, 0);
-  assert.ok(cardNetwork.relayRequests > 0 && cardNetwork.relayBytes > 0);
+  assert.ok(cardNetwork.chunkRelayRequests > 0 && cardNetwork.chunkRelayBytes > 0);
 
   console.log(
     "FNAA_TEXTURE_CARD_LAYER8_PROVEN",
@@ -1134,13 +1284,19 @@ try {
       bytes:
         relayBytes
     },
+    chunkRelay: {
+      requests:
+        chunkRelayRequests,
+      bytes:
+        chunkRelayBytes
+    },
     manifestRelay: {
       requests:
         manifestRelayRequests,
       bytes:
         manifestRelayBytes
     },
-    uiRelay,
+    uiChunk,
     console:
       consoleLines.slice(
         -80
@@ -1170,6 +1326,8 @@ try {
           result.pixelsSha256,
         pngBytes:
           result.pngBytes,
+        chunkRelay:
+          proof.chunkRelay,
         relay:
           proof.relay,
         manifestRelay:
