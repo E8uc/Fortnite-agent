@@ -23,7 +23,7 @@ const context = {
   WebAssembly, document: {
     baseURI: 'https://example.test/',
     currentScript: {
-      src: 'https://example.test/novasparx-texture-runtime.js?v=105'
+      src: 'https://example.test/novasparx-texture-runtime.js?v=106'
     }
   },
   FNAA_CONFIG: { apiEndpoint: 'https://example.test' },
@@ -67,7 +67,7 @@ assert.equal(
 );
 assert.equal(
   workers[0].url.searchParams.get('runtimeRevision'),
-  '105',
+  '106',
   'browser runtime must version the Worker URL with the deployed script revision'
 );
 workers[0].send({ type: 'pixels', path: 'other.uasset', width: 1, height: 1, pixels: new ArrayBuffer(4) });
