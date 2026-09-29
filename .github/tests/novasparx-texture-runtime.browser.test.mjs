@@ -966,7 +966,8 @@ try {
   assert.ok(meshUi.src.startsWith('blob:'));
   assert.equal(meshUi.width,512);assert.equal(meshUi.height,512);
   assert.match(meshUi.meta,/44 triangles/);
-  assert.match(meshUi.meta,/unsupported/,'Unsupported LEGO decorators must not be treated as base color');
+  assert.match(meshUi.meta,/Base color preview/,'Verified surface Texture should be rendered on the Mesh');
+  assert.doesNotMatch(meshUi.meta,/unsupported/i);
   assert.equal(legacyTextureRequests,0);
   await page.locator('.asset-result-card .mesh-preview-image').screenshot({path:'fnaa-real-mesh.png'});
   fs.writeFileSync('fnaa-mesh-proof.json',JSON.stringify({path:meshPath,...meshUi},null,2));
