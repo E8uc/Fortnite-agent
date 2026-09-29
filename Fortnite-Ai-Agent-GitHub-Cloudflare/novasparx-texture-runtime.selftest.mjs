@@ -21,7 +21,11 @@ const context = {
     return new Promise(resolve => pending.set(path, { signal, resolve: () => resolve({ key: path, toc: 'test.utoc', shard: '00' }) }));
   },
   Worker: class {
-    constructor(url) { this.path = url.searchParams.get('path'); workers.push(this); }
+    constructor(url) {
+      this.url = url;
+      this.path = url.searchParams.get('path');
+      workers.push(this);
+    }
     terminate() { this.terminated = true; }
     send(data) { this.onmessage({ data }); }
   }
@@ -39,6 +43,11 @@ assert.equal(pending.get('a.uasset').signal.aborted, true);
 pending.get('b.uasset').resolve(); await tick();
 pending.get('a.uasset').resolve(); await rejectedA;
 assert.equal(workers.length, 1, 'old metadata must not spawn or replace a Worker');
+assert.equal(
+  workers[0].url.searchParams.get('chunkBase'),
+  'https://example.test/nova-edge/chunk/',
+  'browser runtime must keep Epic BuildPatch chunk fetches on the controlled Nova edge'
+);
 workers[0].send({ type: 'pixels', path: 'other.uasset', width: 1, height: 1, pixels: new ArrayBuffer(4) });
 await rejectedB;
 assert.equal(workers[0].terminated, true);

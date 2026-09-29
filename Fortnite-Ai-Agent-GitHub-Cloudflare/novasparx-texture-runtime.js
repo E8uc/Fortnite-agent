@@ -19,7 +19,7 @@
   const MANIFEST_ENDPOINT =
     "https://export-service-new.dillyapis.com/v1/manifests";
 
-  const CHUNK_BASE =
+  const DIRECT_CHUNK_BASE =
     "https://egdownload.fastly-edge.com/Builds/Fortnite/CloudDir/";
 
   const MAPPINGS_API =
@@ -1342,6 +1342,16 @@
     );
   }
 
+  function chunkBaseUrl() {
+    const base =
+      apiBase();
+
+    return base
+      ? base +
+          "/nova-edge/chunk/"
+      : DIRECT_CHUNK_BASE;
+  }
+
   function manifestRelayUrl(
     manifest
   ) {
@@ -1402,7 +1412,7 @@
 
     url.searchParams.set(
       "chunkBase",
-      CHUNK_BASE
+      chunkBaseUrl()
     );
 
     url.searchParams.set(
