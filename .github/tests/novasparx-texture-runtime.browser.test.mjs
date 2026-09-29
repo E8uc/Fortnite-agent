@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { chromium, webkit } from "playwright";
+import { chromium, webkit, devices } from "playwright";
 
 const BROWSER_ENGINE =
   String(
@@ -16,6 +16,26 @@ const BROWSER_TYPE =
     "webkit"
     ? webkit
     : chromium;
+
+const MOBILE_PROFILE =
+  String(
+    process.env
+      .FNAA_MOBILE_PROFILE ||
+    ""
+  ).toLowerCase();
+
+const PAGE_OPTIONS =
+  MOBILE_PROFILE === "ios"
+    ? {
+        ...devices["iPhone 13"],
+        browserName: undefined
+      }
+    : MOBILE_PROFILE === "android"
+      ? {
+          ...devices["Pixel 5"],
+          browserName: undefined
+        }
+      : {};
 
 const site =
   path.resolve(
@@ -766,7 +786,25 @@ const browser =
 
 try {
   const page =
-    await browser.newPage();
+    await browser.newPage(
+      PAGE_OPTIONS
+    );
+
+  console.log(
+    "FNAA_BROWSER_PROFILE",
+    JSON.stringify({
+      engine:
+        BROWSER_ENGINE,
+      mobileProfile:
+        MOBILE_PROFILE ||
+        "desktop",
+      userAgent:
+        await page.evaluate(
+          () =>
+            navigator.userAgent
+        )
+    })
+  );
 
   page.setDefaultTimeout(
     300_000
