@@ -3325,25 +3325,205 @@
       if (requestedKind === "staticmesh") {
         setStatus(ui.status, "Reading and rendering this Mesh in your browser…");
         try {
-          const result = await window.NovaSparxTextureRuntime.resolveMeshImage(clean, {signal});
-          throwIfAborted(signal);
-          const url = URL.createObjectURL(result.blob);
-          let loaded = false;
-          try { loaded = await loadImage(ui.image, url, 20000, signal); throwIfAborted(signal); }
-          finally { if (!loaded || signal?.aborted) URL.revokeObjectURL(url); }
-          if (!loaded) throw new Error("Mesh image could not be displayed");
-          rememberObjectUrl(clean, url);
-          ui.image.hidden = false; ui.status.hidden = true;
+          const result =
+            await window
+              .NovaSparxTextureRuntime
+              .resolveMeshImage(
+                clean,
+                {
+                  signal
+                }
+              );
+
+          throwIfAborted(
+            signal
+          );
+
+          const firstUrl =
+            URL.createObjectURL(
+              result.blob
+            );
+
+          let firstLoaded =
+            false;
+
+          try {
+            firstLoaded =
+              await loadImage(
+                ui.image,
+                firstUrl,
+                20_000,
+                signal
+              );
+
+            throwIfAborted(
+              signal
+            );
+          } finally {
+            if (
+              !firstLoaded ||
+              signal?.aborted
+            ) {
+              URL.revokeObjectURL(
+                firstUrl
+              );
+            }
+          }
+
+          if (!firstLoaded) {
+            throw new Error(
+              "Mesh image could not be displayed"
+            );
+          }
+
+          rememberObjectUrl(
+            clean,
+            firstUrl
+          );
+
+          ui.image.hidden =
+            false;
+
+          ui.status.hidden =
+            true;
+
+          setMeta(
+            ui.meta,
+            `Browser CUE4Parse Mesh • ${result.triangleCount} triangles • Geometry ready • loading Texture + Material…`,
+            "high"
+          );
+
+          if (
+            !result
+              .materialPromise
+          ) {
+            return {
+              state:
+                "ready",
+              kind:
+                "staticmesh",
+              materialFidelity:
+                result
+                  .materialFidelity
+            };
+          }
+
+          let materialResult;
+
+          try {
+            materialResult =
+              await result
+                .materialPromise;
+          } catch (materialError) {
+            if (
+              signal?.aborted ||
+              materialError
+                ?.name ===
+                "AbortError"
+            ) {
+              throw materialError;
+            }
+
+            setMeta(
+              ui.meta,
+              `Browser CUE4Parse Mesh • ${result.triangleCount} triangles • Mesh geometry ready • Texture + Material unavailable: ${String(materialError?.message || materialError).slice(0, 180)}`,
+              "partial"
+            );
+
+            return {
+              state:
+                "partial",
+              kind:
+                "staticmesh",
+              materialFidelity:
+                "geometry-only",
+              error:
+                String(
+                  materialError
+                    ?.message ||
+                  materialError
+                )
+            };
+          }
+
+          throwIfAborted(
+            signal
+          );
+
+          const finalUrl =
+            URL.createObjectURL(
+              materialResult.blob
+            );
+
+          let finalLoaded =
+            false;
+
+          try {
+            finalLoaded =
+              await loadImage(
+                ui.image,
+                finalUrl,
+                20_000,
+                signal
+              );
+
+            throwIfAborted(
+              signal
+            );
+          } finally {
+            if (
+              !finalLoaded ||
+              signal?.aborted
+            ) {
+              URL.revokeObjectURL(
+                finalUrl
+              );
+            }
+          }
+
+          if (!finalLoaded) {
+            throw new Error(
+              "Textured Mesh image could not be displayed"
+            );
+          }
+
+          rememberObjectUrl(
+            clean,
+            finalUrl
+          );
+
+          ui.image.hidden =
+            false;
+
+          ui.status.hidden =
+            true;
+
           const quality =
-            result.previewMode === "geometry-first"
-              ? "Fast geometry preview"
-              : (
-                  result.missingMaterials.length
-                    ? "Materials partially unsupported; geometry shown"
-                    : "Base color preview"
-                );
-          setMeta(ui.meta, `Browser CUE4Parse Mesh • ${result.triangleCount} triangles • ${quality}`, "high");
-          return {state:"ready",kind:"staticmesh",materialFidelity:result.materialFidelity};
+            materialResult
+              .missingMaterials
+              .length
+              ? "Mesh + Texture + Material • partially resolved"
+              : "Mesh + Texture + Material";
+
+          setMeta(
+            ui.meta,
+            `Browser CUE4Parse Mesh • ${materialResult.triangleCount} triangles • ${quality}`,
+            materialResult
+              .missingMaterials
+              .length
+              ? "partial"
+              : "high"
+          );
+
+          return {
+            state:
+              "ready",
+            kind:
+              "staticmesh",
+            materialFidelity:
+              materialResult
+                .materialFidelity
+          };
         } catch (error) {
           const failure = new Error(error?.message || String(error), {cause:error});
           failure.code = "NOVASPARX_MESH_FAILED"; throw failure;
