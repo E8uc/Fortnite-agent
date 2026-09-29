@@ -23,12 +23,15 @@ const RELAY_ALLOWED_HOSTS =
   new Set([
     "egdownload.fastly-edge.com",
     "download.epicgames.com",
+    "export-service-new.dillyapis.com",
     "fortnite-direct.dillycdn.com",
     "stormforge.dillycdn.com"
   ]);
 
 let relayRequests = 0;
 let relayBytes = 0;
+let manifestRelayRequests = 0;
+let manifestRelayBytes = 0;
 let exactImageRequests = 0;
 let legacyTextureRequests = 0;
 
@@ -112,6 +115,124 @@ const server =
 
           res.end(
             "Legacy Texture fallback must not be used by the Layer 8 UI proof."
+          );
+
+          return;
+        }
+
+        if (
+          requestUrl.pathname ===
+          "/nova-edge/manifest"
+        ) {
+          let target;
+
+          try {
+            target =
+              new URL(
+                requestUrl
+                  .searchParams
+                  .get(
+                    "url"
+                  ) ||
+                ""
+              );
+          } catch {
+            res.writeHead(400);
+            res.end(
+              "Invalid manifest relay URL"
+            );
+            return;
+          }
+
+          if (
+            target.protocol !==
+              "https:" ||
+            !RELAY_ALLOWED_HOSTS
+              .has(
+                target.hostname
+                  .toLowerCase()
+              )
+          ) {
+            res.writeHead(400);
+            res.end(
+              "Invalid manifest relay target"
+            );
+            return;
+          }
+
+          const upstream =
+            await fetch(
+              target,
+              {
+                method:
+                  "GET",
+                redirect:
+                  "follow",
+                headers: {
+                  accept:
+                    "application/octet-stream,*/*;q=0.8"
+                }
+              }
+            );
+
+          if (
+            ![
+              200,
+              206
+            ].includes(
+              upstream.status
+            )
+          ) {
+            res.writeHead(502);
+            res.end(
+              "Manifest relay upstream HTTP " +
+              upstream.status
+            );
+            return;
+          }
+
+          const bytes =
+            new Uint8Array(
+              await upstream
+                .arrayBuffer()
+            );
+
+          if (
+            bytes.byteLength < 32 ||
+            bytes.byteLength >
+              64 *
+              1024 *
+              1024
+          ) {
+            res.writeHead(502);
+            res.end(
+              "Manifest relay payload exceeded byte budget"
+            );
+            return;
+          }
+
+          manifestRelayRequests++;
+          manifestRelayBytes +=
+            bytes.byteLength;
+
+          res.writeHead(
+            200,
+            {
+              "Content-Type":
+                "application/octet-stream",
+              "Content-Length":
+                String(
+                  bytes.byteLength
+                ),
+              "Cache-Control":
+                "no-store"
+            }
+          );
+
+          res.end(
+            Buffer.from(
+              bytes
+            )
           );
 
           return;
@@ -622,6 +743,14 @@ try {
     "FNAA Layer 8 relay transferred no bytes"
   );
 
+  assert.ok(
+    manifestRelayRequests >
+      0 &&
+    manifestRelayBytes >
+      0,
+    "FNAA Layer 8 did not fetch the Fortnite manifest through the metadata relay"
+  );
+
   const uiRelayBefore = {
     requests:
       relayRequests,
@@ -1005,6 +1134,12 @@ try {
       bytes:
         relayBytes
     },
+    manifestRelay: {
+      requests:
+        manifestRelayRequests,
+      bytes:
+        manifestRelayBytes
+    },
     uiRelay,
     console:
       consoleLines.slice(
@@ -1036,7 +1171,9 @@ try {
         pngBytes:
           result.pngBytes,
         relay:
-          proof.relay
+          proof.relay,
+        manifestRelay:
+          proof.manifestRelay
       }
     )
   );
