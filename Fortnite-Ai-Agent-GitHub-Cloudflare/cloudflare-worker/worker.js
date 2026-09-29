@@ -202,6 +202,22 @@ function isAllowedOrigin(request, env) {
   );
 }
 
+function isAllowedNovaEdgeOrigin(
+  request,
+  env
+) {
+  const origin =
+    String(
+      request.headers.get("Origin") || ""
+    ).trim();
+
+  return (
+    !origin ||
+    origin === "null" ||
+    allowedOrigins(env).has(origin)
+  );
+}
+
 function baseCorsHeaders(
   request,
   env,
@@ -1352,7 +1368,7 @@ async function handleNovaEdgeManifest(
   ctx
 ) {
   if (
-    !isAllowedOrigin(
+    !isAllowedNovaEdgeOrigin(
       request,
       env
     )
@@ -1570,7 +1586,7 @@ async function handleNovaEdgeRange(
   url
 ) {
   if (
-    !isAllowedOrigin(
+    !isAllowedNovaEdgeOrigin(
       request,
       env
     )
