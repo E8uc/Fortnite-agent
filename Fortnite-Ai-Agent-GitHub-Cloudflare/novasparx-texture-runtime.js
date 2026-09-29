@@ -2118,63 +2118,381 @@
   async function resolveMeshImage(path, options = {}) {
     throwIfAborted(options.signal);
     activeRequest?.abort('replaced-by-new-mesh');
+
     const controller = new AbortController();
     activeRequest = controller;
-    const onAbort = () => controller.abort(options.signal?.reason);
-    options.signal?.addEventListener('abort', onAbort, {once:true});
-    const request = {...options, signal:controller.signal};
-    const urls = [];
-    try {
-      const [location, manifest] = await Promise.all([locate(path, request), currentManifestUrl(request)]);
-      throwIfAborted(request.signal);
-      const mesh = await runWorker(location, manifest, {...request, mode:'mesh'});
-      throwIfAborted(request.signal);
 
-      // View Image must become visible as soon as verified Mesh geometry is ready.
-      // Material Texture decoding used to launch one additional browser-WASM
-      // worker per material, serially. On mobile Safari each worker can spend
-      // up to 120 seconds rebuilding the same Fortnite runtime state, so a
-      // valid Mesh could remain stuck on "Reading and rendering..." for minutes.
-      //
-      // Keep material resolution out of this first-image path. The renderer's
-      // neutral material is deterministic, bounded, and still uses the exact
-      // CUE4Parse geometry extracted from Fortnite bytes.
+    const onAbort = () =>
+      controller.abort(
+        options.signal?.reason
+      );
+
+    options.signal?.addEventListener(
+      'abort',
+      onAbort,
+      {once:true}
+    );
+
+    const request = {
+      ...options,
+      signal:
+        controller.signal
+    };
+
+    let requestFinished =
+      false;
+
+    const finishRequest =
+      reason => {
+        if (requestFinished) {
+          return;
+        }
+
+        requestFinished =
+          true;
+
+        controller.abort(
+          reason ||
+          'mesh-request-finished'
+        );
+
+        options.signal
+          ?.removeEventListener(
+            'abort',
+            onAbort
+          );
+
+        if (
+          activeRequest ===
+          controller
+        ) {
+          activeRequest =
+            null;
+        }
+      };
+
+    try {
+      const [
+        location,
+        manifest
+      ] =
+        await Promise.all([
+          locate(
+            path,
+            request
+          ),
+          currentManifestUrl(
+            request
+          )
+        ]);
+
+      throwIfAborted(
+        request.signal
+      );
+
+      const mesh =
+        await runWorker(
+          location,
+          manifest,
+          {
+            ...request,
+            mode:
+              'mesh'
+          }
+        );
+
+      throwIfAborted(
+        request.signal
+      );
+
+      if (
+        !globalThis
+          .NovaSparxRenderer
+          ?.render
+      ) {
+        throw new Error(
+          'Mesh image renderer is unavailable'
+        );
+      }
+
       const materialCount =
-        Array.isArray(mesh.materialMetadata)
-          ? mesh.materialMetadata.length
+        Array.isArray(
+          mesh.materialMetadata
+        )
+          ? mesh
+              .materialMetadata
+              .length
           : 0;
 
-      const materials =
-        Array.from(
-          {length: materialCount},
-          () => ({})
-        );
-
-      const missingMaterials =
-        Array.from(
-          {length: materialCount},
-          (_, index) => index
-        );
-
-      if (!globalThis.NovaSparxRenderer?.render) throw new Error('Mesh image renderer is unavailable');
-      const rendered = await globalThis.NovaSparxRenderer.render({
-        geometry:{positions:new Float32Array(mesh.positions),indices:new Uint32Array(mesh.indices),uv0:new Float32Array(mesh.uv0)},
-        sections:mesh.sections.map(s=>({...s,indexCount:s.numTriangles*3})), materials,
-        metadata:{materialFidelity:'geometry-first'}
-      },{signal:request.signal,size:512});
-      throwIfAborted(request.signal);
-      return {
-        ...rendered,
-        path:mesh.path,
-        source:'browser-wasm',
-        missingMaterials,
-        previewMode:'geometry-first'
+      const geometry = {
+        positions:
+          new Float32Array(
+            mesh.positions
+          ),
+        indices:
+          new Uint32Array(
+            mesh.indices
+          ),
+        uv0:
+          new Float32Array(
+            mesh.uv0
+          )
       };
-    } finally {
-      for (const url of urls) URL.revokeObjectURL(url);
-      controller.abort('mesh-request-finished');
-      options.signal?.removeEventListener('abort', onAbort);
-      if (activeRequest === controller) activeRequest = null;
+
+      const sections =
+        mesh.sections.map(
+          section => ({
+            ...section,
+            indexCount:
+              section.numTriangles *
+              3
+          })
+        );
+
+      // First frame: show the verified CUE4Parse Mesh immediately.
+      // Texture + Material fidelity is upgraded below using the same
+      // browser Texture runtime that powers normal 2D Texture previews.
+      const firstFrame =
+        await globalThis
+          .NovaSparxRenderer
+          .render(
+            {
+              geometry,
+              sections,
+              materials:
+                Array.from(
+                  {
+                    length:
+                      materialCount
+                  },
+                  () => ({})
+                ),
+              metadata: {
+                materialFidelity:
+                  'geometry-first'
+              }
+            },
+            {
+              signal:
+                request.signal,
+              size:
+                512
+            }
+          );
+
+      throwIfAborted(
+        request.signal
+      );
+
+      const materialPromise =
+        (async () => {
+          const objectUrls = [];
+          const resolvedByPackage =
+            new Map();
+
+          try {
+            const materials = [];
+            const missingMaterials = [];
+
+            for (
+              let index = 0;
+              index <
+                materialCount;
+              index++
+            ) {
+              throwIfAborted(
+                request.signal
+              );
+
+              const metadata =
+                mesh
+                  .materialMetadata[
+                    index
+                  ];
+
+              const parameter =
+                baseColorParameter(
+                  metadata
+                );
+
+              if (
+                !parameter
+                  ?.packageId
+              ) {
+                materials.push(
+                  {}
+                );
+
+                missingMaterials
+                  .push(
+                    index
+                  );
+
+                continue;
+              }
+
+              const packageId =
+                String(
+                  parameter
+                    .packageId
+                )
+                  .toLowerCase();
+
+              let material =
+                resolvedByPackage
+                  .get(
+                    packageId
+                  );
+
+              if (!material) {
+                const textureLocation =
+                  await locatePackage(
+                    packageId,
+                    request
+                  );
+
+                const texture =
+                  await runWorker(
+                    textureLocation,
+                    manifest,
+                    {
+                      ...request,
+                      mode:
+                        'texture',
+                      maxSize:
+                        512
+                    }
+                  );
+
+                throwIfAborted(
+                  request.signal
+                );
+
+                const blob =
+                  await canvasBlob(
+                    texture.width,
+                    texture.height,
+                    texture.pixels
+                  );
+
+                throwIfAborted(
+                  request.signal
+                );
+
+                const url =
+                  URL.createObjectURL(
+                    blob
+                  );
+
+                objectUrls.push(
+                  url
+                );
+
+                material = {
+                  baseColorTexture:
+                    url
+                };
+
+                resolvedByPackage
+                  .set(
+                    packageId,
+                    material
+                  );
+              }
+
+              materials.push(
+                material
+              );
+            }
+
+            throwIfAborted(
+              request.signal
+            );
+
+            const rendered =
+              await globalThis
+                .NovaSparxRenderer
+                .render(
+                  {
+                    geometry,
+                    sections,
+                    materials,
+                    metadata: {
+                      materialFidelity:
+                        missingMaterials
+                          .length
+                          ? 'base-color-partial'
+                          : 'base-color-preview'
+                    }
+                  },
+                  {
+                    signal:
+                      request.signal,
+                    size:
+                      512
+                  }
+                );
+
+            throwIfAborted(
+              request.signal
+            );
+
+            return {
+              ...rendered,
+              path:
+                mesh.path,
+              source:
+                'browser-wasm',
+              missingMaterials,
+              previewMode:
+                missingMaterials
+                  .length
+                  ? 'base-color-partial'
+                  : 'base-color-preview'
+            };
+          } finally {
+            for (
+              const url of
+              objectUrls
+            ) {
+              try {
+                URL.revokeObjectURL(
+                  url
+                );
+              } catch {}
+            }
+
+            finishRequest(
+              'mesh-materials-finished'
+            );
+          }
+        })();
+
+      return {
+        ...firstFrame,
+        path:
+          mesh.path,
+        source:
+          'browser-wasm',
+        missingMaterials:
+          Array.from(
+            {
+              length:
+                materialCount
+            },
+            (_, index) =>
+              index
+          ),
+        previewMode:
+          'geometry-first',
+        materialPromise
+      };
+    } catch (error) {
+      finishRequest(
+        'mesh-request-failed'
+      );
+
+      throw error;
     }
   }
 
