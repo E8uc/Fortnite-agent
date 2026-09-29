@@ -3334,7 +3334,15 @@
           if (!loaded) throw new Error("Mesh image could not be displayed");
           rememberObjectUrl(clean, url);
           ui.image.hidden = false; ui.status.hidden = true;
-          setMeta(ui.meta, `Browser CUE4Parse Mesh • ${result.triangleCount} triangles • ${result.missingMaterials.length ? "Materials partially unsupported; geometry shown" : "Base color preview"}`, "high");
+          const quality =
+            result.previewMode === "geometry-first"
+              ? "Fast geometry preview"
+              : (
+                  result.missingMaterials.length
+                    ? "Materials partially unsupported; geometry shown"
+                    : "Base color preview"
+                );
+          setMeta(ui.meta, `Browser CUE4Parse Mesh • ${result.triangleCount} triangles • ${quality}`, "high");
           return {state:"ready",kind:"staticmesh",materialFidelity:result.materialFidelity};
         } catch (error) {
           const failure = new Error(error?.message || String(error), {cause:error});
