@@ -212,6 +212,24 @@ jobs:
             node .github/tests/novasparx-texture-runtime.browser.test.mjs \
             Fortnite-Ai-Agent-GitHub-Cloudflare
 
+      - name: Prove FNAA Layer 8 with iPhone WebKit profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          FNAA_BROWSER_ENGINE=webkit \
+          FNAA_MOBILE_PROFILE=ios \
+            node .github/tests/novasparx-texture-runtime.browser.test.mjs \
+            Fortnite-Ai-Agent-GitHub-Cloudflare
+
+      - name: Prove FNAA Layer 8 with Android Chromium profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          FNAA_BROWSER_ENGINE=chromium \
+          FNAA_MOBILE_PROFILE=android \
+            node .github/tests/novasparx-texture-runtime.browser.test.mjs \
+            Fortnite-Ai-Agent-GitHub-Cloudflare
+
       - name: Preserve FNAA Layer 8 proof
         if: always()
         uses: actions/upload-artifact@v4
