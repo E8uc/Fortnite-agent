@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: E8uc/NovaSparx
-          ref: 78eac6f66eeef24ea88bf1dca15738b76ad108db
+          ref: c7a2c1a3829144bc338f5c87fcd38b934f529614
           path: .novasparx-src
           fetch-depth: 1
 
