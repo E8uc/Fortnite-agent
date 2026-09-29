@@ -2128,27 +2128,48 @@
       const [location, manifest] = await Promise.all([locate(path, request), currentManifestUrl(request)]);
       throwIfAborted(request.signal);
       const mesh = await runWorker(location, manifest, {...request, mode:'mesh'});
-      const materials = [], missingMaterials = [];
-      for (let i=0;i<mesh.materialMetadata.length;i++) {
-        throwIfAborted(request.signal);
-        const material = mesh.materialMetadata[i], parameter = baseColorParameter(material);
-        if (!parameter?.packageId) { materials.push({}); missingMaterials.push(i); continue; }
-        const textureLocation = await locatePackage(parameter.packageId, request);
-        const texture = await runWorker(textureLocation, manifest, {...request, mode:'texture',maxSize:512});
-        const blob = await canvasBlob(texture.width, texture.height, texture.pixels);
-        throwIfAborted(request.signal);
-        const url = URL.createObjectURL(blob); urls.push(url);
-        materials.push({baseColorTexture:url});
-      }
       throwIfAborted(request.signal);
+
+      // View Image must become visible as soon as verified Mesh geometry is ready.
+      // Material Texture decoding used to launch one additional browser-WASM
+      // worker per material, serially. On mobile Safari each worker can spend
+      // up to 120 seconds rebuilding the same Fortnite runtime state, so a
+      // valid Mesh could remain stuck on "Reading and rendering..." for minutes.
+      //
+      // Keep material resolution out of this first-image path. The renderer's
+      // neutral material is deterministic, bounded, and still uses the exact
+      // CUE4Parse geometry extracted from Fortnite bytes.
+      const materialCount =
+        Array.isArray(mesh.materialMetadata)
+          ? mesh.materialMetadata.length
+          : 0;
+
+      const materials =
+        Array.from(
+          {length: materialCount},
+          () => ({})
+        );
+
+      const missingMaterials =
+        Array.from(
+          {length: materialCount},
+          (_, index) => index
+        );
+
       if (!globalThis.NovaSparxRenderer?.render) throw new Error('Mesh image renderer is unavailable');
       const rendered = await globalThis.NovaSparxRenderer.render({
         geometry:{positions:new Float32Array(mesh.positions),indices:new Uint32Array(mesh.indices),uv0:new Float32Array(mesh.uv0)},
         sections:mesh.sections.map(s=>({...s,indexCount:s.numTriangles*3})), materials,
-        metadata:{materialFidelity:missingMaterials.length ? 'geometry-only-or-partial' : 'base-color-preview'}
+        metadata:{materialFidelity:'geometry-first'}
       },{signal:request.signal,size:512});
       throwIfAborted(request.signal);
-      return {...rendered,path:mesh.path,source:'browser-wasm',missingMaterials};
+      return {
+        ...rendered,
+        path:mesh.path,
+        source:'browser-wasm',
+        missingMaterials,
+        previewMode:'geometry-first'
+      };
     } finally {
       for (const url of urls) URL.revokeObjectURL(url);
       controller.abort('mesh-request-finished');
