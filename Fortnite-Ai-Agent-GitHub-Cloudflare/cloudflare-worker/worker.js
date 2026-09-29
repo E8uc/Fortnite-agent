@@ -20,6 +20,12 @@ const NOVASPARX_EDGE_MANIFESTS_URL =
 const NOVASPARX_EDGE_MAX_RANGE_BYTES =
   4 * 1024 * 1024;
 
+const NOVASPARX_EDGE_MAX_CHUNK_BYTES =
+  8 * 1024 * 1024;
+
+const NOVASPARX_BUILDPATCH_CHUNK_BASE =
+  "https://egdownload.fastly-edge.com/Builds/Fortnite/CloudDir/";
+
 const NOVASPARX_EDGE_MAX_METADATA_BYTES =
   2 * 1024 * 1024;
 
@@ -525,6 +531,79 @@ function cleanNovaEdgeUrl(
   url.hash = "";
 
   return url;
+}
+
+function cleanNovaBuildPatchChunkPath(
+  pathname
+) {
+  const prefix =
+    "/nova-edge/chunk/";
+
+  const raw =
+    String(
+      pathname ||
+      ""
+    );
+
+  if (
+    !raw.startsWith(
+      prefix
+    )
+  ) {
+    return null;
+  }
+
+  let relative;
+
+  try {
+    relative =
+      decodeURIComponent(
+        raw.slice(
+          prefix.length
+        )
+      );
+  } catch {
+    return null;
+  }
+
+  relative =
+    relative
+      .replace(
+        /^\/+/, 
+        ""
+      );
+
+  if (
+    !relative ||
+    relative.length > 640 ||
+    relative.includes("\\") ||
+    relative.includes("..") ||
+    !relative
+      .toLowerCase()
+      .endsWith(
+        ".chunk"
+      )
+  ) {
+    return null;
+  }
+
+  const parts =
+    relative.split("/");
+
+  if (
+    parts.length < 3 ||
+    parts.length > 6 ||
+    parts.some(
+      part =>
+        !part ||
+        !/^[a-z0-9._-]+$/i
+          .test(part)
+    )
+  ) {
+    return null;
+  }
+
+  return relative;
 }
 
 function validateNovaEdgeRange(
@@ -1578,6 +1657,207 @@ async function handleNovaEdgeManifest(
   }
 
   return response;
+}
+
+async function handleNovaEdgeBuildPatchChunk(
+  request,
+  env,
+  url
+) {
+  if (
+    !isAllowedNovaEdgeOrigin(
+      request,
+      env
+    )
+  ) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Origin not allowed."
+      },
+      403
+    );
+  }
+
+  const relative =
+    cleanNovaBuildPatchChunkPath(
+      url.pathname
+    );
+
+  if (!relative) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "invalid",
+        error:
+          "Invalid Fortnite BuildPatch chunk path."
+      },
+      400
+    );
+  }
+
+  const target =
+    new URL(
+      relative,
+      NOVASPARX_BUILDPATCH_CHUNK_BASE
+    );
+
+  if (
+    !target
+      .toString()
+      .startsWith(
+        NOVASPARX_BUILDPATCH_CHUNK_BASE
+      )
+  ) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "invalid",
+        error:
+          "Invalid Fortnite BuildPatch chunk target."
+      },
+      400
+    );
+  }
+
+  let upstream;
+
+  try {
+    upstream =
+      await fetchWithTimeout(
+        target.toString(),
+        {
+          method:
+            "GET",
+          redirect:
+            "error",
+          headers: {
+            Accept:
+              "application/octet-stream,*/*;q=0.8"
+          },
+          signal:
+            request.signal
+        },
+        20_000
+      );
+  } catch (error) {
+    if (
+      request.signal
+        ?.aborted
+    ) {
+      throw error;
+    }
+
+    return json(
+      request,
+      env,
+      {
+        state:
+          "offline",
+        error:
+          "Fortnite BuildPatch chunk source unavailable."
+      },
+      502
+    );
+  }
+
+  if (
+    ![
+      200,
+      206
+    ].includes(
+      upstream.status
+    )
+  ) {
+    try {
+      await upstream.body
+        ?.cancel();
+    } catch {}
+
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Fortnite BuildPatch chunk source returned HTTP " +
+          upstream.status +
+          "."
+      },
+      502
+    );
+  }
+
+  let bytes;
+
+  try {
+    bytes =
+      await readResponseBytesBounded(
+        upstream,
+        NOVASPARX_EDGE_MAX_CHUNK_BYTES,
+        "Fortnite BuildPatch chunk"
+      );
+  } catch (error) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          String(
+            error?.message ||
+            "Fortnite BuildPatch chunk exceeded the browser byte budget."
+          )
+      },
+      502
+    );
+  }
+
+  if (
+    bytes.byteLength < 32
+  ) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Fortnite BuildPatch chunk returned an invalid payload."
+      },
+      502
+    );
+  }
+
+  return new Response(
+    bytes,
+    {
+      status:
+        200,
+      headers: {
+        ...publicBinaryHeaders(
+          "application/octet-stream",
+          "public, max-age=86400, immutable"
+        ),
+        "Content-Length":
+          String(
+            bytes.byteLength
+          ),
+        "X-FNAA-Nova-Source":
+          "buildpatch-chunk-relay"
+      }
+    }
+  );
 }
 
 async function handleNovaEdgeRange(
@@ -7678,6 +7958,27 @@ export default {
         env,
         url,
         ctx
+      );
+    }
+
+    if (
+      request.method ===
+        "GET" &&
+      url.pathname.startsWith(
+        "/nova-edge/chunk/"
+      )
+    ) {
+      if (!allowByAssetLimit(request)) {
+        return assetRateLimitResponse(
+          request,
+          env
+        );
+      }
+
+      return handleNovaEdgeBuildPatchChunk(
+        request,
+        env,
+        url
       );
     }
 
