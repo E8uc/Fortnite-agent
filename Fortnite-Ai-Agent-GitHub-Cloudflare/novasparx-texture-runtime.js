@@ -2002,9 +2002,81 @@
   }
 
   function baseColorParameter(material) {
-    // Never map LUTs, normals, masks, decorator/UDIM layers or an arbitrary first texture onto base color.
-    const candidates = (material?.textureParameters || []).filter(p => /^(base[ _]?colou?r|diffuse|albedo)([ _]?texture)?$/i.test(String(p.name || '')));
-    return candidates.length === 1 ? candidates[0] : null;
+    const ranked =
+      (material?.textureParameters || [])
+        .filter(parameter =>
+          /^[a-f0-9]{16}$/i.test(
+            String(parameter?.packageId || "")
+          )
+        )
+        .map(parameter => {
+          const name =
+            String(parameter?.name || "")
+              .trim()
+              .toLowerCase();
+
+          let score =
+            -1;
+
+          if (
+            /lut|lookup/.test(name) ||
+            /normal/.test(name) ||
+            /emissive/.test(name) ||
+            /opacity|mask/.test(name) ||
+            /rough|metal|spec/.test(name)
+          ) {
+            score =
+              -1;
+          } else if (
+            /^(base[ _]?colou?r|diffuse|albedo)([ _]?texture)?$/.test(name)
+          ) {
+            score =
+              120;
+          } else if (
+            name.includes("decorator")
+          ) {
+            score =
+              95;
+          } else if (
+            name.includes("color") ||
+            name.includes("colour")
+          ) {
+            score =
+              85;
+          }
+
+          return {
+            parameter,
+            score,
+            name
+          };
+        })
+        .filter(item =>
+          item.score >=
+          85
+        )
+        .sort((left, right) =>
+          right.score -
+            left.score ||
+          left.name.localeCompare(
+            right.name
+          ) ||
+          String(
+            left.parameter
+              ?.packageId ||
+            ""
+          ).localeCompare(
+            String(
+              right.parameter
+                ?.packageId ||
+              ""
+            )
+          )
+        );
+
+    return ranked[0]
+      ?.parameter ||
+      null;
   }
 
   async function resolveMeshImage(path, options = {}) {
