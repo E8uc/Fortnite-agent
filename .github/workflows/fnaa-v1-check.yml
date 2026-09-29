@@ -116,7 +116,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: E8uc/NovaSparx
-          ref: dcf77557381acb519366404f5b44701c4aaab26b
+          ref: c82e5784029b9360df49e6a77e129751fce52106
           path: .novasparx-src
           fetch-depth: 1
 
@@ -146,11 +146,12 @@ jobs:
           target="Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-runtime"
 
           rm -rf "$target"
-          mkdir -p "$target/location-index" "$target/package-id-index" "$target/mappings"
+          mkdir -p "$target/location-index" "$target/studio-location-index" "$target/package-id-index" "$target/mappings"
 
           cp -a "$bundle"/. "$target"/
           cp .novasparx-src/tools/CUE4Parse.BrowserProbe/worker.js "$target/worker.js"
           cp -a .novasparx-src/web/location-index/. "$target/location-index/"
+          cp -a .novasparx-src/web/studio-location-index/. "$target/studio-location-index/"
           cp -a .novasparx-src/web/package-id-index/. "$target/package-id-index/"
 
           mappings_meta="$(mktemp)"
@@ -179,6 +180,7 @@ jobs:
           test -s "$target/_framework/dotnet.js"
           test -n "$(find "$target/_framework" -type f -name '*.wasm' -print -quit)"
           test -s "$target/location-index/manifest.json"
+          test -s "$target/studio-location-index/manifest.json"
           test -s "$target/mappings/current.usmap"
           test -s "$target/mappings/current.usmap.sha256"
 
