@@ -7,7 +7,11 @@ import vm from 'node:vm';
 const workers = [], pending = new Map();
 let source = fs.readFileSync(new URL('./novasparx-texture-runtime.js', import.meta.url), 'utf8');
 source = source.replace('  function clearCaches() {', `
-  locate = globalThis.testLocate;
+  locate = (path, options) =>
+    globalThis.testLocate(
+      normalizeInput(path),
+      options
+    );
   locatePackage = globalThis.testLocatePackage;
   currentManifestUrl = async () => 'https://example.test/live.manifest';
   canvasBlob = async () => new Blob(['pixels']);
@@ -138,8 +142,9 @@ progressiveMeshWorker.send({
   }],
   materialMetadata: [{
     textureParameters: [{
-      name: 'BaseColor',
-      packageId: '0123456789abcdef'
+      name: 'PM_Diffuse',
+      path: '/Game/Textures/T_Inherited.T_Inherited',
+      packageId: ''
     }]
   }]
 });
@@ -151,7 +156,18 @@ progressiveMeshWorker.send({
 const firstFrame = await progressiveMesh;
 assert.equal(firstFrame.previewMode, 'geometry-first');
 assert.equal(typeof firstFrame.materialPromise?.then, 'function');
+
+const inheritedTexturePath =
+  'FortniteGame/Content/Textures/T_Inherited.uasset';
+
+assert.ok(
+  pending.has(inheritedTexturePath),
+  'PM_Diffuse inherited path must be routed through the normal asset location index'
+);
+
+pending.get(inheritedTexturePath).resolve();
 await tick();
+
 assert.equal(
   workers.length,
   beforeProgressiveWorkers + 2,
@@ -161,12 +177,12 @@ assert.equal(
 const materialWorker = workers.at(-1);
 assert.equal(
   materialWorker.path,
-  'material-0123456789abcdef.uasset'
+  inheritedTexturePath
 );
 
 materialWorker.send({
   type: 'pixels',
-  path: 'material-0123456789abcdef.uasset',
+  path: inheritedTexturePath,
   width: 1,
   height: 1,
   pixels: new ArrayBuffer(4)
@@ -186,4 +202,4 @@ assert.equal(
 );
 assert.equal(progressiveMeshWorker.terminated, true);
 assert.equal(materialWorker.terminated, true);
-console.log('Mesh View Image: geometry appears first, then the existing Texture runtime applies Texture + Material.');
+console.log('Mesh View Image: FModel-style PM_Diffuse parent Texture path resolves through the existing Texture runtime.');
