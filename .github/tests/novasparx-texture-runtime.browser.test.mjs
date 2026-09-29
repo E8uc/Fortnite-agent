@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { chromium, webkit } from "playwright";
+import { chromium, webkit, devices } from "playwright";
 
 const BROWSER_ENGINE =
   String(
@@ -16,6 +16,24 @@ const BROWSER_TYPE =
     "webkit"
     ? webkit
     : chromium;
+
+const MOBILE_PROFILE =
+  String(
+    process.env
+      .FNAA_MOBILE_PROFILE ||
+    ""
+  ).toLowerCase();
+
+const PAGE_OPTIONS =
+  MOBILE_PROFILE === "ios"
+    ? {
+        ...devices["iPhone 13"]
+      }
+    : MOBILE_PROFILE === "android"
+      ? {
+          ...devices["Pixel 5"]
+        }
+      : {};
 
 const site =
   path.resolve(
@@ -639,16 +657,9 @@ const server =
     allowTextureDecode: () => true
   };
 
-  window.NovaSparxBrowserGuard = {
-    status: () => ({
-      isMobile: true,
-      isIOS: true,
-      recoveryMode: false
-    })
-  };
-
   window.requestIdleCallback = () => 0;
 </script>
+<script src="/novasparx-browser-guard.js"></script>
 <script src="/novasparx-texture-runtime.js"></script>
 <script src="/preview.js"></script>
 <script src="/tools.js"></script>`;
@@ -766,7 +777,25 @@ const browser =
 
 try {
   const page =
-    await browser.newPage();
+    await browser.newPage(
+      PAGE_OPTIONS
+    );
+
+  console.log(
+    "FNAA_BROWSER_PROFILE",
+    JSON.stringify({
+      engine:
+        BROWSER_ENGINE,
+      mobileProfile:
+        MOBILE_PROFILE ||
+        "desktop",
+      userAgent:
+        await page.evaluate(
+          () =>
+            navigator.userAgent
+        )
+    })
+  );
 
   page.setDefaultTimeout(
     300_000
@@ -809,6 +838,42 @@ try {
         ?.resolveTexture ===
         "function"
   );
+
+  if (MOBILE_PROFILE) {
+    const guardStatus =
+      await page.evaluate(
+        () =>
+          globalThis
+            .NovaSparxBrowserGuard
+            ?.status?.() ||
+          null
+      );
+
+    assert.ok(
+      guardStatus,
+      "mobile profile must load NovaSparxBrowserGuard"
+    );
+
+    assert.equal(
+      guardStatus.previewTimeoutMs,
+      250_000,
+      "mobile Layer 8 must not be killed by the old 16–20 second operation timeout"
+    );
+
+    if (MOBILE_PROFILE === "ios") {
+      assert.equal(
+        guardStatus.isIOS,
+        true,
+        "iPhone WebKit profile was not detected as iOS"
+      );
+    } else {
+      assert.equal(
+        guardStatus.isAndroid,
+        true,
+        "Android Chromium profile was not detected as Android"
+      );
+    }
+  }
 
   const result =
     await page.evaluate(

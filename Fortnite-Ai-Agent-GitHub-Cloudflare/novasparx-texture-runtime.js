@@ -2070,6 +2070,10 @@
         .filter(parameter =>
           /^[a-f0-9]{16}$/i.test(
             String(parameter?.packageId || "")
+          ) ||
+          Boolean(
+            String(parameter?.path || "")
+              .trim()
           )
         )
         .map(parameter => {
@@ -2090,6 +2094,12 @@
           ) {
             score =
               -1;
+          } else if (
+            name === "pm_diffuse"
+          ) {
+            // CUE4Parse/FModel canonical effective diffuse fallback.
+            score =
+              140;
           } else if (
             /^(base[ _]?colou?r|diffuse|albedo)([ _]?texture)?$/.test(name)
           ) {
@@ -2342,9 +2352,28 @@
                   metadata
                 );
 
+              const packageId =
+                String(
+                  parameter
+                    ?.packageId ||
+                  ""
+                )
+                  .trim()
+                  .toLowerCase();
+
+              const texturePath =
+                String(
+                  parameter
+                    ?.path ||
+                  ""
+                )
+                  .trim();
+
               if (
-                !parameter
-                  ?.packageId
+                !/^[a-f0-9]{16}$/.test(
+                  packageId
+                ) &&
+                !texturePath
               ) {
                 materials.push(
                   {}
@@ -2358,25 +2387,37 @@
                 continue;
               }
 
-              const packageId =
-                String(
-                  parameter
-                    .packageId
+              const materialKey =
+                /^[a-f0-9]{16}$/.test(
+                  packageId
                 )
-                  .toLowerCase();
+                  ? "id:" +
+                    packageId
+                  : "path:" +
+                    normalizeInput(
+                      texturePath
+                    )
+                      .toLowerCase();
 
               let material =
                 resolvedByPackage
                   .get(
-                    packageId
+                    materialKey
                   );
 
               if (!material) {
                 const textureLocation =
-                  await locatePackage(
-                    packageId,
-                    request
-                  );
+                  /^[a-f0-9]{16}$/.test(
+                    packageId
+                  )
+                    ? await locatePackage(
+                        packageId,
+                        request
+                      )
+                    : await locate(
+                        texturePath,
+                        request
+                      );
 
                 const texture =
                   await runWorker(
@@ -2422,7 +2463,7 @@
 
                 resolvedByPackage
                   .set(
-                    packageId,
+                    materialKey,
                     material
                   );
               }

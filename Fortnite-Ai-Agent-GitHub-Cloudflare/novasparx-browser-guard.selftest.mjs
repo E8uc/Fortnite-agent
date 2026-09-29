@@ -71,6 +71,12 @@ assert.equal(
   300_000
 );
 
+assert.equal(
+  status.previewTimeoutMs,
+  250_000,
+  "iPhone Layer 8 operation must outlive the bounded 120-second Mesh/Texture workers"
+);
+
 let cancelled = false;
 
 const oversizedResponse = {
