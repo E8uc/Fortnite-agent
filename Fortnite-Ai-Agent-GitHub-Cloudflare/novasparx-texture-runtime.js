@@ -4,6 +4,28 @@
   const VERSION =
     "1.0.0";
 
+  const SCRIPT_REVISION =
+    (() => {
+      try {
+        const source =
+          document.currentScript
+            ?.src ||
+          document.baseURI;
+
+        return (
+          new URL(
+            source,
+            document.baseURI
+          )
+            .searchParams
+            .get("v") ||
+          VERSION
+        );
+      } catch {
+        return VERSION;
+      }
+    })();
+
   const RUNTIME_BASE =
     new URL(
       "novasparx-runtime/",
@@ -1435,6 +1457,11 @@
     url.searchParams.set(
       "relay",
       relayEndpoint()
+    );
+
+    url.searchParams.set(
+      "runtimeRevision",
+      SCRIPT_REVISION
     );
 
     return url;
