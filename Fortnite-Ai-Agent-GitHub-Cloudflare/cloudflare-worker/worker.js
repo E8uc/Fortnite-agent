@@ -23,6 +23,9 @@ const NOVASPARX_EDGE_MAX_RANGE_BYTES =
 const NOVASPARX_EDGE_MAX_METADATA_BYTES =
   2 * 1024 * 1024;
 
+const NOVASPARX_EDGE_MAX_MANIFEST_BYTES =
+  64 * 1024 * 1024;
+
 const NOVASPARX_EDGE_ALLOWED_RANGE_HOSTS = [
   "egdownload.fastly-edge.com",
   "download.epicgames.com",
@@ -1340,6 +1343,225 @@ async function handleNovaEdgeBootstrap(
         "public, max-age=300, stale-while-revalidate=3600"
     }
   );
+}
+
+async function handleNovaEdgeManifest(
+  request,
+  env,
+  url,
+  ctx
+) {
+  if (
+    !isAllowedOrigin(
+      request,
+      env
+    )
+  ) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Origin not allowed."
+      },
+      403
+    );
+  }
+
+  const target =
+    cleanNovaEdgeUrl(
+      url.searchParams
+        .get("url"),
+      env
+    );
+
+  if (!target) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "invalid",
+        error:
+          "Invalid NovaSparx manifest request."
+      },
+      400
+    );
+  }
+
+  const cache =
+    globalThis.caches
+      ?.default ||
+    null;
+
+  const cacheKey =
+    new Request(
+      url.toString(),
+      {
+        method:
+          "GET"
+      }
+    );
+
+  if (cache) {
+    const cached =
+      await cache.match(
+        cacheKey
+      );
+
+    if (cached) {
+      return cached;
+    }
+  }
+
+  let upstream;
+
+  try {
+    upstream =
+      await fetchWithTimeout(
+        target.toString(),
+        {
+          method:
+            "GET",
+          redirect:
+            "follow",
+          headers: {
+            Accept:
+              "application/octet-stream,*/*;q=0.8"
+          },
+          signal:
+            request.signal
+        },
+        30_000
+      );
+  } catch (error) {
+    if (
+      request.signal
+        ?.aborted
+    ) {
+      throw error;
+    }
+
+    return json(
+      request,
+      env,
+      {
+        state:
+          "offline",
+        error:
+          "Manifest source unavailable."
+      },
+      502
+    );
+  }
+
+  if (
+    ![
+      200,
+      206
+    ].includes(
+      upstream.status
+    )
+  ) {
+    try {
+      await upstream.body
+        ?.cancel();
+    } catch {}
+
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Manifest source returned HTTP " +
+          upstream.status +
+          "."
+      },
+      502
+    );
+  }
+
+  let bytes;
+
+  try {
+    bytes =
+      await readResponseBytesBounded(
+        upstream,
+        NOVASPARX_EDGE_MAX_MANIFEST_BYTES,
+        "Fortnite BuildPatch manifest"
+      );
+  } catch (error) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          String(
+            error?.message ||
+            "Manifest source exceeded the browser byte budget."
+          )
+      },
+      502
+    );
+  }
+
+  if (
+    !bytes ||
+    bytes.byteLength < 32
+  ) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Manifest source returned an invalid payload."
+      },
+      502
+    );
+  }
+
+  const response =
+    new Response(
+      bytes,
+      {
+        status:
+          200,
+        headers: {
+          ...publicBinaryHeaders(
+            "application/octet-stream",
+            "public, max-age=300, stale-while-revalidate=3600"
+          ),
+          "Content-Length":
+            String(
+              bytes.byteLength
+            ),
+          "X-FNAA-Nova-Source":
+            "manifest-relay"
+        }
+      }
+    );
+
+  if (
+    cache &&
+    ctx?.waitUntil
+  ) {
+    ctx.waitUntil(
+      cache.put(
+        cacheKey,
+        response.clone()
+      )
+    );
+  }
+
+  return response;
 }
 
 async function handleNovaEdgeRange(
@@ -7419,6 +7641,27 @@ export default {
       return handleNovaEdgeBootstrap(
         request,
         env
+      );
+    }
+
+    if (
+      request.method ===
+        "GET" &&
+      url.pathname ===
+        "/nova-edge/manifest"
+    ) {
+      if (!allowByAssetLimit(request)) {
+        return assetRateLimitResponse(
+          request,
+          env
+        );
+      }
+
+      return handleNovaEdgeManifest(
+        request,
+        env,
+        url,
+        ctx
       );
     }
 
