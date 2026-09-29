@@ -910,6 +910,57 @@ try {
     "https://fortnite-ai-agent-api.a39328122.workers.dev/nova-edge/chunk/" +
     chunkRelayPaths[0];
 
+  const directChunkUrl =
+    BUILDPATCH_CHUNK_BASE.toString() +
+    chunkRelayPaths[0];
+
+  const productionRangeUrl =
+    new URL(
+      "https://fortnite-ai-agent-api.a39328122.workers.dev/nova-edge/range"
+    );
+
+  productionRangeUrl.searchParams.set(
+    "url",
+    directChunkUrl
+  );
+  productionRangeUrl.searchParams.set(
+    "start",
+    "0"
+  );
+  productionRangeUrl.searchParams.set(
+    "end",
+    "0"
+  );
+
+  const productionRangeResponse =
+    await fetch(
+      productionRangeUrl,
+      {
+        headers: {
+          Origin:
+            "https://e8uc.github.io"
+        }
+      }
+    );
+
+  const productionRangeBody =
+    new Uint8Array(
+      await productionRangeResponse.arrayBuffer()
+    );
+
+  console.log(
+    "FNAA_PRODUCTION_RANGE_PROBE",
+    JSON.stringify({
+      path: chunkRelayPaths[0],
+      status: productionRangeResponse.status,
+      bytes: productionRangeBody.byteLength,
+      contentRange:
+        productionRangeResponse.headers.get(
+          "content-range"
+        ) || ""
+    })
+  );
+
   const productionChunkResponse =
     await fetch(
       productionChunkUrl,
