@@ -1245,7 +1245,7 @@ try {
   assert.ok(meshUi.src.startsWith('blob:'));
   assert.equal(meshUi.width,512);assert.equal(meshUi.height,512);
   assert.match(meshUi.meta,/44 triangles/);
-  assert.match(meshUi.meta,/Base color preview/,'Verified surface Texture should be rendered on the Mesh');
+  assert.match(meshUi.meta,/Fast geometry preview/,'View Image must render verified Mesh geometry without waiting on serial material Texture workers');
   assert.doesNotMatch(meshUi.meta,/unsupported/i);
   assert.equal(legacyTextureRequests,0);
   await page.locator('.asset-result-card .mesh-preview-image').screenshot({path:'fnaa-real-mesh.png'});
