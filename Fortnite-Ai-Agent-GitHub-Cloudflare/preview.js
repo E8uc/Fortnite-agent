@@ -3498,19 +3498,48 @@
           ui.status.hidden =
             true;
 
-          const quality =
+          const textureApplied =
             materialResult
-              .missingMaterials
-              .length
+              .textured ===
+            true;
+
+          const missingMaterials =
+            Array.isArray(
+              materialResult
+                .missingMaterials
+            )
+              ? materialResult
+                  .missingMaterials
+              : [];
+
+          if (!textureApplied) {
+            setMeta(
+              ui.meta,
+              `Browser CUE4Parse Mesh • ${materialResult.triangleCount} triangles • Mesh geometry ready • Texture + Material were decoded but not applied by the renderer`,
+              "partial"
+            );
+
+            return {
+              state:
+                "partial",
+              kind:
+                "staticmesh",
+              materialFidelity:
+                "geometry-only",
+              textured:
+                false
+            };
+          }
+
+          const quality =
+            missingMaterials.length
               ? "Mesh + Texture + Material • partially resolved"
               : "Mesh + Texture + Material";
 
           setMeta(
             ui.meta,
             `Browser CUE4Parse Mesh • ${materialResult.triangleCount} triangles • ${quality}`,
-            materialResult
-              .missingMaterials
-              .length
+            missingMaterials.length
               ? "partial"
               : "high"
           );
@@ -3522,7 +3551,9 @@
               "staticmesh",
             materialFidelity:
               materialResult
-                .materialFidelity
+                .materialFidelity,
+            textured:
+              true
           };
         } catch (error) {
           const failure = new Error(error?.message || String(error), {cause:error});

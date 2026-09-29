@@ -617,7 +617,9 @@
         texture:
           fallbackTexture,
         loaded:
-          false
+          false,
+        decoder:
+          "none"
       };
     }
 
@@ -632,8 +634,17 @@
     let bitmap =
       null;
 
+    let imageElement =
+      null;
+
+    let imageUrl =
+      null;
+
     let texture =
       null;
+
+    let decoder =
+      "none";
 
     try {
       const response =
@@ -692,18 +703,171 @@
         signal
       );
 
-      bitmap =
-        await createImageBitmap(
-          blob,
-          {
-            premultiplyAlpha:
-              "none"
+      let source =
+        null;
+
+      if (
+        typeof globalThis
+          .createImageBitmap ===
+        "function"
+      ) {
+        try {
+          bitmap =
+            await globalThis
+              .createImageBitmap(
+                blob,
+                {
+                  premultiplyAlpha:
+                    "none"
+                }
+              );
+
+          source =
+            bitmap;
+
+          decoder =
+            "image-bitmap";
+        } catch {
+          bitmap =
+            null;
+        }
+      }
+
+      if (!source) {
+        if (
+          typeof Image !==
+          "function"
+        ) {
+          throw new Error(
+            "Browser image decoding is unavailable."
+          );
+        }
+
+        imageUrl =
+          URL.createObjectURL(
+            blob
+          );
+
+        imageElement =
+          new Image();
+
+        imageElement.decoding =
+          "async";
+
+        await new Promise(
+          (
+            resolve,
+            reject
+          ) => {
+            let settled =
+              false;
+
+            const cleanup =
+              () => {
+                imageElement
+                  .removeEventListener(
+                    "load",
+                    onLoad
+                  );
+
+                imageElement
+                  .removeEventListener(
+                    "error",
+                    onError
+                  );
+
+                signal
+                  ?.removeEventListener(
+                    "abort",
+                    onAbort
+                  );
+              };
+
+            const finish =
+              (
+                error = null
+              ) => {
+                if (settled) {
+                  return;
+                }
+
+                settled =
+                  true;
+
+                cleanup();
+
+                error
+                  ? reject(
+                      error
+                    )
+                  : resolve();
+              };
+
+            const onLoad =
+              () =>
+                finish();
+
+            const onError =
+              () =>
+                finish(
+                  new Error(
+                    "Browser image decoder rejected the material Texture."
+                  )
+                );
+
+            const onAbort =
+              () =>
+                finish(
+                  abortError(
+                    signal
+                  )
+                );
+
+            imageElement
+              .addEventListener(
+                "load",
+                onLoad,
+                {
+                  once:
+                    true
+                }
+              );
+
+            imageElement
+              .addEventListener(
+                "error",
+                onError,
+                {
+                  once:
+                    true
+                }
+              );
+
+            signal
+              ?.addEventListener(
+                "abort",
+                onAbort,
+                {
+                  once:
+                    true
+                }
+              );
+
+            imageElement.src =
+              imageUrl;
           }
         );
 
-      throwIfAborted(
-        signal
-      );
+        throwIfAborted(
+          signal
+        );
+
+        source =
+          imageElement;
+
+        decoder =
+          "html-image";
+      }
 
       texture =
         gl.createTexture();
@@ -730,7 +894,7 @@
         gl.RGBA,
         gl.RGBA,
         gl.UNSIGNED_BYTE,
-        bitmap
+        source
       );
 
       gl.texParameteri(
@@ -776,7 +940,8 @@
       return {
         texture,
         loaded:
-          true
+          true,
+        decoder
       };
     } catch (error) {
       if (
@@ -806,7 +971,15 @@
         texture:
           fallbackTexture,
         loaded:
-          false
+          false,
+        decoder:
+          "fallback",
+        error:
+          String(
+            error?.message ||
+            error ||
+            "unknown texture decode error"
+          )
       };
     } finally {
       try {
@@ -814,6 +987,31 @@
       } catch {}
 
       bitmap =
+        null;
+
+      if (
+        imageElement
+      ) {
+        try {
+          imageElement.src =
+            "";
+        } catch {}
+      }
+
+      if (
+        imageUrl
+      ) {
+        try {
+          URL.revokeObjectURL(
+            imageUrl
+          );
+        } catch {}
+      }
+
+      imageElement =
+        null;
+
+      imageUrl =
         null;
     }
   }

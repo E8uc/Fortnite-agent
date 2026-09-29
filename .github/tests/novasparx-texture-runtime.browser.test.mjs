@@ -2,7 +2,20 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { chromium } from "playwright";
+import { chromium, webkit } from "playwright";
+
+const BROWSER_ENGINE =
+  String(
+    process.env
+      .FNAA_BROWSER_ENGINE ||
+    "chromium"
+  ).toLowerCase();
+
+const BROWSER_TYPE =
+  BROWSER_ENGINE ===
+    "webkit"
+    ? webkit
+    : chromium;
 
 const site =
   path.resolve(
@@ -746,7 +759,7 @@ const origin =
   `http://127.0.0.1:${address.port}`;
 
 const browser =
-  await chromium.launch({
+  await BROWSER_TYPE.launch({
     headless:
       true
   });
@@ -1255,6 +1268,211 @@ try {
   await page.locator('.asset-result-card .mesh-preview-image').screenshot({path:'fnaa-real-mesh.png'});
   fs.writeFileSync('fnaa-mesh-proof.json',JSON.stringify({path:meshPath,...meshUi},null,2));
   console.log('FNAA_REAL_MESH_BUTTON_IMAGE_PROVEN',JSON.stringify(meshUi));
+
+  const lazyLakePath =
+    "FortniteGame/Content/Environments/Apollo/Props/LazyLakeSign/Mesh/SM_LazyLakeLodge_Sign.uasset";
+
+  const lazyLakeUi =
+    await page.evaluate(
+      async target => {
+        const host =
+          document.createElement(
+            "div"
+          );
+
+        host.id =
+          "lazy-lake-material-proof";
+
+        document.body.append(
+          host
+        );
+
+        const result =
+          await globalThis
+            .FortnitePreview
+            .render(
+              host,
+              target.toLowerCase(),
+              null,
+              {
+                assetKind:
+                  "staticmesh"
+              }
+            );
+
+        const image =
+          host.querySelector(
+            ".mesh-preview-image"
+          );
+
+        const meta =
+          host.querySelector(
+            ".mesh-image-meta"
+          );
+
+        if (
+          !image ||
+          image.hidden ||
+          !image.src
+        ) {
+          throw new Error(
+            "Lazy Lake View Image did not display a preview."
+          );
+        }
+
+        if (
+          typeof image.decode ===
+          "function"
+        ) {
+          await image.decode();
+        }
+
+        const canvas =
+          document.createElement(
+            "canvas"
+          );
+
+        canvas.width =
+          image.naturalWidth;
+
+        canvas.height =
+          image.naturalHeight;
+
+        const context =
+          canvas.getContext(
+            "2d"
+          );
+
+        if (!context) {
+          throw new Error(
+            "Lazy Lake visual proof has no 2D canvas context."
+          );
+        }
+
+        context.drawImage(
+          image,
+          0,
+          0
+        );
+
+        const pixels =
+          context.getImageData(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+          ).data;
+
+        const colors =
+          new Set();
+
+        let visiblePixels =
+          0;
+
+        for (
+          let index = 0;
+          index < pixels.length;
+          index += 4
+        ) {
+          if (
+            pixels[index + 3] >
+            0
+          ) {
+            visiblePixels++;
+
+            if (
+              colors.size <
+              4096
+            ) {
+              colors.add(
+                pixels[index] +
+                "," +
+                pixels[index + 1] +
+                "," +
+                pixels[index + 2]
+              );
+            }
+          }
+        }
+
+        return {
+          state:
+            result?.state ||
+            "",
+          kind:
+            result?.kind ||
+            "",
+          textured:
+            result?.textured ===
+            true,
+          width:
+            image.naturalWidth,
+          height:
+            image.naturalHeight,
+          meta:
+            meta?.textContent ||
+            "",
+          visiblePixels,
+          distinctColors:
+            colors.size
+        };
+      },
+      lazyLakePath
+    );
+
+  assert.equal(
+    lazyLakeUi.state,
+    "ready",
+    "Lazy Lake did not reach a ready View Image state"
+  );
+
+  assert.equal(
+    lazyLakeUi.kind,
+    "staticmesh"
+  );
+
+  assert.equal(
+    lazyLakeUi.textured,
+    true,
+    "Lazy Lake renderer did not actually bind a decoded material Texture"
+  );
+
+  assert.equal(
+    lazyLakeUi.width,
+    512
+  );
+
+  assert.equal(
+    lazyLakeUi.height,
+    512
+  );
+
+  assert.match(
+    lazyLakeUi.meta,
+    /Mesh \+ Texture \+ Material/,
+    "Lazy Lake must not report success until the Texture is really applied"
+  );
+
+  assert.ok(
+    lazyLakeUi.visiblePixels >
+      0,
+    "Lazy Lake rendered no visible pixels"
+  );
+
+  assert.ok(
+    lazyLakeUi.distinctColors >
+      8,
+    "Lazy Lake final preview is visually blank or a single fallback color"
+  );
+
+  console.log(
+    "FNAA_LAZY_LAKE_TEXTURED_PROVEN",
+    JSON.stringify({
+      engine:
+        BROWSER_ENGINE,
+      ...lazyLakeUi
+    })
+  );
 
   const failedPreview = await page.evaluate(async target => {
     const original = globalThis.NovaSparxTextureRuntime;
