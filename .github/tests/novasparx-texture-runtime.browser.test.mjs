@@ -1238,6 +1238,10 @@ try {
     const image=document.querySelector('.asset-result-card .mesh-preview-image');
     return image && !image.hidden && image.complete && image.naturalWidth>0;
   },null,{timeout:240000});
+  await page.waitForFunction(()=>{
+    const meta=document.querySelector('.asset-result-card .mesh-image-meta')?.textContent || '';
+    return /Mesh \+ Texture \+ Material/.test(meta);
+  },null,{timeout:240000});
   const meshUi=await page.evaluate(()=>{
     const card=document.querySelector('.asset-result-card'),image=card.querySelector('.mesh-preview-image');
     return {width:image.naturalWidth,height:image.naturalHeight,src:image.src,meta:card.querySelector('.mesh-image-meta')?.textContent};
@@ -1245,7 +1249,7 @@ try {
   assert.ok(meshUi.src.startsWith('blob:'));
   assert.equal(meshUi.width,512);assert.equal(meshUi.height,512);
   assert.match(meshUi.meta,/44 triangles/);
-  assert.match(meshUi.meta,/Fast geometry preview/,'View Image must render verified Mesh geometry without waiting on serial material Texture workers');
+  assert.match(meshUi.meta,/Mesh \+ Texture \+ Material/,'Verified Mesh View Image must finish with the existing Texture engine applied to the material');
   assert.doesNotMatch(meshUi.meta,/unsupported/i);
   assert.equal(legacyTextureRequests,0);
   await page.locator('.asset-result-card .mesh-preview-image').screenshot({path:'fnaa-real-mesh.png'});
