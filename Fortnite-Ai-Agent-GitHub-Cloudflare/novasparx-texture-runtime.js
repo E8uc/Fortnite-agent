@@ -38,6 +38,12 @@
       RUNTIME_BASE
     );
 
+  const STUDIO_LOCATION_BASE =
+    new URL(
+      "studio-location-index/",
+      RUNTIME_BASE
+    );
+
   const MANIFEST_ENDPOINT =
     "https://export-service-new.dillyapis.com/v1/manifests";
 
@@ -71,13 +77,28 @@
   let locationManifestTask =
     null;
 
+  let studioLocationManifest =
+    null;
+
+  let studioLocationManifestTask =
+    null;
+
   const shardCache =
+    new Map();
+
+  const studioShardCache =
     new Map();
 
   let rawManifestCache =
     null;
 
   let rawManifestTask =
+    null;
+
+  let studioRawManifestCache =
+    null;
+
+  let studioRawManifestTask =
     null;
 
   let activeRun =
@@ -496,22 +517,46 @@
       );
   }
 
-  async function getLocationManifest(
-    options = {}
+  function locationBase(
+    family
   ) {
+    return family ===
+      "studio"
+      ? STUDIO_LOCATION_BASE
+      : LOCATION_BASE;
+  }
+
+  async function getLocationManifest(
+    options = {},
+    family = "live"
+  ) {
+    const studio =
+      family ===
+      "studio";
+
+    const cached =
+      studio
+        ? studioLocationManifest
+        : locationManifest;
+
+    const pending =
+      studio
+        ? studioLocationManifestTask
+        : locationManifestTask;
+
     if (
-      locationManifest &&
+      cached &&
       !options.refresh
     ) {
-      return locationManifest;
+      return cached;
     }
 
     if (
-      locationManifestTask &&
+      pending &&
       !options.signal &&
       !options.refresh
     ) {
-      return await locationManifestTask;
+      return await pending;
     }
 
     const request =
@@ -520,10 +565,14 @@
           await fetchJson(
             new URL(
               "manifest.json",
-              LOCATION_BASE
+              locationBase(
+                family
+              )
             ),
             128 * 1024,
-            "NovaSparx asset location manifest",
+            studio
+              ? "NovaSparx Fortnite Studio location manifest"
+              : "NovaSparx asset location manifest",
             {
               signal:
                 options.signal,
@@ -545,21 +594,41 @@
           );
         }
 
-        locationManifest =
-          data;
+        if (studio) {
+          studioLocationManifest =
+            data;
+        } else {
+          locationManifest =
+            data;
+        }
 
         return data;
       })();
 
-    locationManifestTask =
-      request;
+    if (studio) {
+      studioLocationManifestTask =
+        request;
+    } else {
+      locationManifestTask =
+        request;
+    }
 
     try {
       return await request;
     } finally {
       if (
+        studio &&
+        studioLocationManifestTask ===
+          request
+      ) {
+        studioLocationManifestTask =
+          null;
+      }
+
+      if (
+        !studio &&
         locationManifestTask ===
-        request
+          request
       ) {
         locationManifestTask =
           null;
@@ -567,7 +636,9 @@
     }
   }
 
-  function trimShardCache() {
+  function trimShardCache(
+    cache
+  ) {
     const state =
       globalThis
         .NovaSparxBrowserGuard
@@ -582,11 +653,11 @@
           : 8;
 
     while (
-      shardCache.size >
+      cache.size >
       limit
     ) {
       const key =
-        shardCache
+        cache
           .keys()
           .next()
           .value;
@@ -595,7 +666,7 @@
         break;
       }
 
-      shardCache.delete(
+      cache.delete(
         key
       );
     }
@@ -603,24 +674,34 @@
 
   async function getShard(
     shard,
-    options = {}
+    options = {},
+    family = "live"
   ) {
+    const studio =
+      family ===
+      "studio";
+
+    const cache =
+      studio
+        ? studioShardCache
+        : shardCache;
+
     if (
-      shardCache.has(
+      cache.has(
         shard
       ) &&
       !options.refresh
     ) {
       const value =
-        shardCache.get(
+        cache.get(
           shard
         );
 
-      shardCache.delete(
+      cache.delete(
         shard
       );
 
-      shardCache.set(
+      cache.set(
         shard,
         value
       );
@@ -630,7 +711,7 @@
 
     if (
       typeof DecompressionStream !==
-      "function"
+        "function"
     ) {
       const error =
         new Error(
@@ -648,10 +729,14 @@
         new URL(
           shard +
           ".json.gz",
-          LOCATION_BASE
+          locationBase(
+            family
+          )
         ),
         MAX_SHARD_GZIP_BYTES,
-        "NovaSparx asset location shard",
+        studio
+          ? "NovaSparx Fortnite Studio location shard"
+          : "NovaSparx asset location shard",
         {
           signal:
             options.signal,
@@ -685,7 +770,9 @@
           stream
         ),
         MAX_SHARD_JSON_BYTES,
-        "NovaSparx expanded asset location shard",
+        studio
+          ? "NovaSparx expanded Fortnite Studio location shard"
+          : "NovaSparx expanded asset location shard",
         options.signal
       );
 
@@ -719,12 +806,14 @@
       );
     }
 
-    shardCache.set(
+    cache.set(
       shard,
       data
     );
 
-    trimShardCache();
+    trimShardCache(
+      cache
+    );
 
     return data;
   }
@@ -737,78 +826,115 @@
       options.signal
     );
 
-    await getLocationManifest(
-      options
-    );
-
     for (
-      const candidate of
-      lookupCandidates(
-        path
-      )
+      const family of [
+        "live",
+        "studio"
+      ]
     ) {
-      const key =
-        candidate
-          .toLowerCase();
+      let manifest;
 
-      const shard =
-        fnvShard(
-          key
-        );
+      try {
+        manifest =
+          await getLocationManifest(
+            options,
+            family
+          );
+      } catch (error) {
+        if (
+          family ===
+            "live" ||
+          error?.name ===
+            "AbortError"
+        ) {
+          throw error;
+        }
 
-      const data =
-        await getShard(
-          shard,
-          options
-        );
-
-      throwIfAborted(
-        options.signal
-      );
+        continue;
+      }
 
       if (
-        !Object.hasOwn(
-          data.items,
-          key
-        )
+        !manifest ||
+        Number(
+          manifest.entries ||
+          0
+        ) < 1
       ) {
         continue;
       }
 
-      const toc =
-        data.items[
-          key
-        ];
-
-      if (
-        typeof toc !==
-          "string" ||
-        !/\.utoc$/i.test(
-          toc
-        ) ||
-        toc.includes(
-          ".."
+      for (
+        const candidate of
+        lookupCandidates(
+          path
         )
       ) {
-        throw new Error(
-          "NovaSparx asset location entry is invalid."
-        );
-      }
+        const key =
+          candidate
+            .toLowerCase();
 
-      return {
-        key,
-        toc:
-          toc.replace(
-            /\\/g,
-            "/"
-          ),
-        shard
-      };
+        const shard =
+          fnvShard(
+            key
+          );
+
+        const data =
+          await getShard(
+            shard,
+            options,
+            family
+          );
+
+        throwIfAborted(
+          options.signal
+        );
+
+        if (
+          !Object.hasOwn(
+            data.items,
+            key
+          )
+        ) {
+          continue;
+        }
+
+        const toc =
+          data.items[
+            key
+          ];
+
+        if (
+          typeof toc !==
+            "string" ||
+          !/\.utoc$/i.test(
+            toc
+          ) ||
+          toc.includes(
+            ".."
+          )
+        ) {
+          throw new Error(
+            "NovaSparx asset location entry is invalid."
+          );
+        }
+
+        return {
+          key,
+          toc:
+            toc.replace(
+              /\\/g,
+              "/"
+            ),
+          shard,
+          manifestFamily:
+            family
+        };
+      }
     }
 
     const error =
       new Error(
-        "This Fortnite asset is not present in the current NovaSparx location index."
+        "This Fortnite asset is not present in the current NovaSparx core or Fortnite Studio location index."
       );
 
     error.code =
