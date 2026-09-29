@@ -1256,6 +1256,188 @@ try {
   fs.writeFileSync('fnaa-mesh-proof.json',JSON.stringify({path:meshPath,...meshUi},null,2));
   console.log('FNAA_REAL_MESH_BUTTON_IMAGE_PROVEN',JSON.stringify(meshUi));
 
+  // Large Apollo container proof: this is the asset that succeeds at the
+  // low-level Mesh parser but previously stopped before Texture + Material in
+  // the real FNAA View Image flow.
+  const lazyMeshPath =
+    "StaticMesh'FortniteGame/Content/Environments/Apollo/Props/LazyLakeSign/Mesh/SM_LazyLakeLodge_Sign.uasset'";
+
+  await page.evaluate(lazyMeshPath => {
+    window.FortniteAgent.searchDatabase =
+      async () => ({
+        results: [{
+          path: lazyMeshPath,
+          source: 'live-lazy-lake-proof',
+          match: 'exact'
+        }],
+        total: 1
+      });
+
+    window.FortniteTools.open('assets');
+    document.querySelector('#assetQuery').value =
+      'LazyLakeLodge';
+    document.querySelector('#assetSearch').click();
+  }, lazyMeshPath);
+
+  const lazyButton =
+    page.locator(
+      '.asset-result-card [data-asset-action="preview"]'
+    );
+
+  await page.waitForFunction(() => {
+    const card =
+      document.querySelector(
+        '.asset-result-card'
+      );
+
+    return (
+      card?.dataset.assetKind ===
+        'staticmesh' &&
+      !card
+        .querySelector(
+          '[data-asset-action="preview"]'
+        )
+        .disabled
+    );
+  });
+
+  assert.equal(
+    await lazyButton.textContent(),
+    'View Image'
+  );
+
+  await lazyButton.click();
+
+  await page.waitForFunction(() => {
+    const image =
+      document.querySelector(
+        '.asset-result-card .mesh-preview-image'
+      );
+
+    return (
+      image &&
+      !image.hidden &&
+      image.complete &&
+      image.naturalWidth > 0
+    );
+  }, null, {timeout: 240000});
+
+  await page.waitForFunction(() => {
+    const card =
+      document.querySelector(
+        '.asset-result-card'
+      );
+
+    const meta =
+      card
+        ?.querySelector(
+          '.mesh-image-meta'
+        )
+        ?.textContent ||
+      '';
+
+    const status =
+      card
+        ?.querySelector(
+          '.mesh-image-status'
+        )
+        ?.textContent ||
+      '';
+
+    return (
+      /Mesh \+ Texture \+ Material/.test(meta) ||
+      /Texture \+ Material unavailable|decoded but not applied|View Image unavailable/i
+        .test(meta + ' ' + status)
+    );
+  }, null, {timeout: 240000});
+
+  const lazyUi =
+    await page.evaluate(() => {
+      const card =
+        document.querySelector(
+          '.asset-result-card'
+        );
+
+      const image =
+        card.querySelector(
+          '.mesh-preview-image'
+        );
+
+      return {
+        width:
+          image.naturalWidth,
+        height:
+          image.naturalHeight,
+        src:
+          image.src,
+        meta:
+          card
+            .querySelector(
+              '.mesh-image-meta'
+            )
+            ?.textContent ||
+          '',
+        status:
+          card
+            .querySelector(
+              '.mesh-image-status'
+            )
+            ?.textContent ||
+          ''
+      };
+    });
+
+  console.log(
+    'FNAA_LAZY_LAKE_MESH_IMAGE_RESULT',
+    JSON.stringify(lazyUi)
+  );
+
+  assert.ok(
+    lazyUi.src.startsWith('blob:')
+  );
+
+  assert.equal(
+    lazyUi.width,
+    512
+  );
+
+  assert.equal(
+    lazyUi.height,
+    512
+  );
+
+  assert.match(
+    lazyUi.meta,
+    /60 triangles/
+  );
+
+  assert.match(
+    lazyUi.meta,
+    /Mesh \+ Texture \+ Material/,
+    'Lazy Lake View Image must finish with its Diffuse Texture and Material applied: ' +
+      JSON.stringify(lazyUi)
+  );
+
+  assert.doesNotMatch(
+    lazyUi.meta + ' ' +
+      lazyUi.status,
+    /unavailable|not applied|error/i
+  );
+
+  await page
+    .locator(
+      '.asset-result-card .mesh-preview-image'
+    )
+    .screenshot({
+      path:
+        'fnaa-lazy-lake-mesh.png'
+    });
+
+  console.log(
+    'FNAA_LAZY_LAKE_MESH_IMAGE_PROVEN',
+    JSON.stringify(lazyUi)
+  );
+
   const failedPreview = await page.evaluate(async target => {
     const original = globalThis.NovaSparxTextureRuntime;
     globalThis.NovaSparxTextureRuntime = {
