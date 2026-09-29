@@ -657,16 +657,9 @@ const server =
     allowTextureDecode: () => true
   };
 
-  window.NovaSparxBrowserGuard = {
-    status: () => ({
-      isMobile: true,
-      isIOS: true,
-      recoveryMode: false
-    })
-  };
-
   window.requestIdleCallback = () => 0;
 </script>
+<script src="/novasparx-browser-guard.js"></script>
 <script src="/novasparx-texture-runtime.js"></script>
 <script src="/preview.js"></script>
 <script src="/tools.js"></script>`;
