@@ -155,12 +155,18 @@
           ? 480_000
           : 1_200_000;
 
+  // Layer 8 Mesh View Image can legitimately run two bounded WASM phases:
+  // Mesh parsing, then one or more material Texture decodes. Each worker already
+  // has its own 120-second timeout, so aborting the entire operation at 16–20s
+  // made physical iOS/Android devices fail while fast desktop/WebKit CI passed.
+  // Keep the memory/geometry budgets strict and give the bounded worker phases
+  // enough wall-clock time to finish on slower phones.
   const previewTimeoutMs =
     isIOS
-      ? 16_000
+      ? 250_000
       : isMobile
-        ? 20_000
-        : 35_000;
+        ? 250_000
+        : 180_000;
 
   let activeController = null;
   let activeOperationId = 0;
