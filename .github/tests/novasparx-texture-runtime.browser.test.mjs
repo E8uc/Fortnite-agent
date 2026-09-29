@@ -2,7 +2,20 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { chromium } from "playwright";
+import { chromium, webkit } from "playwright";
+
+const BROWSER_ENGINE =
+  String(
+    process.env
+      .FNAA_BROWSER_ENGINE ||
+    "chromium"
+  ).toLowerCase();
+
+const BROWSER_TYPE =
+  BROWSER_ENGINE ===
+    "webkit"
+    ? webkit
+    : chromium;
 
 const site =
   path.resolve(
@@ -746,7 +759,7 @@ const origin =
   `http://127.0.0.1:${address.port}`;
 
 const browser =
-  await chromium.launch({
+  await BROWSER_TYPE.launch({
     headless:
       true
   });
