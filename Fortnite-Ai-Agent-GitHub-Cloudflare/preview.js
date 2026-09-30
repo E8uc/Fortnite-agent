@@ -3503,6 +3503,12 @@
               .textured ===
             true;
 
+          const materialApplied =
+            textureApplied ||
+            materialResult
+              .materialApplied ===
+            true;
+
           const missingMaterials =
             Array.isArray(
               materialResult
@@ -3512,10 +3518,10 @@
                   .missingMaterials
               : [];
 
-          if (!textureApplied) {
+          if (!materialApplied) {
             setMeta(
               ui.meta,
-              `Browser CUE4Parse Mesh • ${materialResult.triangleCount} triangles • Mesh geometry ready • Texture + Material were decoded but not applied by the renderer`,
+              `Browser CUE4Parse Mesh • ${materialResult.triangleCount} triangles • Mesh geometry ready • no supported BaseColor/Emissive material preview was resolved`,
               "partial"
             );
 
@@ -3532,9 +3538,17 @@
           }
 
           const quality =
-            missingMaterials.length
-              ? "Mesh + Texture + Material • partially resolved"
-              : "Mesh + Texture + Material";
+            textureApplied
+              ? (
+                  missingMaterials.length
+                    ? "Mesh + Texture + Material • partially resolved"
+                    : "Mesh + Texture + Material"
+                )
+              : (
+                  missingMaterials.length
+                    ? "Mesh + Material • partially resolved"
+                    : "Mesh + Material"
+                );
 
           setMeta(
             ui.meta,
@@ -3553,7 +3567,7 @@
               materialResult
                 .materialFidelity,
             textured:
-              true
+              textureApplied
           };
         } catch (error) {
           const failure = new Error(error?.message || String(error), {cause:error});
