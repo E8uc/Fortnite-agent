@@ -303,3 +303,190 @@ assert.equal(
 );
 console.log('Mesh View Image: environment material ranking prefers WS/layer diffuse over generic color textures.');
 
+async function proveParameterMaterial(path, metadata) {
+  const beforeWorkers =
+    workers.length;
+
+  const request =
+    runtime.resolveMeshImage(
+      path
+    );
+
+  pending.get(path).resolve();
+  await tick();
+
+  const meshWorker =
+    workers.at(-1);
+
+  meshWorker.send({
+    type: 'mesh',
+    path,
+    positions:
+      new Float32Array([
+        0, 0, 0,
+        1, 0, 0,
+        0, 1, 0
+      ]).buffer,
+    indices:
+      new Uint32Array([
+        0, 1, 2
+      ]).buffer,
+    uv0:
+      new Float32Array([
+        0, 0,
+        1, 0,
+        0, 1
+      ]).buffer,
+    sections: [{
+      firstIndex: 0,
+      numTriangles: 1,
+      materialIndex: 0
+    }],
+    materialMetadata: [
+      metadata
+    ]
+  });
+
+  meshWorker.send({
+    type: 'done',
+    exitCode: 0
+  });
+
+  const first =
+    await request;
+
+  const final =
+    await first.materialPromise;
+
+  assert.equal(
+    workers.length,
+    beforeWorkers + 1,
+    'Parameter-only Mesh unexpectedly spawned a Texture worker'
+  );
+
+  assert.equal(
+    final.previewMode,
+    'parameter-preview'
+  );
+
+  assert.deepEqual(
+    final.missingMaterials,
+    []
+  );
+
+  return renderCalls.at(-1)
+    .materials[0];
+}
+
+const waterMaterial =
+  await proveParameterMaterial(
+    'water.uasset',
+    {
+      textureParameters: [],
+      vectorParameterValues: [
+        {
+          name: 'BaseColor',
+          r: 0.192688,
+          g: 0.610496,
+          b: 0.600139,
+          a: 1
+        },
+        {
+          name: 'HLODColorOverride',
+          r: 0.060764,
+          g: 0.208333,
+          b: 0.186334,
+          a: 1
+        }
+      ],
+      scalarParameterValues: [
+        {
+          name: 'FarWaveNormalScale',
+          value: 750
+        }
+      ]
+    }
+  );
+
+assert.equal(
+  waterMaterial.parameterPreview,
+  true
+);
+assert.deepEqual(
+  waterMaterial.baseColor,
+  [
+    0.192688,
+    0.610496,
+    0.600139,
+    1
+  ]
+);
+
+const pirateMaterial =
+  await proveParameterMaterial(
+    'pirate.uasset',
+    {
+      textureParameters: [],
+      vectorParameterValues: [
+        {
+          name: 'Elipsis',
+          r: 2,
+          g: 1,
+          b: 1,
+          a: 1
+        },
+        {
+          name: 'Emissive',
+          r: 10,
+          g: 4.217889,
+          b: 1.06289,
+          a: 1
+        }
+      ],
+      scalarParameterValues: [
+        {
+          name: 'Day',
+          value: -11.932945
+        }
+      ]
+    }
+  );
+
+assert.equal(
+  pirateMaterial.parameterPreview,
+  true
+);
+assert.deepEqual(
+  pirateMaterial.baseColor,
+  [
+    0,
+    0,
+    0,
+    1
+  ]
+);
+assert.ok(
+  Math.abs(
+    pirateMaterial.emissiveColor[0] -
+    1
+  ) <
+  1e-9
+);
+assert.ok(
+  Math.abs(
+    pirateMaterial.emissiveColor[1] -
+    0.4217889
+  ) <
+  1e-7
+);
+assert.ok(
+  Math.abs(
+    pirateMaterial.emissiveColor[2] -
+    0.106289
+  ) <
+  1e-7
+);
+
+console.log('Mesh View Image: vector/scalar-only Water and procedural Emissive materials produce renderable parameter previews.');
+
+
