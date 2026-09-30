@@ -1574,6 +1574,81 @@ try {
     })
   );
 
+  // Exercise the exact sparse large-UTOC path that physical phones were
+  // failing inside ReadTocStructureAsync. This asset resolves from
+  // pakchunk40-WindowsClient.utoc (> 32 MiB), so reaching geometry proves the
+  // compact structural prefix was allocated and parsed successfully.
+  const largeTocMeshPath =
+    "FortniteGame/Content/Environments/Arid/Other/SM_STW_Flowers_Group_02.uasset";
+
+  const largeTocMesh =
+    await page.evaluate(
+      async target => {
+        const controller =
+          new AbortController();
+
+        const firstFrame =
+          await globalThis
+            .NovaSparxTextureRuntime
+            .resolveMeshImage(
+              target.toLowerCase(),
+              {
+                signal:
+                  controller.signal
+              }
+            );
+
+        firstFrame
+          .materialPromise
+          ?.catch?.(
+            () => {}
+          );
+
+        controller.abort(
+          "large-toc-geometry-proven"
+        );
+
+        return {
+          path:
+            firstFrame.path ||
+            "",
+          triangleCount:
+            firstFrame.triangleCount ||
+            0,
+          previewMode:
+            firstFrame.previewMode ||
+            "",
+          source:
+            firstFrame.source ||
+            ""
+        };
+      },
+      largeTocMeshPath
+    );
+
+  assert.equal(
+    largeTocMesh.source,
+    "browser-wasm"
+  );
+
+  assert.ok(
+    largeTocMesh.triangleCount >
+      0,
+    "Large-UTOC STW Mesh returned no geometry"
+  );
+
+  console.log(
+    "FNAA_LARGE_TOC_MESH_PROVEN",
+    JSON.stringify({
+      engine:
+        BROWSER_ENGINE,
+      mobileProfile:
+        MOBILE_PROFILE ||
+        "desktop",
+      ...largeTocMesh
+    })
+  );
+
   const failedPreview = await page.evaluate(async target => {
     const original = globalThis.NovaSparxTextureRuntime;
     globalThis.NovaSparxTextureRuntime = {

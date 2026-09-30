@@ -1459,9 +1459,21 @@
       normalized
     );
 
+    // Safari/WebKit intermittently rejects the direct cross-origin
+    // metadata fetch even though the same Dilly endpoint works in Chromium.
+    // Route metadata through the already-bounded Cloudflare manifest relay;
+    // raw .manifest bytes are relayed separately when the Worker starts.
+    const metadataUrl =
+      normalized ===
+        MANIFEST_ENDPOINT
+        ? manifestRelayUrl(
+            normalized
+          )
+        : normalized;
+
     const data =
       await fetchJson(
-        normalized,
+        metadataUrl,
         MAX_METADATA_BYTES,
         "NovaSparx manifest metadata",
         {
@@ -1588,7 +1600,9 @@
       (async () => {
         const data =
           await fetchJson(
-            MANIFEST_ENDPOINT,
+            manifestRelayUrl(
+              MANIFEST_ENDPOINT
+            ),
             MAX_METADATA_BYTES,
             "NovaSparx manifest metadata",
             {
