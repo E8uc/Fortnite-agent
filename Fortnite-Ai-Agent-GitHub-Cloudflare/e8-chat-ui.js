@@ -3,6 +3,87 @@ const state = {
   anchor: null
 };
 
+const styleReady =
+  new Promise(
+    (resolve) => {
+      const existing =
+        document.querySelector(
+          'link[data-e8-chat-ui="1"]'
+        );
+
+      if (existing) {
+        if (
+          existing.sheet ||
+          existing.dataset.loaded ===
+            "1"
+        ) {
+          resolve();
+          return;
+        }
+
+        existing.addEventListener(
+          "load",
+          resolve,
+          {
+            once: true
+          }
+        );
+
+        existing.addEventListener(
+          "error",
+          resolve,
+          {
+            once: true
+          }
+        );
+
+        return;
+      }
+
+      const link =
+        document.createElement(
+          "link"
+        );
+
+      link.rel =
+        "stylesheet";
+
+      link.href =
+        new URL(
+          "e8-chat-ui.css?v=1",
+          import.meta.url
+        ).href;
+
+      link.dataset.e8ChatUi =
+        "1";
+
+      link.addEventListener(
+        "load",
+        () => {
+          link.dataset.loaded =
+            "1";
+
+          resolve();
+        },
+        {
+          once: true
+        }
+      );
+
+      link.addEventListener(
+        "error",
+        resolve,
+        {
+          once: true
+        }
+      );
+
+      document.head.appendChild(
+        link
+      );
+    }
+  );
+
 function iconMarkup(
   name,
   size = 20
@@ -721,9 +802,10 @@ function openFind(
   );
 }
 
-export function openFeedbackMenu(
+export async function openFeedbackMenu(
   options
 ) {
+  await styleReady;
   const {
     anchor,
     currentRating = "",
@@ -761,9 +843,10 @@ export function openFeedbackMenu(
   );
 }
 
-export function openChatMenu(
+export async function openChatMenu(
   options
 ) {
+  await styleReady;
   const {
     anchor,
     pinned = false,
