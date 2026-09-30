@@ -3503,6 +3503,12 @@
               .textured ===
             true;
 
+          const materialApplied =
+            materialResult
+              .materialApplied ===
+            true ||
+            textureApplied;
+
           const missingMaterials =
             Array.isArray(
               materialResult
@@ -3512,10 +3518,10 @@
                   .missingMaterials
               : [];
 
-          if (!textureApplied) {
+          if (!materialApplied) {
             setMeta(
               ui.meta,
-              `Browser CUE4Parse Mesh • ${materialResult.triangleCount} triangles • Mesh geometry ready • Texture + Material were decoded but not applied by the renderer`,
+              `Browser CUE4Parse Mesh • ${materialResult.triangleCount} triangles • Mesh geometry ready • no renderable Texture or material parameters were found`,
               "partial"
             );
 
@@ -3527,14 +3533,24 @@
               materialFidelity:
                 "geometry-only",
               textured:
+                false,
+              materialApplied:
                 false
             };
           }
 
           const quality =
-            missingMaterials.length
-              ? "Mesh + Texture + Material • partially resolved"
-              : "Mesh + Texture + Material";
+            textureApplied
+              ? (
+                  missingMaterials.length
+                    ? "Mesh + Texture + Material • partially resolved"
+                    : "Mesh + Texture + Material"
+                )
+              : (
+                  missingMaterials.length
+                    ? "Mesh + Material • parameter preview • partially resolved"
+                    : "Mesh + Material • parameter/procedural preview"
+                );
 
           setMeta(
             ui.meta,
@@ -3553,6 +3569,8 @@
               materialResult
                 .materialFidelity,
             textured:
+              textureApplied,
+            materialApplied:
               true
           };
         } catch (error) {
