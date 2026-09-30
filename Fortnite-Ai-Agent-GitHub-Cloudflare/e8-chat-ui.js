@@ -5,7 +5,10 @@ const state = {
 
 const styleReady =
   new Promise(
-    (resolve) => {
+    (
+      resolve,
+      reject
+    ) => {
       const existing =
         document.querySelector(
           'link[data-e8-chat-ui="1"]'
@@ -31,7 +34,12 @@ const styleReady =
 
         existing.addEventListener(
           "error",
-          resolve,
+          () =>
+            reject(
+              new Error(
+                "E8 chat UI styles failed to load."
+              )
+            ),
           {
             once: true
           }
@@ -72,7 +80,12 @@ const styleReady =
 
       link.addEventListener(
         "error",
-        resolve,
+        () =>
+          reject(
+            new Error(
+              "E8 chat UI styles failed to load."
+            )
+          ),
         {
           once: true
         }
