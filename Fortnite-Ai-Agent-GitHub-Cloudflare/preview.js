@@ -19,14 +19,112 @@
       {};
 
     if (state.isIOS) {
-      return 2;
+      return 1;
     }
 
     if (state.isMobile) {
-      return 3;
+      return 2;
     }
 
-    return 8;
+    return 6;
+  }
+
+  function clearPreviewImageForKey(
+    key,
+    releasedUrl = ""
+  ) {
+    for (
+      const panel of
+      document.querySelectorAll(
+        "[data-preview-asset-path]"
+      )
+    ) {
+      if (
+        String(
+          panel.dataset
+            .previewAssetPath ||
+          ""
+        ).trim() !==
+        key
+      ) {
+        continue;
+      }
+
+      const image =
+        panel.querySelector(
+          ".mesh-preview-image"
+        );
+
+      if (!image) {
+        continue;
+      }
+
+      const source =
+        String(
+          image.getAttribute(
+            "src"
+          ) ||
+          ""
+        );
+
+      if (
+        releasedUrl &&
+        source &&
+        source !==
+          releasedUrl
+      ) {
+        continue;
+      }
+
+      try {
+        image.removeAttribute(
+          "src"
+        );
+      } catch {}
+
+      image.hidden =
+        true;
+
+      panel
+        .querySelector?.(
+          ".mesh-image-stage"
+        )
+        ?.setAttribute(
+          "data-preview-state",
+          "released"
+        );
+    }
+  }
+
+  function forgetObjectUrl(
+    key,
+    clearImage = false
+  ) {
+    const old =
+      objectUrls.get(
+        key
+      );
+
+    if (!old) {
+      return;
+    }
+
+    try {
+      URL.revokeObjectURL(
+        old
+      );
+    } catch {}
+
+    objectUrls.delete(
+      key
+    );
+
+    if (clearImage) {
+      clearPreviewImageForKey(
+        key,
+        old
+      );
+    }
   }
 
   function rememberObjectUrl(
@@ -41,7 +139,11 @@
       return;
     }
 
-    release(key);
+    // Replace the same asset's previous Blob without tearing down the
+    // current UI. This is the normal geometry -> textured image upgrade.
+    forgetObjectUrl(
+      key
+    );
 
     objectUrls.set(
       key,
@@ -64,21 +166,13 @@
         break;
       }
 
-      const oldestUrl =
-        objectUrls.get(
-          oldestKey
-        );
-
-      try {
-        if (oldestUrl) {
-          URL.revokeObjectURL(
-            oldestUrl
-          );
-        }
-      } catch {}
-
-      objectUrls.delete(
-        oldestKey
+      // Safari can keep a decoded raster alive even after the Blob URL is
+      // revoked while an <img> still points at it. Detach the evicted image
+      // as well so physical iPhones release that memory before the next WASM
+      // Mesh Worker starts.
+      forgetObjectUrl(
+        oldestKey,
+        true
       );
     }
   }
@@ -201,22 +295,10 @@
       );
     }
 
-    const old =
-      objectUrls.get(
-        key
-      );
-
-    if (old) {
-      try {
-        URL.revokeObjectURL(
-          old
-        );
-      } catch {}
-
-      objectUrls.delete(
-        key
-      );
-    }
+    forgetObjectUrl(
+      key,
+      true
+    );
   }
 
   function releaseAll() {
@@ -865,9 +947,26 @@
         ""
       ).trim();
 
+    const previewPath =
+      String(
+        ui.panel.dataset
+          .previewAssetPath ||
+        ""
+      ).trim();
+
     if (mountedPath) {
       release(
         mountedPath
+      );
+    }
+
+    if (
+      previewPath &&
+      previewPath !==
+        mountedPath
+    ) {
+      release(
+        previewPath
       );
     }
 

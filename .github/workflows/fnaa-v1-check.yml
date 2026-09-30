@@ -116,7 +116,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: E8uc/NovaSparx
-          ref: 493f71f90aceddee9a1cc9a97842df12696b9d6e
+          ref: 0d3033285346c814f4f4904680abcb0d83df1d49
           path: .novasparx-src
           fetch-depth: 1
 
@@ -239,6 +239,7 @@ jobs:
           name: fnaa-layer8-browser-proof
           path: |
             fnaa-layer8-browser-proof.json
+            fnaa-mobile-heavy-mesh-proof.json
             fnaa-mesh-proof.json
             fnaa-real-mesh.png
           if-no-files-found: ignore
