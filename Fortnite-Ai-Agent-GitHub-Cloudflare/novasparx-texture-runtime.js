@@ -2600,6 +2600,211 @@
       null;
   }
 
+  function materialValueFallback(material) {
+    const vectorValues =
+      Array.isArray(
+        material?.vectorParameterValues
+      )
+        ? material.vectorParameterValues
+        : [];
+
+    const scalarValues =
+      Array.isArray(
+        material?.scalarParameterValues
+      )
+        ? material.scalarParameterValues
+        : [];
+
+    const usableVector =
+      value => {
+        const channels = [
+          Number(value?.r),
+          Number(value?.g),
+          Number(value?.b),
+          Number(value?.a)
+        ];
+
+        return channels.every(
+          Number.isFinite
+        )
+          ? channels
+          : null;
+      };
+
+    const rankedVector =
+      terms =>
+        vectorValues
+          .map(value => {
+            const name =
+              String(
+                value?.name ||
+                ""
+              )
+                .trim()
+                .toLowerCase();
+
+            const color =
+              usableVector(
+                value
+              );
+
+            let score =
+              -1;
+
+            if (
+              !color ||
+              /hlod|override/.test(
+                name
+              )
+            ) {
+              score =
+                -1;
+            } else if (
+              terms.some(
+                term =>
+                  name === term
+              )
+            ) {
+              score =
+                120;
+            } else if (
+              terms.some(
+                term =>
+                  name.includes(
+                    term
+                  )
+              )
+            ) {
+              score =
+                90;
+            }
+
+            return {
+              color,
+              name,
+              score
+            };
+          })
+          .filter(
+            item =>
+              item.score >= 0
+          )
+          .sort(
+            (
+              left,
+              right
+            ) =>
+              right.score -
+                left.score ||
+              left.name.localeCompare(
+                right.name
+              )
+          )[0] ||
+        null;
+
+    const base =
+      rankedVector([
+        "basecolor",
+        "base color",
+        "diffusecolor",
+        "diffuse color",
+        "albedo",
+        "color"
+      ]);
+
+    const emissive =
+      rankedVector([
+        "emissive",
+        "emissivecolor",
+        "emissive color"
+      ]);
+
+    const opacity =
+      scalarValues
+        .map(value => ({
+          name:
+            String(
+              value?.name ||
+              ""
+            )
+              .trim()
+              .toLowerCase(),
+          value:
+            Number(
+              value?.value
+            )
+        }))
+        .filter(
+          item =>
+            Number.isFinite(
+              item.value
+            ) &&
+            (
+              item.name ===
+                "opacity" ||
+              item.name ===
+                "opacityvalue" ||
+              item.name ===
+                "opacity value"
+            )
+        )
+        .sort(
+          (
+            left,
+            right
+          ) =>
+            left.name.localeCompare(
+              right.name
+            )
+        )[0] ||
+      null;
+
+    const preview = {};
+
+    if (base) {
+      preview.baseColor =
+        base.color;
+    }
+
+    if (emissive) {
+      preview.emissiveColor =
+        emissive.color;
+
+      if (!base) {
+        // Procedural emissive-only materials such as distant background
+        // meshes should not fall back to the renderer's white base color.
+        preview.baseColor = [
+          0,
+          0,
+          0,
+          1
+        ];
+      }
+    }
+
+    if (opacity) {
+      preview.opacity =
+        Math.max(
+          0,
+          Math.min(
+            1,
+            opacity.value
+          )
+        );
+    }
+
+    return {
+      material:
+        preview,
+      applied:
+        Boolean(
+          base ||
+          emissive ||
+          opacity
+        )
+    };
+  }
+
   async function resolveMeshImage(path, options = {}) {
     throwIfAborted(options.signal);
     activeRequest?.abort('replaced-by-new-mesh');
@@ -2775,6 +2980,8 @@
           try {
             const materials = [];
             const missingMaterials = [];
+            let textureMaterialCount = 0;
+            let valueMaterialCount = 0;
 
             for (
               let index = 0;
@@ -2791,6 +2998,11 @@
                   .materialMetadata[
                     index
                   ];
+
+              const valueFallback =
+                materialValueFallback(
+                  metadata
+                );
 
               const parameter =
                 baseColorParameter(
@@ -2821,13 +3033,21 @@
                 !texturePath
               ) {
                 materials.push(
-                  {}
+                  valueFallback
+                    .material
                 );
 
-                missingMaterials
-                  .push(
-                    index
-                  );
+                if (
+                  valueFallback
+                    .applied
+                ) {
+                  valueMaterialCount++;
+                } else {
+                  missingMaterials
+                    .push(
+                      index
+                    );
+                }
 
                 continue;
               }
@@ -2888,6 +3108,8 @@
                 );
 
                 material = {
+                  ...valueFallback
+                    .material,
                   baseColorFrame: {
                     width:
                       texture.width,
@@ -2908,6 +3130,8 @@
               materials.push(
                 material
               );
+
+              textureMaterialCount++;
             }
 
             throwIfAborted(
@@ -2924,10 +3148,23 @@
                     materials,
                     metadata: {
                       materialFidelity:
-                        missingMaterials
-                          .length
-                          ? 'base-color-partial'
-                          : 'base-color-preview'
+                        textureMaterialCount >
+                          0
+                          ? (
+                              missingMaterials
+                                .length
+                                ? 'base-color-partial'
+                                : 'base-color-preview'
+                            )
+                          : valueMaterialCount >
+                              0
+                            ? (
+                                missingMaterials
+                                  .length
+                                  ? 'material-value-partial'
+                                  : 'material-value-preview'
+                              )
+                            : 'geometry-only'
                     }
                   },
                   {
@@ -2949,11 +3186,30 @@
               source:
                 'browser-wasm',
               missingMaterials,
+              materialApplied:
+                rendered
+                  .textured ===
+                  true ||
+                valueMaterialCount >
+                  0,
               previewMode:
-                missingMaterials
-                  .length
-                  ? 'base-color-partial'
-                  : 'base-color-preview'
+                textureMaterialCount >
+                  0
+                  ? (
+                      missingMaterials
+                        .length
+                        ? 'base-color-partial'
+                        : 'base-color-preview'
+                    )
+                  : valueMaterialCount >
+                      0
+                    ? (
+                        missingMaterials
+                          .length
+                          ? 'material-value-partial'
+                          : 'material-value-preview'
+                      )
+                    : 'geometry-only'
             };
           } finally {
             finishRequest(
