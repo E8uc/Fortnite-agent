@@ -2600,6 +2600,382 @@
       null;
   }
 
+  function vectorMaterialParameter(material, role) {
+    const values =
+      Array.isArray(
+        material?.vectorParameterValues
+      )
+        ? material.vectorParameterValues
+        : [];
+
+    const ranked =
+      values
+        .map(parameter => {
+          const name =
+            String(
+              parameter?.name ||
+              ""
+            )
+              .trim()
+              .toLowerCase();
+
+          const components = [
+            Number(parameter?.r),
+            Number(parameter?.g),
+            Number(parameter?.b),
+            Number(parameter?.a)
+          ];
+
+          if (
+            !name ||
+            !components
+              .every(
+                Number.isFinite
+              )
+          ) {
+            return null;
+          }
+
+          let score =
+            -1;
+
+          if (
+            role ===
+            "base"
+          ) {
+            if (
+              /^(base[ _]?colou?r|diffuse[ _]?colou?r|albedo)$/.test(
+                name
+              )
+            ) {
+              score =
+                220;
+            } else if (
+              name ===
+                "color1_base" ||
+              name ===
+                "colour1_base"
+            ) {
+              score =
+                190;
+            } else if (
+              /centercolou?r/.test(
+                name
+              )
+            ) {
+              score =
+                175;
+            } else if (
+              /hlodcolou?roverride/.test(
+                name
+              )
+            ) {
+              score =
+                130;
+            } else if (
+              /base.*colou?r|diffuse.*colou?r/.test(
+                name
+              ) &&
+              !/emissive|subsurface|pivot/.test(
+                name
+              )
+            ) {
+              score =
+                150;
+            }
+          } else if (
+            role ===
+            "emissive"
+          ) {
+            if (
+              name ===
+              "emissive"
+            ) {
+              score =
+                220;
+            } else if (
+              name.includes(
+                "emissive"
+              )
+            ) {
+              score =
+                180;
+            }
+          }
+
+          return {
+            parameter,
+            name,
+            components,
+            score
+          };
+        })
+        .filter(
+          item =>
+            item &&
+            item.score >=
+              0
+        )
+        .sort(
+          (
+            left,
+            right
+          ) =>
+            right.score -
+              left.score ||
+            left.name
+              .localeCompare(
+                right.name
+              )
+        );
+
+    return ranked[0] ||
+      null;
+  }
+
+  function normalizeMaterialColor(
+    item
+  ) {
+    if (!item) {
+      return null;
+    }
+
+    let [
+      r,
+      g,
+      b
+    ] =
+      item.components;
+
+    r =
+      Math.max(
+        0,
+        r
+      );
+
+    g =
+      Math.max(
+        0,
+        g
+      );
+
+    b =
+      Math.max(
+        0,
+        b
+      );
+
+    const peak =
+      Math.max(
+        r,
+        g,
+        b,
+        1
+      );
+
+    if (
+      peak >
+      1
+    ) {
+      r /=
+        peak;
+
+      g /=
+        peak;
+
+      b /=
+        peak;
+    }
+
+    return [
+      Math.min(
+        1,
+        r
+      ),
+      Math.min(
+        1,
+        g
+      ),
+      Math.min(
+        1,
+        b
+      ),
+      1
+    ];
+  }
+
+  function scalarMaterialParameter(
+    material,
+    pattern
+  ) {
+    const values =
+      Array.isArray(
+        material?.scalarParameterValues
+      )
+        ? material.scalarParameterValues
+        : [];
+
+    for (
+      const parameter of
+        values
+    ) {
+      const name =
+        String(
+          parameter?.name ||
+          ""
+        )
+          .trim()
+          .toLowerCase();
+
+      const value =
+        Number(
+          parameter?.value
+        );
+
+      if (
+        pattern.test(
+          name
+        ) &&
+        Number.isFinite(
+          value
+        )
+      ) {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  function parameterMaterial(
+    metadata
+  ) {
+    const base =
+      vectorMaterialParameter(
+        metadata,
+        "base"
+      );
+
+    const emissive =
+      vectorMaterialParameter(
+        metadata,
+        "emissive"
+      );
+
+    if (
+      !base &&
+      !emissive
+    ) {
+      return null;
+    }
+
+    const material = {
+      parameterPreview:
+        true,
+      baseColor:
+        base
+          ? normalizeMaterialColor(
+              base
+            )
+          : [
+              0,
+              0,
+              0,
+              1
+            ],
+      emissiveColor:
+        emissive
+          ? normalizeMaterialColor(
+              emissive
+            )
+          : [
+              0,
+              0,
+              0,
+              1
+            ]
+    };
+
+    const roughness =
+      scalarMaterialParameter(
+        metadata,
+        /(^|[_ ])roughness($|[_ ])/
+      );
+
+    const metallic =
+      scalarMaterialParameter(
+        metadata,
+        /(^|[_ ])metallic($|[_ ])|metalness/
+      );
+
+    const specular =
+      scalarMaterialParameter(
+        metadata,
+        /(^|[_ ])specular($|[_ ])/
+      );
+
+    const opacity =
+      scalarMaterialParameter(
+        metadata,
+        /(^|[_ ])opacity($|[_ ])/
+      );
+
+    if (
+      roughness !==
+      null
+    ) {
+      material.roughness =
+        Math.max(
+          0,
+          Math.min(
+            1,
+            roughness
+          )
+        );
+    }
+
+    if (
+      metallic !==
+      null
+    ) {
+      material.metallic =
+        Math.max(
+          0,
+          Math.min(
+            1,
+            metallic
+          )
+        );
+    }
+
+    if (
+      specular !==
+      null
+    ) {
+      material.specular =
+        Math.max(
+          0,
+          Math.min(
+            1,
+            specular
+          )
+        );
+    }
+
+    if (
+      opacity !==
+      null
+    ) {
+      // Parameter-only previews do not know the parent's blend mode. Keep
+      // opaque geometry visible instead of interpreting arbitrary material
+      // graph scalars as transparency.
+      material.opacity =
+        1;
+    }
+
+    return material;
+  }
+
   async function resolveMeshImage(path, options = {}) {
     throwIfAborted(options.signal);
     activeRequest?.abort('replaced-by-new-mesh');
@@ -2775,6 +3151,7 @@
           try {
             const materials = [];
             const missingMaterials = [];
+            const parameterMaterials = [];
 
             for (
               let index = 0;
@@ -2820,14 +3197,32 @@
                 ) &&
                 !texturePath
               ) {
-                materials.push(
-                  {}
-                );
-
-                missingMaterials
-                  .push(
-                    index
+                const fallbackMaterial =
+                  parameterMaterial(
+                    metadata
                   );
+
+                if (
+                  fallbackMaterial
+                ) {
+                  materials.push(
+                    fallbackMaterial
+                  );
+
+                  parameterMaterials
+                    .push(
+                      index
+                    );
+                } else {
+                  materials.push(
+                    {}
+                  );
+
+                  missingMaterials
+                    .push(
+                      index
+                    );
+                }
 
                 continue;
               }
@@ -2926,8 +3321,18 @@
                       materialFidelity:
                         missingMaterials
                           .length
-                          ? 'base-color-partial'
-                          : 'base-color-preview'
+                          ? (
+                              parameterMaterials
+                                .length
+                                ? 'parameter-preview-partial'
+                                : 'base-color-partial'
+                            )
+                          : (
+                              parameterMaterials
+                                .length
+                                ? 'parameter-preview'
+                                : 'base-color-preview'
+                            )
                     }
                   },
                   {
@@ -2949,11 +3354,22 @@
               source:
                 'browser-wasm',
               missingMaterials,
+              parameterMaterials,
               previewMode:
                 missingMaterials
                   .length
-                  ? 'base-color-partial'
-                  : 'base-color-preview'
+                  ? (
+                      parameterMaterials
+                        .length
+                        ? 'parameter-preview-partial'
+                        : 'base-color-partial'
+                    )
+                  : (
+                      parameterMaterials
+                        .length
+                        ? 'parameter-preview'
+                        : 'base-color-preview'
+                    )
             };
           } finally {
             finishRequest(
