@@ -239,6 +239,7 @@ jobs:
           name: fnaa-layer8-browser-proof
           path: |
             fnaa-layer8-browser-proof.json
+            fnaa-mobile-heavy-mesh-proof.json
             fnaa-mesh-proof.json
             fnaa-real-mesh.png
           if-no-files-found: ignore
