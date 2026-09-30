@@ -701,6 +701,35 @@
         null;
 
       try {
+        // WebKit can leave an earlier non-fatal GL error queued on the same
+        // context. If we read that stale error after texImage2D, a perfectly
+        // valid decoded Texture is misclassified as failed. Drain only the
+        // pre-existing queue before the material upload, then validate the
+        // upload's own error state.
+        for (
+          let attempt = 0;
+          attempt < 8;
+          attempt++
+        ) {
+          const staleError =
+            gl.getError();
+
+          if (
+            staleError ===
+              gl.NO_ERROR
+          ) {
+            break;
+          }
+
+          if (
+            gl.isContextLost?.()
+          ) {
+            throw new Error(
+              "WebGL context was lost before the decoded material Texture upload."
+            );
+          }
+        }
+
         // PNG/Image uploads used UNPACK_FLIP_Y_WEBGL. Typed-array uploads do
         // not consistently honor that flag across WebKit/WebGL versions, so
         // flip rows explicitly and upload the already-decoded RGBA bytes.
