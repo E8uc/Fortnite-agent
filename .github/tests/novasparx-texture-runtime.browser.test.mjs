@@ -1705,6 +1705,288 @@ try {
     )
   );
 
+  const tiledOpaqueMaterial =
+    await page.evaluate(
+      async () => {
+        const originalGuard =
+          globalThis
+            .NovaSparxBrowserGuard;
+
+        globalThis
+          .NovaSparxBrowserGuard = {
+            ...originalGuard,
+            assertManifestBudget() {},
+            activeSignal() {
+              return null;
+            },
+            renderPolicy() {
+              return {
+                maxMaterials: 1,
+                maxTextureLoads: 1,
+                textureModes: ["base"],
+                mipmaps: false,
+                size: 128,
+                supersample: false
+              };
+            }
+          };
+
+        let objectUrl =
+          "";
+
+        try {
+          const result =
+            await globalThis
+              .NovaSparxRenderer
+              .render(
+                {
+                  geometry: {
+                    positions: [
+                      -1, -1, 0,
+                       1, -1, 0,
+                       1,  1, 0,
+                      -1,  1, 0
+                    ],
+                    indices: [
+                      0, 1, 2,
+                      0, 2, 3
+                    ],
+                    uv0: [
+                      0, 0,
+                      4, 0,
+                      4, 1,
+                      0, 1
+                    ]
+                  },
+                  sections: [
+                    {
+                      firstIndex: 0,
+                      indexCount: 6,
+                      materialIndex: 0
+                    }
+                  ],
+                  materials: [
+                    {
+                      opacityMode:
+                        "opaque",
+                      baseColorFrame: {
+                        width: 2,
+                        height: 1,
+                        pixels:
+                          new Uint8Array(
+                            [
+                              255, 24, 16, 32,
+                              16, 255, 24, 32
+                            ]
+                          ).buffer
+                      }
+                    }
+                  ],
+                  metadata: {
+                    materialFidelity:
+                      "tiled-opaque-proof"
+                  }
+                },
+                {
+                  size: 128
+                }
+              );
+
+          objectUrl =
+            URL.createObjectURL(
+              result.blob
+            );
+
+          const image =
+            new Image();
+
+          image.src =
+            objectUrl;
+
+          await new Promise(
+            (
+              resolve,
+              reject
+            ) => {
+              image.onload =
+                () =>
+                  resolve();
+
+              image.onerror =
+                () =>
+                  reject(
+                    new Error(
+                      "Opaque tiled material proof image failed to load"
+                    )
+                  );
+            }
+          );
+
+          const canvas =
+            document.createElement(
+              "canvas"
+            );
+
+          canvas.width =
+            image.naturalWidth;
+
+          canvas.height =
+            image.naturalHeight;
+
+          const context =
+            canvas.getContext(
+              "2d"
+            );
+
+          if (!context) {
+            throw new Error(
+              "Opaque tiled material proof has no 2D context"
+            );
+          }
+
+          context.drawImage(
+            image,
+            0,
+            0
+          );
+
+          const pixels =
+            context.getImageData(
+              0,
+              0,
+              canvas.width,
+              canvas.height
+            ).data;
+
+          let visible =
+            0;
+
+          let opaque =
+            0;
+
+          let red =
+            0;
+
+          let green =
+            0;
+
+          for (
+            let index = 0;
+            index <
+              pixels.length;
+            index += 4
+          ) {
+            const alpha =
+              pixels[
+                index + 3
+              ];
+
+            if (
+              alpha >
+              8
+            ) {
+              visible++;
+            }
+
+            if (
+              alpha >
+              220
+            ) {
+              opaque++;
+
+              const r =
+                pixels[index];
+
+              const g =
+                pixels[
+                  index + 1
+                ];
+
+              if (
+                r >
+                g * 1.2
+              ) {
+                red++;
+              } else if (
+                g >
+                r * 1.2
+              ) {
+                green++;
+              }
+            }
+          }
+
+          return {
+            textured:
+              result.textured ===
+              true,
+            visible,
+            opaque,
+            opaqueRatio:
+              visible
+                ? opaque /
+                  visible
+                : 0,
+            red,
+            green,
+            redRatio:
+              red + green
+                ? red /
+                  (
+                    red +
+                    green
+                  )
+                : 0
+          };
+        } finally {
+          if (
+            objectUrl
+          ) {
+            URL.revokeObjectURL(
+              objectUrl
+            );
+          }
+
+          globalThis
+            .NovaSparxBrowserGuard =
+            originalGuard;
+        }
+      }
+    );
+
+  assert.equal(
+    tiledOpaqueMaterial.textured,
+    true,
+    "Renderer did not bind the decoded RGBA BaseColor texture"
+  );
+
+  assert.ok(
+    tiledOpaqueMaterial.visible >
+      100,
+    "Opaque tiled material proof rendered no useful pixels"
+  );
+
+  assert.ok(
+    tiledOpaqueMaterial.opaqueRatio >
+      0.72,
+    "Opaque Fortnite BaseColor alpha incorrectly made the Mesh translucent"
+  );
+
+  assert.ok(
+    tiledOpaqueMaterial.redRatio >
+      0.28 &&
+    tiledOpaqueMaterial.redRatio <
+      0.72,
+    "Environment BaseColor UVs were clamped instead of tiled"
+  );
+
+  console.log(
+    "FNAA_TILED_OPAQUE_MATERIAL_PROVEN",
+    JSON.stringify(
+      tiledOpaqueMaterial
+    )
+  );
+
   const stwFlowerPath =
     "FortniteGame/Content/Environments/Arid/Other/SM_STW_Flowers_Group_02.uasset";
 
