@@ -64,11 +64,13 @@ const MAX_USER_MESSAGE_CHARS = 6_000;
 const MAX_ASSET_PATH = 2400;
 
 const ABUSE_WINDOW_MS = 60_000;
-const ABUSE_MAX_PER_WINDOW = 20;
+const ABUSE_MAX_PER_WINDOW = 90;
+const CHAT_ABUSE_MAX_PER_WINDOW = 20;
 const ASSET_ABUSE_MAX_PER_WINDOW = 180;
 
 const FALLBACK_GUEST_TIMES = new Map();
 const ABUSE_BUCKETS = new Map();
+const CHAT_ABUSE_BUCKETS = new Map();
 const ASSET_ABUSE_BUCKETS = new Map();
 
 const STATELESS_AUTH_VERSION = 1;
@@ -2762,21 +2764,34 @@ function allowByAssetLimit(
   );
 }
 
-function allowByWindowLimit(
+function allowByChatLimit(
   request,
+  identity
+) {
+  const key =
+    identity?.mode ===
+      "authenticated" &&
+    identity?.user?.uid
+      ? `user:${identity.user.uid}`
+      : `guest-ip:${request.headers.get("CF-Connecting-IP") || "unknown"}`;
+
+  return allowByKeyWindowLimit(
+    key,
+    CHAT_ABUSE_BUCKETS,
+    CHAT_ABUSE_MAX_PER_WINDOW
+  );
+}
+
+function allowByKeyWindowLimit(
+  key,
   buckets,
   maximum
 ) {
-  const ip =
-    request.headers.get(
-      "CF-Connecting-IP"
-    ) || "unknown";
-
   const now =
     Date.now();
 
   const bucket =
-    buckets.get(ip);
+    buckets.get(key);
 
   if (
     !bucket ||
@@ -2784,7 +2799,7 @@ function allowByWindowLimit(
       ABUSE_WINDOW_MS
   ) {
     buckets.set(
-      ip,
+      key,
       {
         startedAt: now,
         count: 1
@@ -2801,15 +2816,15 @@ function allowByWindowLimit(
     6000
   ) {
     for (
-      const [key, value] of
+      const [bucketKey, value] of
       buckets
     ) {
       if (
         now - value.startedAt >=
-        ABUSE_WINDOW_MS
+          ABUSE_WINDOW_MS
       ) {
         buckets.delete(
-          key
+          bucketKey
         );
       }
     }
@@ -2817,6 +2832,23 @@ function allowByWindowLimit(
 
   return (
     bucket.count <=
+    maximum
+  );
+}
+
+function allowByWindowLimit(
+  request,
+  buckets,
+  maximum
+) {
+  const ip =
+    request.headers.get(
+      "CF-Connecting-IP"
+    ) || "unknown";
+
+  return allowByKeyWindowLimit(
+    `ip:${ip}`,
+    buckets,
     maximum
   );
 }
@@ -7114,6 +7146,27 @@ async function handleChat(
           identity.error
       },
       503
+    );
+  }
+
+  if (
+    !allowByChatLimit(
+      request,
+      identity
+    )
+  ) {
+    return json(
+      request,
+      env,
+      {
+        error:
+          "Too many chat requests. Try again shortly."
+      },
+      429,
+      {
+        "Retry-After":
+          "60"
+      }
     );
   }
 
