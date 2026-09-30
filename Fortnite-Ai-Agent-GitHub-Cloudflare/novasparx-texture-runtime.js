@@ -2608,13 +2608,6 @@
         ? material.vectorParameterValues
         : [];
 
-    const scalarValues =
-      Array.isArray(
-        material?.scalarParameterValues
-      )
-        ? material.scalarParameterValues
-        : [];
-
     const usableVector =
       value => {
         const channels = [
@@ -2719,46 +2712,6 @@
         "emissive color"
       ]);
 
-    const opacity =
-      scalarValues
-        .map(value => ({
-          name:
-            String(
-              value?.name ||
-              ""
-            )
-              .trim()
-              .toLowerCase(),
-          value:
-            Number(
-              value?.value
-            )
-        }))
-        .filter(
-          item =>
-            Number.isFinite(
-              item.value
-            ) &&
-            (
-              item.name ===
-                "opacity" ||
-              item.name ===
-                "opacityvalue" ||
-              item.name ===
-                "opacity value"
-            )
-        )
-        .sort(
-          (
-            left,
-            right
-          ) =>
-            left.name.localeCompare(
-              right.name
-            )
-        )[0] ||
-      null;
-
     const preview = {};
 
     if (base) {
@@ -2782,25 +2735,13 @@
       }
     }
 
-    if (opacity) {
-      preview.opacity =
-        Math.max(
-          0,
-          Math.min(
-            1,
-            opacity.value
-          )
-        );
-    }
-
     return {
       material:
         preview,
       applied:
         Boolean(
           base ||
-          emissive ||
-          opacity
+          emissive
         )
     };
   }
@@ -3108,8 +3049,6 @@
                 );
 
                 material = {
-                  ...valueFallback
-                    .material,
                   baseColorFrame: {
                     width:
                       texture.width,
