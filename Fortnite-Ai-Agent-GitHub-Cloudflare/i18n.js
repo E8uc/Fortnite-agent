@@ -9,20 +9,20 @@
 
   const COPY = {
     en: {
-      brand: "Fortnite Ai Agent",
+      brand: "E8 Tools",
       newChat: "New chat",
       moreTools: "More Fortnite Tools",
       settings: "Settings",
       recents: "Recents",
 
       welcomeTitle:
-        "Chat with FNAA (Fortnite Ai Agent)",
+        "Chat with E8 (Fortnite Helper)",
 
       welcomeSubtitle:
-        "Fortnite files, FModel, UEFN, Verse, asset paths and research.",
+        "Fortnite files, UEFN, asset paths.",
 
       messagePlaceholder:
-        "Message Fortnite Ai Agent",
+        "Ask E8",
 
       toolsTitle:
         "More Fortnite Tools",
@@ -83,7 +83,7 @@
         "Search the Fortnite asset database without sending the query to the AI.",
 
       searchPlaceholder:
-        "Search a path, asset, SM_, M_, MI_...",
+        "Search a path/assets..",
 
       search: "Search",
       searching: "Searching",
@@ -114,14 +114,14 @@
         "Path Modifier",
 
       pathNote:
-        "Convert Fortnite filesystem paths to mount-aware Unreal object paths.",
+        "Convert Fortnite filesystem paths to mountaware Unreal object paths.",
 
       format: "Format",
       addClassAction: "Add _C",
       addClass: "Add _C",
 
       classSkipped:
-        "_C skipped: this asset does not look class-compatible.",
+        "_C skipped: this asset does not look class compatible.",
 
       convertedPath:
         "Converted path will appear here",
@@ -199,7 +199,7 @@
     },
 
     fr: {
-      brand: "Fortnite Ai Agent",
+      brand: "E8 Tools",
       newChat: "Nouveau chat",
       moreTools:
         "Plus d’outils Fortnite",
@@ -207,13 +207,13 @@
       recents: "Récents",
 
       welcomeTitle:
-        "Discuter avec FNAA (Fortnite Ai Agent)",
+        "Discuter avec E8 (Fortnite Ai Helper)",
 
       welcomeSubtitle:
-        "Fichiers Fortnite, FModel, UEFN, Verse, chemins d’assets et recherche.",
+        "Fichiers Fortnite, UEFN, chemins d’assets et recherche.",
 
       messagePlaceholder:
-        "Message à Fortnite Ai Agent",
+        "Demander à E8",
 
       toolsTitle:
         "Plus d’outils Fortnite",
@@ -277,7 +277,7 @@
         "Recherche dans la base d’assets Fortnite sans envoyer la requête à l’IA.",
 
       searchPlaceholder:
-        "Chemin, asset, SM_, M_, MI_...",
+        "Chemin/asset..",
 
       search: "Rechercher",
       searching: "Recherche",
@@ -396,7 +396,7 @@
     },
 
     ar: {
-      brand: "Fortnite Ai Agent",
+      brand: "E8 Tools",
       newChat: "محادثة جديدة",
       moreTools:
         "المزيد من أدوات فورتنايت",
@@ -405,7 +405,7 @@
         "المحادثات الأخيرة",
 
       welcomeTitle:
-        "تحدث مع FNAA (Fortnite Ai Agent)",
+        "تحدث مع E8 (Fortnite Ai Helper)",
 
       welcomeSubtitle:
         "ملفات فورتنايت، FModel، UEFN، Verse، المسارات والبحث.",
