@@ -2540,23 +2540,30 @@
           ) {
             // CUE4Parse/FModel canonical effective diffuse fallback.
             score =
-              140;
+              160;
           } else if (
-            /^(base[ _]?colou?r|diffuse|albedo)([ _]?texture)?$/.test(name)
+            /^(base[ _]?colou?r|diffuse|albedo)([ _]?(texture|map))?$/.test(name)
           ) {
             score =
-              120;
+              150;
+          } else if (
+            /base[ _]?colou?r|diffuse|albedo|texture[ _]?bc|(^|[_ ])bc($|[_ ])/.test(name)
+          ) {
+            // Environment/building materials commonly expose names such as
+            // WS Diffuse, Trunk_BaseColor and Layer1_Diffuse.
+            score =
+              130;
           } else if (
             name.includes("decorator")
           ) {
             score =
-              95;
+              110;
           } else if (
             name.includes("color") ||
             name.includes("colour")
           ) {
             score =
-              85;
+              90;
           }
 
           return {
