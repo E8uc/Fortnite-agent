@@ -2321,6 +2321,11 @@
       busy ||
       activeChatController
     ) {
+      showToast(
+        "Stop the current response first.",
+        true
+      );
+
       return {
         blocked: true,
         busy: true
