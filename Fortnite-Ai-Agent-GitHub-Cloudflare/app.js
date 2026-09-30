@@ -168,9 +168,10 @@
     closeSidebar: $("closeSidebar"),
 
     newChatBtn: $("newChatBtn"),
+    newChatTop: $("newChatTop"),
+    chatMenuButton: $("chatMenuButton"),
     moreToolsBtn: $("moreToolsBtn"),
     settingsBtn: $("settingsBtn"),
-    discordTop: $("discordTop"),
 
     recentList: $("recentList"),
     chat: $("chat"),
@@ -246,6 +247,12 @@
 
   let activeChatRun =
     0;
+
+  let activeChatUiLayer =
+    null;
+
+  let activeChatUiAnchor =
+    null;
 
   let toastTimer = null;
 
@@ -1217,6 +1224,9 @@
 
       output[id] = {
         id,
+        pinned:
+          chat.pinned ===
+          true,
         title:
           String(
             chat.title ||
@@ -1298,6 +1308,7 @@
 
     chats[id] = {
       id,
+      pinned: false,
       title: "New chat",
       createdAt: Date.now(),
       updatedAt: Date.now(),
