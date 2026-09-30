@@ -168,9 +168,10 @@
     closeSidebar: $("closeSidebar"),
 
     newChatBtn: $("newChatBtn"),
+    newChatTop: $("newChatTop"),
+    chatMenuButton: $("chatMenuButton"),
     moreToolsBtn: $("moreToolsBtn"),
     settingsBtn: $("settingsBtn"),
-    discordTop: $("discordTop"),
 
     recentList: $("recentList"),
     chat: $("chat"),
@@ -247,6 +248,12 @@
   let activeChatRun =
     0;
 
+  let chatUiModule =
+    null;
+
+  let chatUiPromise =
+    null;
+
   let toastTimer = null;
 
   let dbWorker = null;
@@ -282,6 +289,7 @@
   );
 
   setupEvents();
+  syncChatChromeLabels();
   renderAll();
   ensureGuestLoginButton();
   ensureSettingsApiCard();
@@ -482,6 +490,8 @@
   }
 
   function applyCurrentRoute() {
+    closeChatUiIfLoaded();
+
     const route =
       currentRoute();
 
@@ -520,6 +530,541 @@
   // Global events / UI
   // ---------------------------------------------------------------------------
 
+  function e8ActionIconMarkup(
+    name,
+    size = 20
+  ) {
+    const icons = {
+      copy:
+        '<rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path>',
+
+      feedback:
+        '<path d="M3 11h3v7H3z"></path><path d="M6 11l2.3-5A2 2 0 0 1 10.1 5H11v6h3.2a1.8 1.8 0 0 1 1.7 2.4L14.7 17H9.3A3.3 3.3 0 0 1 6 13.7Z"></path><path d="M29 13h-3V6h3z"></path><path d="M26 13l-2.3 5a2 2 0 0 1-1.8 1H21v-6h-3.2a1.8 1.8 0 0 1-1.7-2.4L17.3 7h5.4A3.3 3.3 0 0 1 26 10.3Z"></path>',
+
+      pin:
+        '<path d="M12 17v5"></path><path d="m5 17 5-5"></path><path d="M15 3l6 6-4 1-5 5-3-3 5-5Z"></path>'
+    };
+
+    const viewBox =
+      name === "feedback"
+        ? "0 0 32 24"
+        : "0 0 24 24";
+
+    return `<svg aria-hidden="true" viewBox="${viewBox}" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ""}</svg>`;
+  }
+
+  async function loadChatUi() {
+    if (chatUiModule) {
+      return chatUiModule;
+    }
+
+    if (!chatUiPromise) {
+      chatUiPromise =
+        import(
+          `${SITE_BASE_PATH}e8-chat-ui.js?v=1`
+        )
+          .then(
+            (module) => {
+              chatUiModule =
+                module;
+
+              return module;
+            }
+          )
+          .catch(
+            (error) => {
+              chatUiPromise =
+                null;
+
+              throw error;
+            }
+          );
+    }
+
+    return chatUiPromise;
+  }
+
+  function closeChatUiIfLoaded() {
+    chatUiModule
+      ?.close?.();
+  }
+
+  function startNewChat() {
+    try {
+      activeChatController
+        ?.abort(
+          "new-chat"
+        );
+    } catch {}
+
+    activeChatController =
+      null;
+
+    activeChatRun++;
+
+    setBusy(false);
+    removeTypingIndicator();
+    closeChatUiIfLoaded();
+
+    activeId =
+      createChat(true);
+
+    renderAll();
+    closeSidebar();
+
+    navigate(
+      ROUTES.chat,
+      {
+        apply: true
+      }
+    );
+  }
+
+  function togglePinChat() {
+    const chat =
+      currentChat();
+
+    if (!chat) return;
+
+    chat.pinned =
+      !chat.pinned;
+
+    chat.updatedAt =
+      Date.now();
+
+    saveChats();
+    renderRecents();
+
+    showToast(
+      chat.pinned
+        ? copyText(
+            "Chat pinned",
+            "Discussion épinglée",
+            "تم تثبيت المحادثة"
+          )
+        : copyText(
+            "Chat unpinned",
+            "Discussion désépinglée",
+            "تم إلغاء تثبيت المحادثة"
+          )
+    );
+  }
+
+  function renameActiveChat(
+    next
+  ) {
+    const chat =
+      currentChat();
+
+    const clean =
+      String(next || "")
+        .replace(
+          /\s+/g,
+          " "
+        )
+        .trim()
+        .slice(
+          0,
+          96
+        );
+
+    if (
+      !chat ||
+      !clean
+    ) {
+      return;
+    }
+
+    chat.title =
+      clean;
+
+    chat.updatedAt =
+      Date.now();
+
+    saveChats();
+    renderRecents();
+
+    showToast(
+      copyText(
+        "Chat renamed",
+        "Discussion renommée",
+        "تمت إعادة تسمية المحادثة"
+      )
+    );
+  }
+
+  function deleteActiveChat() {
+    if (!activeId) return;
+
+    try {
+      activeChatController
+        ?.abort(
+          "delete-chat"
+        );
+    } catch {}
+
+    activeChatController =
+      null;
+
+    activeChatRun++;
+
+    setBusy(false);
+    removeTypingIndicator();
+
+    delete chats[activeId];
+
+    const next =
+      Object.values(chats)
+        .sort(
+          (a, b) =>
+            Number(Boolean(b.pinned)) -
+              Number(Boolean(a.pinned)) ||
+            b.updatedAt -
+              a.updatedAt
+        )[0];
+
+    activeId =
+      next?.id ||
+      createChat(false);
+
+    saveChats();
+    renderAll();
+
+    navigate(
+      ROUTES.chat,
+      {
+        replace: true,
+        apply: true
+      }
+    );
+
+    showToast(
+      copyText(
+        "Chat deleted",
+        "Discussion supprimée",
+        "تم حذف المحادثة"
+      )
+    );
+  }
+
+  function flashFoundMessage(
+    index
+  ) {
+    const target =
+      els.messages
+        .querySelector(
+          `[data-message-index="${index}"]`
+        );
+
+    if (!target) return;
+
+    target.classList.add(
+      "find-target"
+    );
+
+    target.scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    });
+
+    setTimeout(
+      () =>
+        target.classList.remove(
+          "find-target"
+        ),
+      1600
+    );
+  }
+
+  function chatUiLabels() {
+    return {
+      close:
+        copyText(
+          "Close",
+          "Fermer",
+          "إغلاق"
+        ),
+
+      cancel:
+        copyText(
+          "Cancel",
+          "Annuler",
+          "إلغاء"
+        ),
+
+      save:
+        copyText(
+          "Save",
+          "Enregistrer",
+          "حفظ"
+        ),
+
+      delete:
+        copyText(
+          "Delete",
+          "Supprimer",
+          "حذف"
+        ),
+
+      pinChat:
+        copyText(
+          "Pin chat",
+          "Épingler la discussion",
+          "تثبيت المحادثة"
+        ),
+
+      unpinChat:
+        copyText(
+          "Unpin chat",
+          "Désépingler la discussion",
+          "إلغاء تثبيت المحادثة"
+        ),
+
+      findInChat:
+        copyText(
+          "Find in chat",
+          "Rechercher dans la discussion",
+          "بحث في المحادثة"
+        ),
+
+      rename:
+        copyText(
+          "Rename",
+          "Renommer",
+          "إعادة التسمية"
+        ),
+
+      renameChat:
+        copyText(
+          "Rename chat",
+          "Renommer la discussion",
+          "إعادة تسمية المحادثة"
+        ),
+
+      deleteChat:
+        copyText(
+          "Delete chat",
+          "Supprimer la discussion",
+          "حذف المحادثة"
+        ),
+
+      deleteChatQuestion:
+        copyText(
+          "Delete chat?",
+          "Supprimer la discussion ?",
+          "حذف المحادثة؟"
+        ),
+
+      deleteCannotUndo:
+        copyText(
+          "This action cannot be undone.",
+          "Cette action est irréversible.",
+          "لا يمكن التراجع عن هذا الإجراء."
+        ),
+
+      searchMessages:
+        copyText(
+          "Search messages",
+          "Rechercher des messages",
+          "ابحث في الرسائل"
+        ),
+
+      noResults:
+        copyText(
+          "No results",
+          "Aucun résultat",
+          "لا توجد نتائج"
+        ),
+
+      you:
+        copyText(
+          "You",
+          "Vous",
+          "أنت"
+        ),
+
+      goodResponse:
+        copyText(
+          "Good response",
+          "Bonne réponse",
+          "إجابة جيدة"
+        ),
+
+      badResponse:
+        copyText(
+          "Bad response",
+          "Mauvaise réponse",
+          "إجابة سيئة"
+        )
+    };
+  }
+
+  async function openChatMenu() {
+    const chat =
+      currentChat();
+
+    if (
+      !chat ||
+      !els.chatMenuButton
+    ) {
+      return;
+    }
+
+    try {
+      const ui =
+        await loadChatUi();
+
+      await ui.openChatMenu({
+        anchor:
+          els.chatMenuButton,
+
+        pinned:
+          chat.pinned === true,
+
+        title:
+          chat.title || "",
+
+        messages:
+          chat.messages || [],
+
+        labels:
+          chatUiLabels(),
+
+        onTogglePin:
+          togglePinChat,
+
+        onRename:
+          renameActiveChat,
+
+        onDelete:
+          deleteActiveChat,
+
+        onFindSelect:
+          (index) =>
+            requestAnimationFrame(
+              () =>
+                flashFoundMessage(
+                  index
+                )
+            )
+      });
+    } catch {
+      showToast(
+        copyText(
+          "Couldn't open chat menu",
+          "Impossible d’ouvrir le menu",
+          "تعذر فتح قائمة المحادثة"
+        ),
+        true
+      );
+    }
+  }
+
+  function setAssistantFeedback(
+    message,
+    rating,
+    sourceButton
+  ) {
+    message.feedback =
+      rating;
+
+    saveChats();
+
+    sourceButton
+      ?.classList.add(
+        "active"
+      );
+
+    sourceButton
+      ?.setAttribute(
+        "aria-pressed",
+        "true"
+      );
+
+    showToast(
+      copyText(
+        "Thank you for your feedback",
+        "Merci pour votre retour",
+        "شكراً لملاحظتك"
+      )
+    );
+  }
+
+  async function openFeedbackMenu(
+    anchor,
+    message
+  ) {
+    try {
+      const ui =
+        await loadChatUi();
+
+      await ui.openFeedbackMenu({
+        anchor,
+
+        currentRating:
+          message.feedback || "",
+
+        labels:
+          chatUiLabels(),
+
+        onRate:
+          (rating) =>
+            setAssistantFeedback(
+              message,
+              rating,
+              anchor
+            )
+      });
+    } catch {
+      showToast(
+        copyText(
+          "Couldn't open feedback",
+          "Impossible d’ouvrir l’évaluation",
+          "تعذر فتح التقييم"
+        ),
+        true
+      );
+    }
+  }
+
+  function syncChatChromeLabels() {
+    if (els.newChatTop) {
+      const label =
+        copyText(
+          "New chat",
+          "Nouvelle discussion",
+          "محادثة جديدة"
+        );
+
+      els.newChatTop
+        .setAttribute(
+          "aria-label",
+          label
+        );
+
+      els.newChatTop.title =
+        label;
+    }
+
+    if (els.chatMenuButton) {
+      const label =
+        copyText(
+          "Chat menu",
+          "Menu de discussion",
+          "قائمة المحادثة"
+        );
+
+      els.chatMenuButton
+        .setAttribute(
+          "aria-label",
+          label
+        );
+
+      els.chatMenuButton.title =
+        label;
+    }
+  }
+
   function setupEvents() {
     els.openSidebar
       ?.addEventListener(
@@ -542,34 +1087,22 @@
     els.newChatBtn
       ?.addEventListener(
         "click",
-        () => {
-          try {
-            activeChatController
-              ?.abort(
-                "new-chat"
-              );
-          } catch {}
+        startNewChat
+      );
 
-          activeChatController =
-            null;
+    els.newChatTop
+      ?.addEventListener(
+        "click",
+        startNewChat
+      );
 
-          activeChatRun++;
-
-          setBusy(false);
-          removeTypingIndicator();
-
-          activeId =
-            createChat(true);
-
-          renderAll();
-          closeSidebar();
-
-          navigate(
-            ROUTES.chat,
-            {
-              apply: true
-            }
-          );
+    els.chatMenuButton
+      ?.addEventListener(
+        "click",
+        (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openChatMenu();
         }
       );
 
@@ -634,28 +1167,6 @@
               replace: true
             }
           );
-        }
-      );
-
-    els.discordTop
-      ?.addEventListener(
-        "click",
-        async () => {
-          try {
-            await navigator
-              .clipboard
-              .writeText(
-                "@its.swag"
-              );
-
-            showToast(
-              "Copied @its.swag"
-            );
-          } catch {
-            showToast(
-              "@its.swag"
-            );
-          }
         }
       );
 
@@ -758,6 +1269,18 @@
       );
 
     document.addEventListener(
+      "keydown",
+      (event) => {
+        if (
+          event.key ===
+            "Escape"
+        ) {
+          closeChatUiIfLoaded();
+        }
+      }
+    );
+
+    document.addEventListener(
       "click",
       (event) => {
         const button =
@@ -787,6 +1310,8 @@
       "fortnite-language-changed",
       () => {
         syncSettingsApiCard();
+        closeChatUiIfLoaded();
+        syncChatChromeLabels();
       }
     );
 
@@ -1135,15 +1660,27 @@
         .sort(
           (left, right) =>
             Number(
+              Boolean(
+                right[1]
+                  ?.pinned
+              )
+            ) -
+              Number(
+                Boolean(
+                  left[1]
+                    ?.pinned
+                )
+              ) ||
+            Number(
               right[1]
                 ?.updatedAt ||
               0
             ) -
-            Number(
-              left[1]
-                ?.updatedAt ||
-              0
-            )
+              Number(
+                left[1]
+                  ?.updatedAt ||
+                0
+              )
         )
         .slice(
           0,
@@ -1217,6 +1754,9 @@
 
       output[id] = {
         id,
+        pinned:
+          chat.pinned ===
+          true,
         title:
           String(
             chat.title ||
@@ -1298,6 +1838,7 @@
 
     chats[id] = {
       id,
+      pinned: false,
       title: "New chat",
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -1355,8 +1896,10 @@
       )
       .sort(
         (a, b) =>
+          Number(Boolean(b.pinned)) -
+            Number(Boolean(a.pinned)) ||
           b.updatedAt -
-          a.updatedAt
+            a.updatedAt
       )
       .slice(0, 30)
       .forEach(
@@ -1372,8 +1915,40 @@
           button.className =
             `recent-item${chat.id === activeId ? " current" : ""}`;
 
-          button.textContent =
+          if (chat.pinned) {
+            const pin =
+              document.createElement(
+                "span"
+              );
+
+            pin.className =
+              "recent-item-pin";
+
+            pin.innerHTML =
+              e8ActionIconMarkup(
+                "pin",
+                13
+              );
+
+            button.appendChild(
+              pin
+            );
+          }
+
+          const label =
+            document.createElement(
+              "span"
+            );
+
+          label.className =
+            "recent-item-label";
+
+          label.textContent =
             chat.title;
+
+          button.appendChild(
+            label
+          );
 
           button.addEventListener(
             "click",
@@ -1422,17 +1997,21 @@
       return;
     }
 
-    for (
-      const message of
-      chat.messages
-    ) {
-      els.messages
-        .appendChild(
-          createMessageNode(
-            message
-          )
-        );
-    }
+    chat.messages
+      .forEach(
+        (
+          message,
+          index
+        ) => {
+          els.messages
+            .appendChild(
+              createMessageNode(
+                message,
+                index
+              )
+            );
+        }
+      );
 
     requestAnimationFrame(
       scrollToBottom
@@ -1440,7 +2019,8 @@
   }
 
   function createMessageNode(
-    message
+    message,
+    messageIndex = -1
   ) {
     const outer =
       document.createElement(
@@ -1449,6 +2029,18 @@
 
     outer.className =
       `message ${message.role}`;
+
+    if (
+      Number.isInteger(
+        messageIndex
+      ) &&
+      messageIndex >= 0
+    ) {
+      outer.dataset.messageIndex =
+        String(
+          messageIndex
+        );
+    }
 
     if (
       message.role === "user"
@@ -1550,15 +2142,22 @@
     copyButton.className =
       "assistant-action";
 
-    copyButton.textContent =
-      "⧉";
+    copyButton.innerHTML =
+      e8ActionIconMarkup(
+        "copy",
+        19
+      );
 
     copyButton.title =
-      "Copy response";
+      copyText(
+        "Copy response",
+        "Copier la réponse",
+        "نسخ الإجابة"
+      );
 
     copyButton.setAttribute(
       "aria-label",
-      "Copy response"
+      copyButton.title
     );
 
     copyButton.addEventListener(
@@ -1570,134 +2169,87 @@
           );
 
           showToast(
-            "Copied"
+            copyText(
+              "Copied",
+              "Copié",
+              "تم النسخ"
+            )
           );
         } catch {
           showToast(
-            "Copy failed",
+            copyText(
+              "Copy failed",
+              "Échec de la copie",
+              "فشل النسخ"
+            ),
             true
           );
         }
       }
     );
 
-    const feedbackButton =
-      (
-        rating,
-        label,
-        icon
-      ) => {
-        const button =
-          document.createElement(
-            "button"
-          );
+    const feedback =
+      document.createElement(
+        "button"
+      );
 
-        button.type =
-          "button";
+    feedback.type =
+      "button";
 
-        button.className =
-          "assistant-action feedback-action";
+    feedback.className =
+      `assistant-action feedback-action${message.feedback ? " active" : ""}`;
 
-        button.dataset.rating =
-          rating;
+    feedback.innerHTML =
+      e8ActionIconMarkup(
+        "feedback",
+        22
+      );
 
-        button.textContent =
-          icon;
+    feedback.title =
+      copyText(
+        "Rate response",
+        "Évaluer la réponse",
+        "تقييم الإجابة"
+      );
 
-        button.title =
-          label;
+    feedback.setAttribute(
+      "aria-label",
+      feedback.title
+    );
 
-        button.setAttribute(
-          "aria-label",
-          label
+    feedback.setAttribute(
+      "aria-haspopup",
+      "menu"
+    );
+
+    feedback.setAttribute(
+      "aria-expanded",
+      "false"
+    );
+
+    feedback.setAttribute(
+      "aria-pressed",
+      message.feedback
+        ? "true"
+        : "false"
+    );
+
+    feedback.addEventListener(
+      "click",
+      (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        openFeedbackMenu(
+          feedback,
+          message
         );
-
-        const sync =
-          () => {
-            const active =
-              message.feedback ===
-                rating;
-
-            button.classList.toggle(
-              "active",
-              active
-            );
-
-            button.setAttribute(
-              "aria-pressed",
-              active
-                ? "true"
-                : "false"
-            );
-          };
-
-        sync();
-
-        button.addEventListener(
-          "click",
-          () => {
-            message.feedback =
-              message.feedback ===
-                rating
-                ? ""
-                : rating;
-
-            const chat =
-              currentChat();
-
-            if (chat) {
-              chat.updatedAt =
-                Date.now();
-            }
-
-            saveChats();
-
-            for (
-              const item of
-              actions.querySelectorAll(
-                ".feedback-action"
-              )
-            ) {
-              const active =
-                item.dataset.rating ===
-                  message.feedback;
-
-              item.classList.toggle(
-                "active",
-                active
-              );
-
-              item.setAttribute(
-                "aria-pressed",
-                active
-                  ? "true"
-                  : "false"
-              );
-            }
-
-            showToast(
-              message.feedback
-                ? "Thanks for the feedback"
-                : "Feedback removed"
-            );
-          }
-        );
-
-        return button;
-      };
+      }
+    );
 
     actions.append(
       copyButton,
-      feedbackButton(
-        "good",
-        "Good response",
-        "👍"
-      ),
-      feedbackButton(
-        "bad",
-        "Bad response",
-        "👎"
-      )
+      feedback
     );
 
     wrap.appendChild(
@@ -4483,6 +5035,8 @@
   // ---------------------------------------------------------------------------
 
   function openSidebar() {
+    closeChatUiIfLoaded();
+
     els.sidebar
       ?.classList
       .add("open");
@@ -5811,7 +6365,7 @@
 
   window.FortniteAgent =
     Object.freeze({
-      version: "1.0.3",
+      version: "1.0.4",
 
       searchDatabase,
       describePath,

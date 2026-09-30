@@ -85,7 +85,7 @@ a:focus-visible{
   z-index:20;
   grid-row:1;
   display:grid;
-  grid-template-columns:46px minmax(0,1fr) 46px;
+  grid-template-columns:84px minmax(0,1fr) 84px;
   align-items:end;
   gap:4px;
   padding:var(--safe-top) 8px 6px;
@@ -114,6 +114,23 @@ a:focus-visible{
   font-size:22px;
 }
 .icon-btn:active{background:var(--panel-2)}
+
+.topbar-actions{
+  justify-self:end;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:2px;
+  width:84px;
+}
+
+.topbar > #openSidebar{
+  justify-self:start;
+}
+
+.topbar-actions .icon-btn{
+  flex:0 0 40px;
+}
 
 .brand-with-avatar{
   display:inline-flex;
@@ -154,7 +171,7 @@ a:focus-visible{
 
 .fnaa-guest-login{
   position:absolute;
-  right:52px;
+  right:96px;
   bottom:8px;
   min-height:32px;
   padding:0 11px;
@@ -666,9 +683,24 @@ html.fnaa-guest-slowmode-active #sendButton{
   background:transparent;
   color:#bbb;
   text-align:left;
+  display:flex;
+  align-items:center;
+  gap:7px;
   white-space:nowrap;
   overflow:hidden;
+}
+.recent-item-label{
+  min-width:0;
+  overflow:hidden;
   text-overflow:ellipsis;
+}
+.recent-item-pin{
+  width:14px;
+  height:14px;
+  flex:0 0 14px;
+  display:grid;
+  place-items:center;
+  color:var(--muted);
 }
 .recent-item.current{
   background:var(--panel-2);
