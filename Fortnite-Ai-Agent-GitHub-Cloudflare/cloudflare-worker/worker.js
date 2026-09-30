@@ -46,8 +46,10 @@ const SITE_URL =
 const SITE_ORIGIN =
   "https://e8uc.github.io";
 
-const SITE_PATH_PREFIX =
-  "/Fortnite-agent/";
+const SITE_PATH_PREFIXES = [
+  "/Fortnite-agent/",
+  "/E8ucTools/"
+];
 
 const GUEST_SLOWMODE_MS = 15_000;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -72,7 +74,7 @@ const STATELESS_AUTH_AAD =
   "FNAA-STATELESS-OPENROUTER-AUTH";
 
 const SYSTEM_PROMPT = `
-You are Fortnite Ai Agent (FNAA), developed by YT @E8uc.
+You are E8 Helper, also called E8. You were developed and programmed by E8uc.
 
 PRIMARY USE
 - You are mainly for Fortnite Creative 1.0 users.
@@ -151,8 +153,8 @@ RESEARCH
 - Do not claim access to a private Discord unless source text was actually supplied or retrieved.
 - Do not use an older method merely because it is easier to find online.
 
-FNAA SITE GUIDE
-When the user wants to use something that already exists in the FNAA website, guide them to it briefly.
+E8 SITE GUIDE
+When the user wants to use something that already exists in the E8 website, guide them to it briefly.
 Do not invent pages, tabs, buttons or features that are not listed here.
 
 Main navigation:
@@ -192,12 +194,16 @@ STYLE
 - For a simple path question, usually give the path and at most one short note.
 
 IDENTITY
-- Your name is Fortnite Ai Agent.
+- Your public name is E8 Helper. You may refer to yourself as E8.
+- You were developed and programmed by E8uc.
+- Official E8uc accounts: Discord e8uc. ; YouTube E8uc ; TikTok 1k94.
+- If the user asks where to find E8uc, give those official handles accurately.
+- Do not invent or claim any other creator accounts.
 - Do not claim to literally be ChatGPT.
 `;
 
 const RESEARCH_PROMPT = `
-You are FNAA in research mode.
+You are E8 Helper in research mode.
 - Default research target: Fortnite v42.00 / 2026.
 - Search older versions only if the user explicitly asks.
 - Prefer official Epic/Fortnite documentation, then direct technical evidence,
@@ -3305,8 +3311,11 @@ function validReturnTo(
     if (
       url.origin ===
         SITE_ORIGIN &&
-      url.pathname.startsWith(
-        SITE_PATH_PREFIX
+      SITE_PATH_PREFIXES.some(
+        (prefix) =>
+          url.pathname.startsWith(
+            prefix
+          )
       ) &&
       !url.username &&
       !url.password
@@ -3791,7 +3800,7 @@ async function openRouterFetch(
           SITE_URL,
 
         "X-Title":
-          "Fortnite Ai Agent"
+          "E8 Helper"
       },
 
       body:
@@ -7396,7 +7405,7 @@ async function handleChat(
             error:
               openRouterRejected
                 ? "OpenRouter authorization was rejected. Log in with OpenRouter again."
-                : "FNAA's AI backend authentication failed.",
+                : "E8's AI backend authentication failed.",
 
             code:
               openRouterRejected
@@ -7644,7 +7653,7 @@ export default {
           ok: true,
           service: "FNAA",
           version:
-            "1.0.7",
+            "1.0.8",
           fortnite:
             CURRENT_FORTNITE_VERSION,
           authProvider:
