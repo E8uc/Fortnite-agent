@@ -1574,6 +1574,137 @@ try {
     })
   );
 
+  const sparseMaterialSlot =
+    await page.evaluate(
+      async () => {
+        const originalGuard =
+          globalThis
+            .NovaSparxBrowserGuard;
+
+        globalThis
+          .NovaSparxBrowserGuard = {
+            ...originalGuard,
+            assertManifestBudget() {},
+            activeSignal() {
+              return null;
+            },
+            renderPolicy() {
+              return {
+                maxMaterials: 4,
+                maxTextureLoads: 4,
+                textureModes: ["base"],
+                mipmaps: false,
+                size: 128,
+                supersample: false
+              };
+            }
+          };
+
+        try {
+          const result =
+            await globalThis
+              .NovaSparxRenderer
+              .render(
+                {
+                  geometry: {
+                    positions: [
+                      -0.5, -0.5, 0,
+                       0.5, -0.5, 0,
+                       0.0,  0.5, 0
+                    ],
+                    indices: [
+                      0, 1, 2
+                    ],
+                    uv0: [
+                      0, 0,
+                      1, 0,
+                      0.5, 1
+                    ]
+                  },
+                  sections: [
+                    {
+                      firstIndex: 0,
+                      indexCount: 3,
+                      materialIndex: 5
+                    }
+                  ],
+                  materials: [
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {
+                      baseColorFrame: {
+                        width: 1,
+                        height: 1,
+                        pixels:
+                          new Uint8Array(
+                            [
+                              240,
+                              80,
+                              30,
+                              255
+                            ]
+                          ).buffer
+                      }
+                    }
+                  ],
+                  metadata: {
+                    materialFidelity:
+                      "sparse-slot-proof"
+                  }
+                },
+                {
+                  size: 128
+                }
+              );
+
+          return {
+            textured:
+              result.textured ===
+              true,
+            selected:
+              result
+                .selectedMaterialSlots ||
+              [],
+            omitted:
+              result
+                .omittedMaterialSlots ||
+              []
+          };
+        } finally {
+          globalThis
+            .NovaSparxBrowserGuard =
+            originalGuard;
+        }
+      }
+    );
+
+  assert.equal(
+    sparseMaterialSlot.textured,
+    true,
+    "Renderer dropped a Texture referenced by a sparse material slot under the iPhone material limit"
+  );
+
+  assert.deepEqual(
+    sparseMaterialSlot.selected,
+    [5],
+    "Renderer did not compact the section's real source material slot"
+  );
+
+  assert.deepEqual(
+    sparseMaterialSlot.omitted,
+    []
+  );
+
+  console.log(
+    "FNAA_SPARSE_MATERIAL_SLOT_PROVEN",
+    JSON.stringify(
+      sparseMaterialSlot
+    )
+  );
+
   const failedPreview = await page.evaluate(async target => {
     const original = globalThis.NovaSparxTextureRuntime;
     globalThis.NovaSparxTextureRuntime = {
