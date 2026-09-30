@@ -1524,14 +1524,6 @@
     message.feedback =
       rating;
 
-    const chat =
-      currentChat();
-
-    if (chat) {
-      chat.updatedAt =
-        Date.now();
-    }
-
     saveChats();
 
     sourceButton
@@ -2238,15 +2230,27 @@
         .sort(
           (left, right) =>
             Number(
+              Boolean(
+                right[1]
+                  ?.pinned
+              )
+            ) -
+              Number(
+                Boolean(
+                  left[1]
+                    ?.pinned
+                )
+              ) ||
+            Number(
               right[1]
                 ?.updatedAt ||
               0
             ) -
-            Number(
-              left[1]
-                ?.updatedAt ||
-              0
-            )
+              Number(
+                left[1]
+                  ?.updatedAt ||
+                0
+              )
         )
         .slice(
           0,
