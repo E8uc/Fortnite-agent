@@ -2,8 +2,8 @@ import "../asset-diagnosis.js";
 
 const CHAT_MODEL = "openai/gpt-oss-120b";
 const ACCOUNT_MODEL = "openai/gpt-oss-120b";
-const FAST_RESEARCH_MODEL = "groq/compound-mini";
-const DEEP_RESEARCH_MODEL = "groq/compound";
+const FAST_RESEARCH_MODEL = "openai/gpt-oss-120b";
+const DEEP_RESEARCH_MODEL = "openai/gpt-oss-120b";
 
 const CURRENT_FORTNITE_VERSION = "42.00";
 const CURRENT_YEAR = 2026;
@@ -3860,7 +3860,20 @@ async function callChat(
           0.15,
 
         max_tokens:
-          1800
+          1800,
+
+        tools: [
+          {
+            type:
+              "browser_search"
+          }
+        ],
+
+        reasoning_effort:
+          "high",
+
+        reasoning_format:
+          "hidden"
       },
       55_000
     );
@@ -3899,7 +3912,20 @@ async function callChat(
           0.12,
 
         max_tokens:
-          900
+          900,
+
+        tools: [
+          {
+            type:
+              "browser_search"
+          }
+        ],
+
+        reasoning_effort:
+          "low",
+
+        reasoning_format:
+          "hidden"
       },
       45_000
     );
@@ -7278,13 +7304,15 @@ async function handleChat(
         "AI provider response"
       );
 
-    // Compound can reject a provider-specific field on rare model changes.
-    // If so, fall back to the normal account/guest chat instead of failing.
+    // Research models/tools can change or be retired by the provider.
+    // Fall back to normal account/guest chat instead of surfacing model errors.
     if (
       !response.ok &&
       useGroqResearch &&
-      response.status ===
-        400
+      (
+        response.status === 400 ||
+        response.status === 404
+      )
     ) {
       response =
         provider ===
@@ -7584,7 +7612,7 @@ export default {
           ok: true,
           service: "FNAA",
           version:
-            "1.0.5",
+            "1.0.6",
           fortnite:
             CURRENT_FORTNITE_VERSION,
           authProvider:
