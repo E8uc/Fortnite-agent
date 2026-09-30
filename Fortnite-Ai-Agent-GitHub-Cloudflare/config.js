@@ -4,11 +4,17 @@
   const API =
     "https://fortnite-ai-agent-api.a39328122.workers.dev";
 
-  const SITE =
-    "https://e8uc.github.io/Fortnite-agent/";
+  const baseUrl =
+    new URL(".", document.baseURI);
 
   const BASE =
-    "/Fortnite-agent/";
+    baseUrl.pathname.endsWith("/")
+      ? baseUrl.pathname
+      : baseUrl.pathname + "/";
+
+  const SITE =
+    new URL(BASE, location.origin)
+      .toString();
 
   const database = Object.freeze({
     manifest:
@@ -53,7 +59,7 @@
   });
 
   window.FNAA_CONFIG = Object.freeze({
-    version: "1.0.2",
+    version: "1.0.3",
     fortniteVersion: "42.00",
     apiEndpoint: API,
     siteUrl: SITE,
