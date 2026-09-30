@@ -369,9 +369,9 @@ async function proveParameterMaterial(path, metadata) {
     'parameter-preview'
   );
 
-  assert.deepEqual(
-    final.missingMaterials,
-    []
+  assert.equal(
+    final.missingMaterials.length,
+    0
   );
 
   return renderCalls.at(-1)
@@ -413,7 +413,9 @@ assert.equal(
   true
 );
 assert.deepEqual(
-  waterMaterial.baseColor,
+  Array.from(
+    waterMaterial.baseColor
+  ),
   [
     0.192688,
     0.610496,
@@ -457,7 +459,9 @@ assert.equal(
   true
 );
 assert.deepEqual(
-  pirateMaterial.baseColor,
+  Array.from(
+    pirateMaterial.baseColor
+  ),
   [
     0,
     0,
