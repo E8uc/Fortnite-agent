@@ -1952,8 +1952,28 @@
       signal
     );
 
-    const textured = loadedMaterials.some((item) => item.maps[0].loaded);
-    const normalMapped = loadedMaterials.some((item) => item.maps[1].loaded);
+    const textured =
+      loadedMaterials.some(
+        item =>
+          item.maps[0]
+            .loaded
+      );
+
+    const materialApplied =
+      textured ||
+      loadedMaterials.some(
+        item =>
+          item.material
+            ?.parameterPreview ===
+          true
+      );
+
+    const normalMapped =
+      loadedMaterials.some(
+        item =>
+          item.maps[1]
+            .loaded
+      );
 
     for (const item of loadedMaterials) {
       for (const map of item.maps) {
@@ -2002,6 +2022,7 @@
       triangleCount: indices.length / 3,
       materialCount: materials.length,
       textured,
+      materialApplied,
       normalMapped,
       bounds,
       selectedMaterialSlots:
