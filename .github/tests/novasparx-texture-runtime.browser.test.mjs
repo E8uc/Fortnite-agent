@@ -2088,6 +2088,164 @@ try {
     "Reported STW flower did not finish with material fidelity"
   );
 
+  const materialOnlyPaths = [
+    "FortniteGame/Content/Athena/Apollo/Water/Meshes/SM_Apollo_Agency_WaterPlane_01.uasset",
+    "FortniteGame/Plugins/GameFeatures/SaveTheWorld/Content/Environments/World/Backgrounds/Locales/Temperate/Meshes/SM_STW_PirateShip_BG.uasset"
+  ];
+
+  const materialOnlyProofs =
+    await page.evaluate(
+      async targets => {
+        const proofs = [];
+
+        for (
+          const target of targets
+        ) {
+          const host =
+            document.createElement(
+              "div"
+            );
+
+          document.body.append(
+            host
+          );
+
+          try {
+            const result =
+              await globalThis
+                .FortnitePreview
+                .render(
+                  host,
+                  target.toLowerCase(),
+                  null,
+                  {
+                    assetKind:
+                      "staticmesh"
+                  }
+                );
+
+            const image =
+              host.querySelector(
+                ".mesh-preview-image"
+              );
+
+            const meta =
+              host.querySelector(
+                ".mesh-image-meta"
+              );
+
+            if (
+              image &&
+              !image.hidden &&
+              typeof image.decode ===
+                "function"
+            ) {
+              await image.decode();
+            }
+
+            proofs.push({
+              path:
+                target,
+              state:
+                result?.state ||
+                "",
+              kind:
+                result?.kind ||
+                "",
+              textured:
+                result?.textured ===
+                true,
+              materialFidelity:
+                result
+                  ?.materialFidelity ||
+                "",
+              meta:
+                meta?.textContent ||
+                "",
+              imageHidden:
+                image?.hidden ??
+                true,
+              width:
+                image
+                  ?.naturalWidth ||
+                0,
+              height:
+                image
+                  ?.naturalHeight ||
+                0
+            });
+          } finally {
+            host.remove();
+          }
+        }
+
+        return proofs;
+      },
+      materialOnlyPaths
+    );
+
+  for (
+    const proof of
+      materialOnlyProofs
+  ) {
+    assert.equal(
+      proof.state,
+      "ready",
+      proof.path +
+        " did not reach ready state"
+    );
+
+    assert.equal(
+      proof.kind,
+      "staticmesh"
+    );
+
+    assert.equal(
+      proof.textured,
+      false,
+      proof.path +
+        " unexpectedly claimed a BaseColor Texture"
+    );
+
+    assert.equal(
+      proof.materialFidelity,
+      "material-value-preview",
+      proof.path +
+        " did not preserve its CUE4Parse material parameter values"
+    );
+
+    assert.equal(
+      proof.imageHidden,
+      false,
+      proof.path +
+        " material-only preview remained hidden"
+    );
+
+    assert.equal(
+      proof.width,
+      512
+    );
+
+    assert.equal(
+      proof.height,
+      512
+    );
+
+    assert.match(
+      proof.meta,
+      /Mesh \+ Material/,
+      proof.path +
+        " still reports the old decoded-but-not-applied failure"
+    );
+  }
+
+  console.log(
+    "FNAA_MATERIAL_ONLY_MESHES_PROVEN",
+    JSON.stringify(
+      materialOnlyProofs
+    )
+  );
+
   const failedPreview = await page.evaluate(async target => {
     const original = globalThis.NovaSparxTextureRuntime;
     globalThis.NovaSparxTextureRuntime = {
