@@ -1009,6 +1009,16 @@
 
       return {
         key,
+        requestedPath:
+          String(
+            path ||
+            ""
+          )
+            .trim()
+            .replace(
+              /\\/g,
+              "/"
+            ),
         toc:
           toc.replace(
             /\\/g,
@@ -1078,6 +1088,16 @@
 
         return {
           key,
+          requestedPath:
+            String(
+              path ||
+              ""
+            )
+              .trim()
+              .replace(
+                /\\/g,
+                "/"
+              ),
           toc:
             toc.replace(
               /\\/g,
@@ -1860,7 +1880,13 @@
 
     url.searchParams.set(
       "path",
-      location.key
+      mode === "mesh"
+        ? location.key
+        : (
+            location
+              .requestedPath ||
+            location.key
+          )
     );
 
     url.searchParams.set(
@@ -2506,8 +2532,25 @@
   }
 
   function baseColorParameter(material) {
+    const parameters =
+      material?.textureParameters ||
+      [];
+
+    const compactNames =
+      new Set(
+        parameters.map(
+          parameter =>
+            String(
+              parameter?.name ||
+              ""
+            )
+              .trim()
+              .toLowerCase()
+        )
+      );
+
     const ranked =
-      (material?.textureParameters || [])
+      parameters
         .filter(parameter =>
           /^[a-f0-9]{16}$/i.test(
             String(parameter?.packageId || "")
@@ -2546,6 +2589,22 @@
           ) {
             score =
               150;
+          } else if (
+            name === "d" &&
+            (
+              compactNames.has(
+                "s"
+              ) ||
+              compactNames.has(
+                "mask"
+              )
+            )
+          ) {
+            // Older Fortnite environment materials sometimes use the compact
+            // D/S/Mask convention. Treat D as diffuse only when the sibling
+            // parameters make that convention unambiguous.
+            score =
+              145;
           } else if (
             /base[ _]?colou?r|diffuse|albedo|texture[ _]?bc|(^|[_ ])bc($|[_ ])/.test(name)
           ) {
