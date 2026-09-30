@@ -1705,6 +1705,107 @@ try {
     )
   );
 
+  const stwFlowerPath =
+    "FortniteGame/Content/Environments/Arid/Other/SM_STW_Flowers_Group_02.uasset";
+
+  const stwFlowerUi =
+    await page.evaluate(
+      async target => {
+        const host =
+          document.createElement(
+            "div"
+          );
+
+        document.body.append(
+          host
+        );
+
+        const result =
+          await globalThis
+            .FortnitePreview
+            .render(
+              host,
+              target.toLowerCase(),
+              null,
+              {
+                assetKind:
+                  "staticmesh"
+              }
+            );
+
+        const image =
+          host.querySelector(
+            ".mesh-preview-image"
+          );
+
+        const meta =
+          host.querySelector(
+            ".mesh-image-meta"
+          );
+
+        const status =
+          host.querySelector(
+            ".mesh-image-status"
+          );
+
+        return {
+          state:
+            result?.state ||
+            "",
+          kind:
+            result?.kind ||
+            "",
+          textured:
+            result?.textured ===
+            true,
+          materialFidelity:
+            result?.materialFidelity ||
+            "",
+          meta:
+            meta?.textContent ||
+            "",
+          status:
+            status?.textContent ||
+            "",
+          imageHidden:
+            image?.hidden ??
+            true,
+          width:
+            image?.naturalWidth ||
+            0,
+          height:
+            image?.naturalHeight ||
+            0
+        };
+      },
+      stwFlowerPath
+    );
+
+  console.log(
+    "FNAA_STW_FLOWER_PROOF",
+    JSON.stringify(
+      stwFlowerUi
+    )
+  );
+
+  assert.equal(
+    stwFlowerUi.state,
+    "ready",
+    "Reported STW flower Mesh did not reach ready state"
+  );
+
+  assert.equal(
+    stwFlowerUi.textured,
+    true,
+    "Reported STW flower decoded its material Texture but the renderer did not apply it"
+  );
+
+  assert.match(
+    stwFlowerUi.meta,
+    /Mesh \+ Texture \+ Material/,
+    "Reported STW flower did not finish with material fidelity"
+  );
+
   const failedPreview = await page.evaluate(async target => {
     const original = globalThis.NovaSparxTextureRuntime;
     globalThis.NovaSparxTextureRuntime = {
