@@ -85,7 +85,7 @@ a:focus-visible{
   z-index:20;
   grid-row:1;
   display:grid;
-  grid-template-columns:46px minmax(0,1fr) auto;
+  grid-template-columns:84px minmax(0,1fr) 84px;
   align-items:end;
   gap:4px;
   padding:var(--safe-top) 8px 6px;
@@ -116,11 +116,16 @@ a:focus-visible{
 .icon-btn:active{background:var(--panel-2)}
 
 .topbar-actions{
+  justify-self:end;
   display:flex;
   align-items:center;
   justify-content:flex-end;
   gap:2px;
-  min-width:84px;
+  width:84px;
+}
+
+.topbar > #openSidebar{
+  justify-self:start;
 }
 
 .topbar-actions .icon-btn{
