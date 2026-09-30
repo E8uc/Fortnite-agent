@@ -1366,8 +1366,10 @@
       )
       .sort(
         (a, b) =>
+          Number(Boolean(b.pinned)) -
+            Number(Boolean(a.pinned)) ||
           b.updatedAt -
-          a.updatedAt
+            a.updatedAt
       )
       .slice(0, 30)
       .forEach(
@@ -1383,8 +1385,40 @@
           button.className =
             `recent-item${chat.id === activeId ? " current" : ""}`;
 
-          button.textContent =
+          if (chat.pinned) {
+            const pin =
+              document.createElement(
+                "span"
+              );
+
+            pin.className =
+              "recent-item-pin";
+
+            pin.innerHTML =
+              e8IconMarkup(
+                "pin",
+                13
+              );
+
+            button.appendChild(
+              pin
+            );
+          }
+
+          const label =
+            document.createElement(
+              "span"
+            );
+
+          label.className =
+            "recent-item-label";
+
+          label.textContent =
             chat.title;
+
+          button.appendChild(
+            label
+          );
 
           button.addEventListener(
             "click",
@@ -1433,17 +1467,21 @@
       return;
     }
 
-    for (
-      const message of
-      chat.messages
-    ) {
-      els.messages
-        .appendChild(
-          createMessageNode(
-            message
-          )
-        );
-    }
+    chat.messages
+      .forEach(
+        (
+          message,
+          index
+        ) => {
+          els.messages
+            .appendChild(
+              createMessageNode(
+                message,
+                index
+              )
+            );
+        }
+      );
 
     requestAnimationFrame(
       scrollToBottom
@@ -1451,7 +1489,8 @@
   }
 
   function createMessageNode(
-    message
+    message,
+    messageIndex = -1
   ) {
     const outer =
       document.createElement(
@@ -1460,6 +1499,18 @@
 
     outer.className =
       `message ${message.role}`;
+
+    if (
+      Number.isInteger(
+        messageIndex
+      ) &&
+      messageIndex >= 0
+    ) {
+      outer.dataset.messageIndex =
+        String(
+          messageIndex
+        );
+    }
 
     if (
       message.role === "user"
@@ -1561,15 +1612,22 @@
     copyButton.className =
       "assistant-action";
 
-    copyButton.textContent =
-      "⧉";
+    copyButton.innerHTML =
+      e8IconMarkup(
+        "copy",
+        19
+      );
 
     copyButton.title =
-      "Copy response";
+      copyText(
+        "Copy response",
+        "Copier la réponse",
+        "نسخ الإجابة"
+      );
 
     copyButton.setAttribute(
       "aria-label",
-      "Copy response"
+      copyButton.title
     );
 
     copyButton.addEventListener(
@@ -1581,134 +1639,87 @@
           );
 
           showToast(
-            "Copied"
+            copyText(
+              "Copied",
+              "Copié",
+              "تم النسخ"
+            )
           );
         } catch {
           showToast(
-            "Copy failed",
+            copyText(
+              "Copy failed",
+              "Échec de la copie",
+              "فشل النسخ"
+            ),
             true
           );
         }
       }
     );
 
-    const feedbackButton =
-      (
-        rating,
-        label,
-        icon
-      ) => {
-        const button =
-          document.createElement(
-            "button"
-          );
+    const feedback =
+      document.createElement(
+        "button"
+      );
 
-        button.type =
-          "button";
+    feedback.type =
+      "button";
 
-        button.className =
-          "assistant-action feedback-action";
+    feedback.className =
+      `assistant-action feedback-action${message.feedback ? " active" : ""}`;
 
-        button.dataset.rating =
-          rating;
+    feedback.innerHTML =
+      e8IconMarkup(
+        "feedback",
+        22
+      );
 
-        button.textContent =
-          icon;
+    feedback.title =
+      copyText(
+        "Rate response",
+        "Évaluer la réponse",
+        "تقييم الإجابة"
+      );
 
-        button.title =
-          label;
+    feedback.setAttribute(
+      "aria-label",
+      feedback.title
+    );
 
-        button.setAttribute(
-          "aria-label",
-          label
+    feedback.setAttribute(
+      "aria-haspopup",
+      "menu"
+    );
+
+    feedback.setAttribute(
+      "aria-expanded",
+      "false"
+    );
+
+    feedback.setAttribute(
+      "aria-pressed",
+      message.feedback
+        ? "true"
+        : "false"
+    );
+
+    feedback.addEventListener(
+      "click",
+      (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        openFeedbackMenu(
+          feedback,
+          message
         );
-
-        const sync =
-          () => {
-            const active =
-              message.feedback ===
-                rating;
-
-            button.classList.toggle(
-              "active",
-              active
-            );
-
-            button.setAttribute(
-              "aria-pressed",
-              active
-                ? "true"
-                : "false"
-            );
-          };
-
-        sync();
-
-        button.addEventListener(
-          "click",
-          () => {
-            message.feedback =
-              message.feedback ===
-                rating
-                ? ""
-                : rating;
-
-            const chat =
-              currentChat();
-
-            if (chat) {
-              chat.updatedAt =
-                Date.now();
-            }
-
-            saveChats();
-
-            for (
-              const item of
-              actions.querySelectorAll(
-                ".feedback-action"
-              )
-            ) {
-              const active =
-                item.dataset.rating ===
-                  message.feedback;
-
-              item.classList.toggle(
-                "active",
-                active
-              );
-
-              item.setAttribute(
-                "aria-pressed",
-                active
-                  ? "true"
-                  : "false"
-              );
-            }
-
-            showToast(
-              message.feedback
-                ? "Thanks for the feedback"
-                : "Feedback removed"
-            );
-          }
-        );
-
-        return button;
-      };
+      }
+    );
 
     actions.append(
       copyButton,
-      feedbackButton(
-        "good",
-        "Good response",
-        "👍"
-      ),
-      feedbackButton(
-        "bad",
-        "Bad response",
-        "👎"
-      )
+      feedback
     );
 
     wrap.appendChild(
