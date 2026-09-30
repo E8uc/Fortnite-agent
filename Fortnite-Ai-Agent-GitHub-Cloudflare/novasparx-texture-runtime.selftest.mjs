@@ -211,3 +211,95 @@ assert.ok(
 assert.equal(progressiveMeshWorker.terminated, true);
 assert.equal(materialWorker.terminated, true);
 console.log('Mesh View Image: FModel-style PM_Diffuse parent Texture path resolves through the existing Texture runtime.');
+
+// Environment materials often expose a world-space/layered diffuse parameter
+// alongside generic color/gradient textures. Prefer the actual diffuse source
+// so large Props/Walls/Floors do not receive the wrong material texture.
+const rankedMesh = runtime.resolveMeshImage('mesh3.uasset');
+pending.get('mesh3.uasset').resolve();
+await tick();
+
+const rankedMeshWorker = workers.at(-1);
+rankedMeshWorker.send({
+  type: 'mesh',
+  path: 'mesh3.uasset',
+  positions: new Float32Array([
+    0, 0, 0,
+    1, 0, 0,
+    0, 1, 0
+  ]).buffer,
+  indices: new Uint32Array([0, 1, 2]).buffer,
+  uv0: new Float32Array([
+    0, 0,
+    1, 0,
+    0, 1
+  ]).buffer,
+  sections: [{
+    firstIndex: 0,
+    numTriangles: 1,
+    materialIndex: 0
+  }],
+  materialMetadata: [{
+    textureParameters: [
+      {
+        name: 'ColorGradient_Standard',
+        path: '/Game/Textures/T_ColorGradient.T_ColorGradient',
+        packageId: ''
+      },
+      {
+        name: 'WS Diffuse',
+        path: '/Game/Textures/T_WorldDiffuse.T_WorldDiffuse',
+        packageId: ''
+      }
+    ]
+  }]
+});
+rankedMeshWorker.send({
+  type: 'done',
+  exitCode: 0
+});
+
+const rankedFirstFrame = await rankedMesh;
+const worldDiffusePath =
+  'FortniteGame/Content/Textures/T_WorldDiffuse.uasset';
+const colorGradientPath =
+  'FortniteGame/Content/Textures/T_ColorGradient.uasset';
+
+assert.ok(
+  pending.has(worldDiffusePath),
+  'Environment Mesh material did not prefer WS Diffuse'
+);
+assert.equal(
+  pending.has(colorGradientPath),
+  false,
+  'Environment Mesh material incorrectly preferred a generic color gradient over WS Diffuse'
+);
+
+pending.get(worldDiffusePath).resolve();
+await tick();
+
+const rankedTextureWorker = workers.at(-1);
+assert.equal(
+  rankedTextureWorker.path,
+  worldDiffusePath
+);
+rankedTextureWorker.send({
+  type: 'pixels',
+  path: worldDiffusePath,
+  width: 2,
+  height: 2,
+  pixels: new ArrayBuffer(16)
+});
+rankedTextureWorker.send({
+  type: 'done',
+  exitCode: 0
+});
+
+const rankedFinalFrame =
+  await rankedFirstFrame.materialPromise;
+assert.equal(
+  rankedFinalFrame.missingMaterials.length,
+  0
+);
+console.log('Mesh View Image: environment material ranking prefers WS/layer diffuse over generic color textures.');
+
