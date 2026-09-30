@@ -875,6 +875,288 @@ try {
     }
   }
 
+  if (MOBILE_PROFILE) {
+    // Mobile WebKit/Chromium gets a fresh browsing context per heavy Mesh.
+    // This proves the actual one-asset-at-a-time phone workflow without
+    // conflating it with the desktop suite's cumulative WASM stress load.
+    await page.close();
+
+    const heavyMeshes = [
+      {
+        path:
+          "FortniteGame/Content/Environments/Arid/Other/SM_STW_Flowers_Group_02.uasset",
+        requireTexture:
+          true
+      },
+      {
+        path:
+          "FortniteGame/Plugins/GameFeatures/SaveTheWorld/Content/Environments/Sets/StW_Spring/Meshes/Foliage/SM_StW_Tree_Medium.uasset",
+        requireTexture:
+          true
+      },
+      {
+        path:
+          "FortniteGame/Plugins/GameFeatures/STW/STW_Horde/Content/Meshes/SM_StWH_CrystalScree01.uasset",
+        requireTexture:
+          false
+      }
+    ];
+
+    const mobileHeavyProof = [];
+
+    for (
+      const item of
+      heavyMeshes
+    ) {
+      const assetPage =
+        await browser.newPage(
+          PAGE_OPTIONS
+        );
+
+      try {
+        assetPage.setDefaultTimeout(
+          300_000
+        );
+
+        await assetPage.goto(
+          origin,
+          {
+            waitUntil:
+              "domcontentloaded"
+          }
+        );
+
+        await assetPage.waitForFunction(
+          () =>
+            typeof globalThis
+              .FortnitePreview
+              ?.render ===
+              "function" &&
+            typeof globalThis
+              .NovaSparxTextureRuntime
+              ?.resolveMeshImage ===
+              "function"
+        );
+
+        const guard =
+          await assetPage.evaluate(
+            () =>
+              globalThis
+                .NovaSparxBrowserGuard
+                ?.status?.() ||
+              null
+          );
+
+        assert.ok(
+          guard,
+          "heavy mobile Mesh page did not load browser guard"
+        );
+
+        if (
+          MOBILE_PROFILE ===
+          "ios"
+        ) {
+          assert.equal(
+            guard.isIOS,
+            true
+          );
+        } else {
+          assert.equal(
+            guard.isAndroid,
+            true
+          );
+        }
+
+        const proof =
+          await assetPage.evaluate(
+            async target => {
+              const host =
+                document.createElement(
+                  "div"
+                );
+
+              document.body.append(
+                host
+              );
+
+              const result =
+                await globalThis
+                  .FortnitePreview
+                  .render(
+                    host,
+                    target.toLowerCase(),
+                    null,
+                    {
+                      assetKind:
+                        "staticmesh"
+                    }
+                  );
+
+              const image =
+                host.querySelector(
+                  ".mesh-preview-image"
+                );
+
+              const meta =
+                host.querySelector(
+                  ".mesh-image-meta"
+                );
+
+              const status =
+                host.querySelector(
+                  ".mesh-image-status"
+                );
+
+              return {
+                path:
+                  target,
+                state:
+                  result?.state ||
+                  "",
+                kind:
+                  result?.kind ||
+                  "",
+                textured:
+                  result?.textured ===
+                  true,
+                materialFidelity:
+                  result?.materialFidelity ||
+                  "",
+                meta:
+                  meta?.textContent ||
+                  "",
+                status:
+                  status?.textContent ||
+                  "",
+                imageHidden:
+                  image?.hidden ??
+                  true,
+                width:
+                  image?.naturalWidth ||
+                  0,
+                height:
+                  image?.naturalHeight ||
+                  0
+              };
+            },
+            item.path
+          );
+
+        assert.ok(
+          [
+            "ready",
+            "partial"
+          ].includes(
+            proof.state
+          ),
+          "Heavy mobile Mesh did not produce a preview: " +
+          item.path +
+          " -> " +
+          JSON.stringify(
+            proof
+          )
+        );
+
+        assert.equal(
+          proof.kind,
+          "staticmesh"
+        );
+
+        assert.equal(
+          proof.imageHidden,
+          false,
+          "Heavy mobile Mesh image stayed hidden: " +
+          item.path
+        );
+
+        assert.ok(
+          proof.width > 0 &&
+          proof.height > 0,
+          "Heavy mobile Mesh image has no pixels: " +
+          item.path
+        );
+
+        assert.doesNotMatch(
+          proof.status,
+          /View Image unavailable/i,
+          "Heavy mobile Mesh still hit the old unavailable path: " +
+          item.path
+        );
+
+        if (
+          item.requireTexture
+        ) {
+          assert.equal(
+            proof.textured,
+            true,
+            "Heavy mobile Mesh did not apply its decoded material Texture: " +
+            item.path
+          );
+
+          assert.match(
+            proof.meta,
+            /Mesh \+ Texture \+ Material/,
+            "Heavy mobile Mesh did not finish with Texture + Material: " +
+            item.path
+          );
+        }
+
+        mobileHeavyProof.push(
+          proof
+        );
+
+        console.log(
+          "FNAA_MOBILE_HEAVY_MESH_PROVEN",
+          JSON.stringify(
+            proof
+          )
+        );
+      } finally {
+        await assetPage.close();
+      }
+    }
+
+    fs.writeFileSync(
+      "fnaa-mobile-heavy-mesh-proof.json",
+      JSON.stringify(
+        {
+          engine:
+            BROWSER_ENGINE,
+          mobileProfile:
+            MOBILE_PROFILE,
+          meshes:
+            mobileHeavyProof
+        },
+        null,
+        2
+      )
+    );
+
+    console.log(
+      "FNAA_MOBILE_HEAVY_LAYER8_PROVEN",
+      JSON.stringify({
+        engine:
+          BROWSER_ENGINE,
+        mobileProfile:
+          MOBILE_PROFILE,
+        meshes:
+          mobileHeavyProof.map(
+            item => ({
+              path:
+                item.path,
+              state:
+                item.state,
+              textured:
+                item.textured,
+              width:
+                item.width,
+              height:
+                item.height
+            })
+          )
+      })
+    );
+  } else {
   const result =
     await page.evaluate(
       async target => {
@@ -1889,6 +2171,7 @@ try {
       }
     )
   );
+  }
 } finally {
   await browser.close();
   await new Promise(
