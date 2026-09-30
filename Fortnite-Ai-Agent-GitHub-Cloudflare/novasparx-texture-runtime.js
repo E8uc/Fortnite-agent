@@ -1891,6 +1891,14 @@
     );
 
     url.searchParams.set(
+      "packageIndexBase",
+      new URL(
+        "package-id-index/",
+        RUNTIME_BASE
+      ).href
+    );
+
+    url.searchParams.set(
       "maxSize",
       String(
         maxSize
