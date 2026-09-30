@@ -1598,6 +1598,9 @@
         button.className =
           "assistant-action feedback-action";
 
+        button.dataset.rating =
+          rating;
+
         button.textContent =
           icon;
 
@@ -1610,12 +1613,23 @@
         );
 
         const sync =
-          () =>
+          () => {
+            const active =
+              message.feedback ===
+                rating;
+
             button.classList.toggle(
               "active",
-              message.feedback ===
-                rating
+              active
             );
+
+            button.setAttribute(
+              "aria-pressed",
+              active
+                ? "true"
+                : "false"
+            );
+          };
 
         sync();
 
@@ -1637,7 +1651,29 @@
             }
 
             saveChats();
-            renderMessages();
+
+            for (
+              const item of
+              actions.querySelectorAll(
+                ".feedback-action"
+              )
+            ) {
+              const active =
+                item.dataset.rating ===
+                  message.feedback;
+
+              item.classList.toggle(
+                "active",
+                active
+              );
+
+              item.setAttribute(
+                "aria-pressed",
+                active
+                  ? "true"
+                  : "false"
+              );
+            }
 
             showToast(
               message.feedback
