@@ -701,6 +701,33 @@
         null;
 
       try {
+        // Mobile WebKit can leave an earlier non-fatal GL error queued on the
+        // context. Drain only that stale queue before this upload so a valid
+        // decoded Texture is not misclassified as a failed material.
+        for (
+          let attempt = 0;
+          attempt < 8;
+          attempt++
+        ) {
+          const staleError =
+            gl.getError();
+
+          if (
+            staleError ===
+              gl.NO_ERROR
+          ) {
+            break;
+          }
+
+          if (
+            gl.isContextLost?.()
+          ) {
+            throw new Error(
+              "WebGL context was lost before the decoded material Texture upload."
+            );
+          }
+        }
+
         // PNG/Image uploads used UNPACK_FLIP_Y_WEBGL. Typed-array uploads do
         // not consistently honor that flag across WebKit/WebGL versions, so
         // flip rows explicitly and upload the already-decoded RGBA bytes.
@@ -3962,7 +3989,7 @@
   }
 
   window.NovaSparxRenderer = Object.freeze({
-    version: "1.5.1",
+    version: "1.5.3",
     render,
     mount
   });
