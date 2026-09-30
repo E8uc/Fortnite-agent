@@ -2088,6 +2088,163 @@ try {
     "Reported STW flower did not finish with material fidelity"
   );
 
+  async function proveParameterMesh(
+    target,
+    label
+  ) {
+    const result =
+      await page.evaluate(
+        async targetPath => {
+          const host =
+            document.createElement(
+              "div"
+            );
+
+          document.body.append(
+            host
+          );
+
+          const preview =
+            await globalThis
+              .FortnitePreview
+              .render(
+                host,
+                targetPath
+                  .toLowerCase(),
+                null,
+                {
+                  assetKind:
+                    "staticmesh"
+                }
+              );
+
+          const image =
+            host.querySelector(
+              ".mesh-preview-image"
+            );
+
+          const meta =
+            host.querySelector(
+              ".mesh-image-meta"
+            );
+
+          if (
+            image &&
+            !image.hidden &&
+            typeof image.decode ===
+              "function"
+          ) {
+            await image.decode();
+          }
+
+          return {
+            state:
+              preview?.state ||
+              "",
+            kind:
+              preview?.kind ||
+              "",
+            textured:
+              preview?.textured ===
+              true,
+            materialApplied:
+              preview?.materialApplied ===
+              true,
+            materialFidelity:
+              preview?.materialFidelity ||
+              "",
+            meta:
+              meta?.textContent ||
+              "",
+            imageHidden:
+              image?.hidden ??
+              true,
+            width:
+              image?.naturalWidth ||
+              0,
+            height:
+              image?.naturalHeight ||
+              0
+          };
+        },
+        target
+      );
+
+    console.log(
+      label,
+      JSON.stringify(
+        result
+      )
+    );
+
+    assert.equal(
+      result.state,
+      "ready",
+      label +
+        " did not reach ready state"
+    );
+
+    assert.equal(
+      result.kind,
+      "staticmesh"
+    );
+
+    assert.equal(
+      result.materialApplied,
+      true,
+      label +
+        " did not apply its vector/scalar material parameters"
+    );
+
+    assert.equal(
+      result.imageHidden,
+      false
+    );
+
+    assert.equal(
+      result.width,
+      512
+    );
+
+    assert.equal(
+      result.height,
+      512
+    );
+
+    assert.match(
+      result.meta,
+      /Mesh \+ Material/,
+      label +
+        " did not report a parameter/procedural material preview"
+    );
+
+    return result;
+  }
+
+  const waterPlaneUi =
+    await proveParameterMesh(
+      "FortniteGame/Content/Athena/Apollo/Water/Meshes/SM_Apollo_Agency_WaterPlane_01.uasset",
+      "FNAA_WATER_PLANE_PARAMETER_MATERIAL_PROVEN"
+    );
+
+  assert.equal(
+    waterPlaneUi.textured,
+    false,
+    "WaterPlane unexpectedly reported a BaseColor Texture even though CUE4Parse exposes vector parameters only"
+  );
+
+  const pirateShipUi =
+    await proveParameterMesh(
+      "FortniteGame/Plugins/GameFeatures/SaveTheWorld/Content/Environments/World/Backgrounds/Locales/Temperate/Meshes/SM_STW_PirateShip_BG.uasset",
+      "FNAA_PIRATE_SHIP_PROCEDURAL_MATERIAL_PROVEN"
+    );
+
+  assert.equal(
+    pirateShipUi.textured,
+    false,
+    "PirateShip unexpectedly reported a BaseColor Texture even though its material is procedural/emissive"
+  );
+
   const failedPreview = await page.evaluate(async target => {
     const original = globalThis.NovaSparxTextureRuntime;
     globalThis.NovaSparxTextureRuntime = {
