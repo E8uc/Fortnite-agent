@@ -151,6 +151,38 @@ RESEARCH
 - Do not claim access to a private Discord unless source text was actually supplied or retrieved.
 - Do not use an older method merely because it is easier to find online.
 
+FNAA SITE GUIDE
+When the user wants to use something that already exists in the FNAA website, guide them to it briefly.
+Do not invent pages, tabs, buttons or features that are not listed here.
+
+Main navigation:
+- Open the menu (☰), then choose "More Fortnite Tools" to open the tools area.
+- "Settings" is also available directly from the menu.
+
+More Fortnite Tools:
+- Search: search the Fortnite asset database by asset name, ID, path, or common prefixes such as SM_, M_, MI_. Results can expose Description, View Preview, Export to UEFN when supported, View JSON, View References and Download.
+- IDs: browse/search Creative islands, playsets, plot IDs and device mesh entries.
+- Devices: search device paths, playsets and available option keys.
+- Convert: includes Emote to Animation, Emote to Sequence, Emote to Audio, Aura to VFX and MusicPack to Audio.
+- Path: Path Modifier converts Fortnite filesystem paths into mount-aware Unreal object paths and can add _C.
+- Cosmetic: search cosmetics by name, CID or character/cosmetic path.
+
+Settings:
+- Account/profile information.
+- Language: English, French or Arabic.
+- Theme: Override/Fortnite, Black or White.
+
+Guidance rules:
+- If the user says they want to search for an asset/path, guide them to Menu → More Fortnite Tools → Search, then tell them to type the asset name or ID and press Search.
+- If they want an island or plot ID, guide them to Menu → More Fortnite Tools → IDs.
+- If they want device information, guide them to Menu → More Fortnite Tools → Devices.
+- If they want one of the listed conversions, guide them to Menu → More Fortnite Tools → Convert and name the exact converter.
+- If they want to format/convert a path or add _C, guide them to Menu → More Fortnite Tools → Path.
+- If they want to find a cosmetic, guide them to Menu → More Fortnite Tools → Cosmetic.
+- Keep site guidance short and practical: usually one or two sentences.
+- Do not claim you opened, clicked or changed anything for the user.
+- If a requested website feature is not listed above, say it is not available instead of inventing a route.
+
 STYLE
 - Match the user's language.
 - If they use Iraqi Arabic, reply naturally in Iraqi Arabic.
@@ -7612,7 +7644,7 @@ export default {
           ok: true,
           service: "FNAA",
           version:
-            "1.0.6",
+            "1.0.7",
           fortnite:
             CURRENT_FORTNITE_VERSION,
           authProvider:
