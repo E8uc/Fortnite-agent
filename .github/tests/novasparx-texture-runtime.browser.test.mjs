@@ -2246,6 +2246,62 @@ try {
     )
   );
 
+  const volcanoPath =
+    "FortniteGame/Content/Environments/World/Backgrounds/Locales/Temperate/Meshes/SM_STW_Volcano_BG.uasset";
+
+  const volcanoProof =
+    await page.evaluate(
+      async target => {
+        const host =
+          document.createElement(
+            "div"
+          );
+
+        document.body.append(
+          host
+        );
+
+        try {
+          const result =
+            await globalThis
+              .FortnitePreview
+              .render(
+                host,
+                target.toLowerCase(),
+                null,
+                {
+                  assetKind:
+                    "staticmesh"
+                }
+              );
+
+          return {
+            result,
+            meta:
+              host.querySelector(
+                ".mesh-image-meta"
+              )?.textContent ||
+              "",
+            status:
+              host.querySelector(
+                ".mesh-image-status"
+              )?.textContent ||
+              ""
+          };
+        } finally {
+          host.remove();
+        }
+      },
+      volcanoPath
+    );
+
+  console.log(
+    "FNAA_VOLCANO_BG_REPRO",
+    JSON.stringify(
+      volcanoProof
+    )
+  );
+
   const failedPreview = await page.evaluate(async target => {
     const original = globalThis.NovaSparxTextureRuntime;
     globalThis.NovaSparxTextureRuntime = {
