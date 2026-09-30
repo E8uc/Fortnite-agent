@@ -914,7 +914,7 @@
       const ui =
         await loadChatUi();
 
-      ui.openChatMenu({
+      await ui.openChatMenu({
         anchor:
           els.chatMenuButton,
 
@@ -998,7 +998,7 @@
       const ui =
         await loadChatUi();
 
-      ui.openFeedbackMenu({
+      await ui.openFeedbackMenu({
         anchor,
 
         currentRating:
