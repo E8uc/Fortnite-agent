@@ -1653,34 +1653,22 @@
     els.newChatBtn
       ?.addEventListener(
         "click",
-        () => {
-          try {
-            activeChatController
-              ?.abort(
-                "new-chat"
-              );
-          } catch {}
+        startNewChat
+      );
 
-          activeChatController =
-            null;
+    els.newChatTop
+      ?.addEventListener(
+        "click",
+        startNewChat
+      );
 
-          activeChatRun++;
-
-          setBusy(false);
-          removeTypingIndicator();
-
-          activeId =
-            createChat(true);
-
-          renderAll();
-          closeSidebar();
-
-          navigate(
-            ROUTES.chat,
-            {
-              apply: true
-            }
-          );
+    els.chatMenuButton
+      ?.addEventListener(
+        "click",
+        (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openChatMenu();
         }
       );
 
@@ -1745,28 +1733,6 @@
               replace: true
             }
           );
-        }
-      );
-
-    els.discordTop
-      ?.addEventListener(
-        "click",
-        async () => {
-          try {
-            await navigator
-              .clipboard
-              .writeText(
-                "@its.swag"
-              );
-
-            showToast(
-              "Copied @its.swag"
-            );
-          } catch {
-            showToast(
-              "@its.swag"
-            );
-          }
         }
       );
 
@@ -1898,6 +1864,43 @@
       "fortnite-language-changed",
       () => {
         syncSettingsApiCard();
+        closeActiveChatUi();
+
+        if (els.newChatTop) {
+          const label =
+            copyText(
+              "New chat",
+              "Nouvelle discussion",
+              "محادثة جديدة"
+            );
+
+          els.newChatTop
+            .setAttribute(
+              "aria-label",
+              label
+            );
+
+          els.newChatTop.title =
+            label;
+        }
+
+        if (els.chatMenuButton) {
+          const label =
+            copyText(
+              "Chat menu",
+              "Menu de discussion",
+              "قائمة المحادثة"
+            );
+
+          els.chatMenuButton
+            .setAttribute(
+              "aria-label",
+              label
+            );
+
+          els.chatMenuButton.title =
+            label;
+        }
       }
     );
 
