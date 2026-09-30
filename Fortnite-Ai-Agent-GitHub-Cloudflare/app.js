@@ -289,6 +289,7 @@
   );
 
   setupEvents();
+  syncChatChromeLabels();
   renderAll();
   ensureGuestLoginButton();
   ensureSettingsApiCard();
@@ -489,6 +490,8 @@
   }
 
   function applyCurrentRoute() {
+    closeActiveChatUi();
+
     const route =
       currentRoute();
 
@@ -1661,34 +1664,22 @@
     els.newChatBtn
       ?.addEventListener(
         "click",
-        () => {
-          try {
-            activeChatController
-              ?.abort(
-                "new-chat"
-              );
-          } catch {}
+        startNewChat
+      );
 
-          activeChatController =
-            null;
+    els.newChatTop
+      ?.addEventListener(
+        "click",
+        startNewChat
+      );
 
-          activeChatRun++;
-
-          setBusy(false);
-          removeTypingIndicator();
-
-          activeId =
-            createChat(true);
-
-          renderAll();
-          closeSidebar();
-
-          navigate(
-            ROUTES.chat,
-            {
-              apply: true
-            }
-          );
+    els.chatMenuButton
+      ?.addEventListener(
+        "click",
+        (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openChatMenu();
         }
       );
 
@@ -1753,28 +1744,6 @@
               replace: true
             }
           );
-        }
-      );
-
-    els.discordTop
-      ?.addEventListener(
-        "click",
-        async () => {
-          try {
-            await navigator
-              .clipboard
-              .writeText(
-                "@its.swag"
-              );
-
-            showToast(
-              "Copied @its.swag"
-            );
-          } catch {
-            showToast(
-              "@its.swag"
-            );
-          }
         }
       );
 
@@ -1877,6 +1846,19 @@
       );
 
     document.addEventListener(
+      "keydown",
+      (event) => {
+        if (
+          event.key ===
+            "Escape" &&
+          activeChatUiLayer
+        ) {
+          closeActiveChatUi();
+        }
+      }
+    );
+
+    document.addEventListener(
       "click",
       (event) => {
         const button =
@@ -1906,6 +1888,8 @@
       "fortnite-language-changed",
       () => {
         syncSettingsApiCard();
+        closeActiveChatUi();
+        syncChatChromeLabels();
       }
     );
 
@@ -5617,6 +5601,8 @@
   // ---------------------------------------------------------------------------
 
   function openSidebar() {
+    closeActiveChatUi();
+
     els.sidebar
       ?.classList
       .add("open");
