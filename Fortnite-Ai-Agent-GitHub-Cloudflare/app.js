@@ -168,9 +168,10 @@
     closeSidebar: $("closeSidebar"),
 
     newChatBtn: $("newChatBtn"),
+    newChatTop: $("newChatTop"),
+    chatMenuButton: $("chatMenuButton"),
     moreToolsBtn: $("moreToolsBtn"),
     settingsBtn: $("settingsBtn"),
-    discordTop: $("discordTop"),
 
     recentList: $("recentList"),
     chat: $("chat"),
@@ -246,6 +247,12 @@
 
   let activeChatRun =
     0;
+
+  let activeChatUiLayer =
+    null;
+
+  let activeChatUiAnchor =
+    null;
 
   let toastTimer = null;
 
@@ -1217,6 +1224,9 @@
 
       output[id] = {
         id,
+        pinned:
+          chat.pinned ===
+          true,
         title:
           String(
             chat.title ||
@@ -1298,6 +1308,7 @@
 
     chats[id] = {
       id,
+      pinned: false,
       title: "New chat",
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -1355,8 +1366,10 @@
       )
       .sort(
         (a, b) =>
+          Number(Boolean(b.pinned)) -
+            Number(Boolean(a.pinned)) ||
           b.updatedAt -
-          a.updatedAt
+            a.updatedAt
       )
       .slice(0, 30)
       .forEach(
@@ -1372,8 +1385,40 @@
           button.className =
             `recent-item${chat.id === activeId ? " current" : ""}`;
 
-          button.textContent =
+          const label =
+            document.createElement(
+              "span"
+            );
+
+          label.className =
+            "recent-item-label";
+
+          label.textContent =
             chat.title;
+
+          if (chat.pinned) {
+            const pin =
+              document.createElement(
+                "span"
+              );
+
+            pin.className =
+              "recent-item-pin";
+
+            pin.innerHTML =
+              e8IconMarkup(
+                "pin",
+                13
+              );
+
+            button.appendChild(
+              pin
+            );
+          }
+
+          button.appendChild(
+            label
+          );
 
           button.addEventListener(
             "click",
