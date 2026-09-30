@@ -256,6 +256,45 @@ a:focus-visible{
   line-height:1.62;
   overflow-wrap:anywhere;
 }
+
+.e8-thinking{
+  display:inline-block;
+  margin:0!important;
+  font-weight:700;
+  letter-spacing:.01em;
+  color:transparent;
+  background:
+    linear-gradient(
+      100deg,
+      #0b0b0b 12%,
+      #ffffff 48%,
+      #0b0b0b 84%
+    );
+  background-size:220% 100%;
+  background-position:120% 0;
+  -webkit-background-clip:text;
+  background-clip:text;
+  -webkit-text-fill-color:transparent;
+  animation:
+    e8-thinking-shimmer
+    1.35s
+    linear
+    infinite;
+}
+
+@keyframes e8-thinking-shimmer{
+  to{
+    background-position:-120% 0;
+  }
+}
+
+@media (prefers-reduced-motion:reduce){
+  .e8-thinking{
+    animation:none;
+    background-position:50% 0;
+  }
+}
+
 .assistant-content p{margin:0 0 10px}
 .assistant-content h1,
 .assistant-content h2,
