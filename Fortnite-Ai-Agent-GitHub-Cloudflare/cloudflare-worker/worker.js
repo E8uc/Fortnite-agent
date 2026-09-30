@@ -7567,6 +7567,11 @@ async function handleChat(
       body?.client_context
     );
 
+  const userContext =
+    cleanUserContext(
+      body?.user_context
+    );
+
   // Never trust client-supplied inspection JSON. The browser is allowed to
   // send only the target path; FNAA rebuilds the actual context server-side.
   const assetPath =
@@ -7630,7 +7635,8 @@ async function handleChat(
             messages,
             clientContext,
             assetContext,
-            historicalRequested
+            historicalRequested,
+            userContext
           )
         : await callChat(
             provider === "openrouter"
@@ -7640,7 +7646,8 @@ async function handleChat(
             inferredMode,
             clientContext,
             assetContext,
-            historicalRequested
+            historicalRequested,
+            userContext
           );
 
     let data =
@@ -7668,7 +7675,8 @@ async function handleChat(
               messages,
               clientContext,
               assetContext,
-              historicalRequested
+              historicalRequested,
+              userContext
             )
           : await callChat(
               apiKey,
@@ -7676,7 +7684,8 @@ async function handleChat(
               "chat",
               clientContext,
               assetContext,
-              historicalRequested
+              historicalRequested,
+              userContext
             );
 
       actualProvider =
@@ -7972,7 +7981,7 @@ export default {
           ok: true,
           service: "FNAA",
           version:
-            "1.0.9",
+            "1.0.10",
           fortnite:
             CURRENT_FORTNITE_VERSION,
           authProvider:
