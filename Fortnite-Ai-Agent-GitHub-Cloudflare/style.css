@@ -296,6 +296,40 @@ a:focus-visible{
 }
 
 .assistant-content p{margin:0 0 10px}
+
+.assistant-actions{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  min-height:28px;
+  margin-top:4px;
+}
+
+.assistant-action{
+  width:28px;
+  height:28px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1;
+}
+
+.assistant-action:hover,
+.assistant-action:focus-visible{
+  background:var(--panel-2);
+  color:var(--text);
+}
+
+.assistant-action.active{
+  background:var(--panel-3);
+  color:var(--text);
+}
+
 .assistant-content h1,
 .assistant-content h2,
 .assistant-content h3{line-height:1.25}
@@ -448,6 +482,15 @@ a:focus-visible{
 .send-btn:disabled{
   opacity:.3;
   cursor:not-allowed;
+}
+
+.send-btn.stop{
+  font-size:13px;
+  font-weight:900;
+}
+
+.send-btn.stop:disabled{
+  opacity:1;
 }
 
 .fnaa-guest-slowmode-banner{

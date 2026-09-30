@@ -891,7 +891,10 @@
         ) {
           event.preventDefault();
 
-          if (!els.send.disabled) {
+          if (
+            !busy &&
+            !els.send.disabled
+          ) {
             els.composer
               .requestSubmit();
           }
@@ -1053,6 +1056,17 @@
           MAX_STORED_MESSAGE_CHARS
         )
     };
+
+    if (
+      role === "assistant" &&
+      (
+        value.feedback === "good" ||
+        value.feedback === "bad"
+      )
+    ) {
+      message.feedback =
+        value.feedback;
+    }
 
     const attachment =
       value.attachment;
@@ -1515,6 +1529,179 @@
     wrap.append(
       name,
       body
+    );
+
+    const actions =
+      document.createElement(
+        "div"
+      );
+
+    actions.className =
+      "assistant-actions";
+
+    const copyButton =
+      document.createElement(
+        "button"
+      );
+
+    copyButton.type =
+      "button";
+
+    copyButton.className =
+      "assistant-action";
+
+    copyButton.textContent =
+      "⧉";
+
+    copyButton.title =
+      "Copy response";
+
+    copyButton.setAttribute(
+      "aria-label",
+      "Copy response"
+    );
+
+    copyButton.addEventListener(
+      "click",
+      async () => {
+        try {
+          await copyTextToClipboard(
+            message.content
+          );
+
+          showToast(
+            "Copied"
+          );
+        } catch {
+          showToast(
+            "Copy failed",
+            true
+          );
+        }
+      }
+    );
+
+    const feedbackButton =
+      (
+        rating,
+        label,
+        icon
+      ) => {
+        const button =
+          document.createElement(
+            "button"
+          );
+
+        button.type =
+          "button";
+
+        button.className =
+          "assistant-action feedback-action";
+
+        button.dataset.rating =
+          rating;
+
+        button.textContent =
+          icon;
+
+        button.title =
+          label;
+
+        button.setAttribute(
+          "aria-label",
+          label
+        );
+
+        const sync =
+          () => {
+            const active =
+              message.feedback ===
+                rating;
+
+            button.classList.toggle(
+              "active",
+              active
+            );
+
+            button.setAttribute(
+              "aria-pressed",
+              active
+                ? "true"
+                : "false"
+            );
+          };
+
+        sync();
+
+        button.addEventListener(
+          "click",
+          () => {
+            message.feedback =
+              message.feedback ===
+                rating
+                ? ""
+                : rating;
+
+            const chat =
+              currentChat();
+
+            if (chat) {
+              chat.updatedAt =
+                Date.now();
+            }
+
+            saveChats();
+
+            for (
+              const item of
+              actions.querySelectorAll(
+                ".feedback-action"
+              )
+            ) {
+              const active =
+                item.dataset.rating ===
+                  message.feedback;
+
+              item.classList.toggle(
+                "active",
+                active
+              );
+
+              item.setAttribute(
+                "aria-pressed",
+                active
+                  ? "true"
+                  : "false"
+              );
+            }
+
+            showToast(
+              message.feedback
+                ? "Thanks for the feedback"
+                : "Feedback removed"
+            );
+          }
+        );
+
+        return button;
+      };
+
+    actions.append(
+      copyButton,
+      feedbackButton(
+        "good",
+        "Good response",
+        "👍"
+      ),
+      feedbackButton(
+        "bad",
+        "Bad response",
+        "👎"
+      )
+    );
+
+    wrap.appendChild(
+      actions
     );
 
     if (
@@ -2062,6 +2249,11 @@
   // ---------------------------------------------------------------------------
 
   async function sendCurrentInput() {
+    if (busy) {
+      stopActiveResponse();
+      return;
+    }
+
     const text =
       els.input.value.trim();
 
@@ -2160,6 +2352,21 @@
         .trim();
 
     if (!clean) return;
+
+    if (
+      busy ||
+      activeChatController
+    ) {
+      showToast(
+        "Stop the current response first.",
+        true
+      );
+
+      return {
+        blocked: true,
+        busy: true
+      };
+    }
 
     const {
       assetPath = "",
@@ -4134,6 +4341,28 @@
   }
 
   function updateSendState() {
+    if (busy) {
+      els.send.disabled =
+        false;
+
+      els.send.textContent =
+        "■";
+
+      els.send.classList.add(
+        "stop"
+      );
+
+      els.send.setAttribute(
+        "aria-label",
+        "Stop generating"
+      );
+
+      els.send.title =
+        "Stop generating";
+
+      return;
+    }
+
     const text =
       els.input.value.trim();
 
@@ -4142,6 +4371,21 @@
       guestSlowmodeBlocks(
         text
       );
+
+    els.send.textContent =
+      "↑";
+
+    els.send.classList.remove(
+      "stop"
+    );
+
+    els.send.setAttribute(
+      "aria-label",
+      "Send"
+    );
+
+    els.send.title =
+      "Send";
 
     els.send.disabled =
       !text ||
@@ -4153,6 +4397,37 @@
       Boolean(value);
 
     updateSendState();
+  }
+
+  function stopActiveResponse() {
+    const controller =
+      activeChatController;
+
+    if (!controller) {
+      setBusy(false);
+      removeTypingIndicator();
+      return false;
+    }
+
+    try {
+      controller.abort(
+        "user-stopped"
+      );
+    } catch {}
+
+    activeChatRun++;
+
+    activeChatController =
+      null;
+
+    setBusy(false);
+    removeTypingIndicator();
+
+    els.input.focus({
+      preventScroll: true
+    });
+
+    return true;
   }
 
   function addTypingIndicator() {
@@ -5536,7 +5811,7 @@
 
   window.FortniteAgent =
     Object.freeze({
-      version: "1.0.2",
+      version: "1.0.3",
 
       searchDatabase,
       describePath,
