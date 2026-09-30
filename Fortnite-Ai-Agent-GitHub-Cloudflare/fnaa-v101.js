@@ -1023,8 +1023,8 @@
 
       status.textContent =
         filtered.length
-          ? `${filtered.length} cosmetic${filtered.length === 1 ? "" : "s"} found.`
-          : "No matching cosmetics.";
+          ? `E8 Found: ${filtered.length} cosmetic${filtered.length === 1 ? "" : "s"}.`
+          : "E8 Found: 0 cosmetics.";
     }
 
     more.hidden =
@@ -1169,10 +1169,35 @@
         14_000
       );
 
+    let statusTimer =
+      null;
+
     if (status) {
       status.hidden = false;
+
+      const frames = [
+        "E8 Searching.",
+        "E8 Searching..",
+        "E8 Searching…"
+      ];
+
+      let frame = 0;
+
       status.textContent =
-        "Searching...";
+        frames[0];
+
+      statusTimer =
+        setInterval(
+          () => {
+            frame =
+              (frame + 1) %
+              frames.length;
+
+            status.textContent =
+              frames[frame];
+          },
+          350
+        );
     }
 
     const params =
@@ -1276,6 +1301,10 @@
           "Cosmetic search failed.";
       }
     } finally {
+      clearInterval(
+        statusTimer
+      );
+
       clearTimeout(
         timer
       );
