@@ -33,7 +33,8 @@
 
   const SITE_BASE_PATH =
     CONFIG.siteBasePath ||
-    "/Fortnite-agent/";
+    new URL(".", document.baseURI)
+      .pathname;
 
   const CURRENT_FN_VERSION =
     CONFIG.fortniteVersion ||
@@ -1491,7 +1492,7 @@
       );
 
     brand.textContent =
-      "Fortnite Ai Agent";
+      "E8 Helper";
 
     name.append(
       avatar,
@@ -2960,7 +2961,7 @@
   ) {
     if (!API_ENDPOINT) {
       throw new Error(
-        "FNAA API endpoint is not configured."
+        "E8 API endpoint is not configured."
       );
     }
 
@@ -2999,7 +3000,7 @@
       url.password
     ) {
       throw new Error(
-        "FNAA API request target is not allowed."
+        "E8 API request target is not allowed."
       );
     }
 
@@ -3872,7 +3873,7 @@
       "plugin-panel-badge";
 
     badge.textContent =
-      "FNAA";
+      "E8";
 
     header.append(
       title,
@@ -4176,11 +4177,11 @@
             src="${SITE_BASE_PATH}assets/fnaa-avatar.jpeg"
             alt=""
           />
-          <span>Fortnite Ai Agent</span>
+          <span>E8 Helper</span>
         </div>
 
         <div class="assistant-content">
-          <p>Thinking...</p>
+          <p class="e8-thinking" aria-label="Thinking">Thinking</p>
         </div>
       </div>`;
 
@@ -4513,7 +4514,7 @@
             src="${SITE_BASE_PATH}assets/fnaa-avatar.jpeg"
             alt=""
           />
-          <span>Fortnite Ai Agent</span>
+          <span>E8 Helper</span>
         </h1>
 
         <div class="fnaa-login-actions">
@@ -4966,9 +4967,9 @@
       if (state) {
         state.textContent =
           copyText(
-            "Guest uses FNAA access + 15s slow mode.",
-            "L’invité utilise l’accès FNAA + mode lent 15 s.",
-            "الضيف يستخدم FNAA + سلو مود 15 ثانية."
+            "Guest uses E8 access + 15s slow mode.",
+            "L’invité utilise l’accès E8 + mode lent 15 s.",
+            "الضيف يستخدم E8 + سلو مود 15 ثانية."
           );
       }
 
