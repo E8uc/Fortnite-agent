@@ -338,7 +338,13 @@
         if (uHasBase == 1) {
           vec4 texel = texture2D(uBaseMap, vUV);
           base.rgb *= toLinear(texel.rgb);
-          base.a *= texel.a;
+
+          // Fortnite frequently stores auxiliary data in BaseColor alpha.
+          // Only treat that alpha as transparency when the material actually
+          // declares a masked/translucent mode.
+          if (uAlphaMode != 0) {
+            base.a *= texel.a;
+          }
         } else {
           base.rgb = toLinear(base.rgb);
         }
@@ -775,8 +781,28 @@
           flipped
         );
 
-        // LINEAR + CLAMP_TO_EDGE is valid for NPOT textures in WebGL1 and
-        // avoids browser-dependent mipmap/image-decoder behavior on phones.
+        // Fortnite environment/building UVs commonly tile outside 0..1.
+        // Repeating is safe for WebGL2 and for power-of-two textures in WebGL1.
+        // Keep CLAMP_TO_EDGE only for true WebGL1 NPOT inputs.
+        const isPowerOfTwo =
+          value =>
+            Number.isInteger(value) &&
+            value > 0 &&
+            (value & (value - 1)) === 0;
+
+        const isWebGL2Context =
+          typeof WebGL2RenderingContext !==
+            "undefined" &&
+          gl instanceof
+            WebGL2RenderingContext;
+
+        const repeatSafe =
+          isWebGL2Context ||
+          (
+            isPowerOfTwo(width) &&
+            isPowerOfTwo(height)
+          );
+
         gl.texParameteri(
           gl.TEXTURE_2D,
           gl.TEXTURE_MIN_FILTER,
@@ -792,13 +818,17 @@
         gl.texParameteri(
           gl.TEXTURE_2D,
           gl.TEXTURE_WRAP_S,
-          gl.CLAMP_TO_EDGE
+          repeatSafe
+            ? gl.REPEAT
+            : gl.CLAMP_TO_EDGE
         );
 
         gl.texParameteri(
           gl.TEXTURE_2D,
           gl.TEXTURE_WRAP_T,
-          gl.CLAMP_TO_EDGE
+          repeatSafe
+            ? gl.REPEAT
+            : gl.CLAMP_TO_EDGE
         );
 
         const uploadError =
