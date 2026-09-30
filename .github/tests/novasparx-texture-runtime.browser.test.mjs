@@ -935,6 +935,10 @@ try {
             typeof globalThis
               .NovaSparxTextureRuntime
               ?.resolveMeshImage ===
+              "function" &&
+            typeof globalThis
+              .NovaSparxRenderer
+              ?.render ===
               "function"
         );
 
