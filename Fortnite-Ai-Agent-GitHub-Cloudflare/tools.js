@@ -6554,6 +6554,8 @@
           "#cosmeticMore"
         ).hidden = true;
       } finally {
+        stopSearching();
+
         if (
           cosmeticSearchController ===
           controller
