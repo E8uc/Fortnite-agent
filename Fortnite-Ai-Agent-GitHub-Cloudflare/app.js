@@ -3223,6 +3223,14 @@
         )
     };
 
+    const userContext =
+      buildUserChatContext();
+
+    if (userContext) {
+      body.user_context =
+        userContext;
+    }
+
     if (
       context.clientContext
     ) {
@@ -3573,6 +3581,286 @@
     }
 
     return output.reverse();
+  }
+
+  function responseStyleFeatures(
+    content
+  ) {
+    const text =
+      String(content || "");
+
+    const lines =
+      text.split("\n");
+
+    return {
+      chars:
+        text.length,
+
+      lists:
+        lines.some(
+          (line) =>
+            /^\s*(?:[-+*]|\d+[.)])\s+/
+              .test(line)
+        ),
+
+      codeBlocks:
+        text.includes(
+          "```"
+        ),
+
+      headings:
+        lines.some(
+          (line) =>
+            /^\s*#{1,3}\s+/
+              .test(line)
+        )
+    };
+  }
+
+  function styleFeaturePreference(
+    good,
+    bad,
+    key
+  ) {
+    const goodRate =
+      good.length
+        ? good.filter(
+            (item) =>
+              item[key]
+          ).length /
+          good.length
+        : 0;
+
+    const badRate =
+      bad.length
+        ? bad.filter(
+            (item) =>
+              item[key]
+          ).length /
+          bad.length
+        : 0;
+
+    if (
+      good.length &&
+      bad.length
+    ) {
+      const difference =
+        goodRate -
+        badRate;
+
+      if (difference >= 0.25) {
+        return "prefer";
+      }
+
+      if (difference <= -0.25) {
+        return "avoid";
+      }
+
+      return "neutral";
+    }
+
+    if (
+      good.length &&
+      goodRate >= 0.6
+    ) {
+      return "prefer";
+    }
+
+    if (
+      bad.length &&
+      badRate >= 0.6
+    ) {
+      return "avoid";
+    }
+
+    return "neutral";
+  }
+
+  function buildFeedbackStyleProfile() {
+    const rated = [];
+
+    const orderedChats =
+      Object.values(chats)
+        .sort(
+          (a, b) =>
+            Number(
+              b?.updatedAt || 0
+            ) -
+            Number(
+              a?.updatedAt || 0
+            )
+        );
+
+    for (
+      const chat of
+      orderedChats
+    ) {
+      const messages =
+        Array.isArray(
+          chat?.messages
+        )
+          ? chat.messages
+          : [];
+
+      for (
+        let index =
+          messages.length - 1;
+
+        index >= 0 &&
+        rated.length < 40;
+
+        index--
+      ) {
+        const message =
+          messages[index];
+
+        if (
+          message?.role !==
+            "assistant" ||
+          ![
+            "good",
+            "bad"
+          ].includes(
+            message?.feedback
+          )
+        ) {
+          continue;
+        }
+
+        rated.push({
+          rating:
+            message.feedback,
+
+          ...responseStyleFeatures(
+            message.content
+          )
+        });
+      }
+
+      if (
+        rated.length >= 40
+      ) {
+        break;
+      }
+    }
+
+    if (!rated.length) {
+      return null;
+    }
+
+    const good =
+      rated.filter(
+        (item) =>
+          item.rating ===
+          "good"
+      );
+
+    const bad =
+      rated.filter(
+        (item) =>
+          item.rating ===
+          "bad"
+      );
+
+    let preferredLength =
+      "neutral";
+
+    if (good.length) {
+      const average =
+        good.reduce(
+          (
+            total,
+            item
+          ) =>
+            total +
+            item.chars,
+          0
+        ) /
+        good.length;
+
+      preferredLength =
+        average <= 500
+          ? "concise"
+          : average <= 1400
+            ? "balanced"
+            : "detailed";
+    }
+
+    return {
+      rated:
+        rated.length,
+
+      good:
+        good.length,
+
+      bad:
+        bad.length,
+
+      preferred_length:
+        preferredLength,
+
+      lists:
+        styleFeaturePreference(
+          good,
+          bad,
+          "lists"
+        ),
+
+      code_blocks:
+        styleFeaturePreference(
+          good,
+          bad,
+          "codeBlocks"
+        ),
+
+      headings:
+        styleFeaturePreference(
+          good,
+          bad,
+          "headings"
+        )
+    };
+  }
+
+  function buildUserChatContext() {
+    const username =
+      String(
+        accountState.profile
+          ?.username ||
+        ""
+      )
+        .replace(
+          /[\u0000-\u001f\u007f]/g,
+          " "
+        )
+        .trim()
+        .slice(
+          0,
+          32
+        );
+
+    const language =
+      window.FortniteI18n
+        ?.getLanguage?.() ||
+      "en";
+
+    const feedbackStyle =
+      buildFeedbackStyleProfile();
+
+    if (
+      !username &&
+      !feedbackStyle &&
+      !language
+    ) {
+      return null;
+    }
+
+    return {
+      username,
+      language,
+      feedback_style:
+        feedbackStyle
+    };
   }
 
   function lastUserMessage(
@@ -6365,7 +6653,7 @@
 
   window.FortniteAgent =
     Object.freeze({
-      version: "1.0.4",
+      version: "1.0.5",
 
       searchDatabase,
       describePath,
