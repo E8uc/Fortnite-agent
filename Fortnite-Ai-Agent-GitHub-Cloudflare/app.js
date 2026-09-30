@@ -527,6 +527,1118 @@
   // Global events / UI
   // ---------------------------------------------------------------------------
 
+  function e8IconMarkup(
+    name,
+    size = 20
+  ) {
+    const icons = {
+      copy:
+        '<rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path>',
+      feedback:
+        '<path d="M3 11h3v7H3z"></path><path d="M6 11l2.3-5A2 2 0 0 1 10.1 5H11v6h3.2a1.8 1.8 0 0 1 1.7 2.4L14.7 17H9.3A3.3 3.3 0 0 1 6 13.7Z"></path><path d="M29 13h-3V6h3z"></path><path d="M26 13l-2.3 5a2 2 0 0 1-1.8 1H21v-6h-3.2a1.8 1.8 0 0 1-1.7-2.4L17.3 7h5.4A3.3 3.3 0 0 1 26 10.3Z"></path>',
+      thumbUp:
+        '<path d="M7 10v10"></path><path d="M11 10l3-7a3 3 0 0 1 3 3v4h4a2 2 0 0 1 1.9 2.6l-2 6A2 2 0 0 1 19 20H7a3 3 0 0 1-3-3v-4a3 3 0 0 1 3-3Z"></path>',
+      thumbDown:
+        '<path d="M17 14V4"></path><path d="M13 14l-3 7a3 3 0 0 1-3-3v-4H3a2 2 0 0 1-1.9-2.6l2-6A2 2 0 0 1 5 4h12a3 3 0 0 1 3 3v4a3 3 0 0 1-3 3Z"></path>',
+      pin:
+        '<path d="M12 17v5"></path><path d="m5 17 5-5"></path><path d="M15 3l6 6-4 1-5 5-3-3 5-5Z"></path>',
+      search:
+        '<circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path>',
+      pencil:
+        '<path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"></path>',
+      trash:
+        '<path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 10v6M14 10v6"></path>',
+      close:
+        '<path d="M6 6l12 12M18 6 6 18"></path>'
+    };
+
+    const viewBox =
+      name === "feedback"
+        ? "0 0 32 24"
+        : "0 0 24 24";
+
+    return `<svg aria-hidden="true" viewBox="${viewBox}" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ""}</svg>`;
+  }
+
+  function closeActiveChatUi() {
+    activeChatUiAnchor
+      ?.setAttribute?.(
+        "aria-expanded",
+        "false"
+      );
+
+    activeChatUiLayer
+      ?.remove?.();
+
+    activeChatUiLayer =
+      null;
+
+    activeChatUiAnchor =
+      null;
+  }
+
+  function positionAnchoredPopover(
+    menu,
+    anchor
+  ) {
+    const rect =
+      anchor.getBoundingClientRect();
+
+    const box =
+      menu.getBoundingClientRect();
+
+    const edge = 10;
+    const gap = 8;
+
+    let left =
+      rect.right -
+      box.width;
+
+    left =
+      Math.max(
+        edge,
+        Math.min(
+          left,
+          window.innerWidth -
+            box.width -
+            edge
+        )
+      );
+
+    let top =
+      rect.bottom +
+      gap;
+
+    if (
+      top + box.height >
+      window.innerHeight -
+        edge
+    ) {
+      top =
+        Math.max(
+          edge,
+          rect.top -
+            box.height -
+            gap
+        );
+    }
+
+    menu.style.left =
+      `${Math.round(left)}px`;
+
+    menu.style.top =
+      `${Math.round(top)}px`;
+  }
+
+  function openAnchoredMenu(
+    anchor,
+    items,
+    className = ""
+  ) {
+    closeActiveChatUi();
+
+    const layer =
+      document.createElement(
+        "div"
+      );
+
+    layer.className =
+      "e8-popover-layer";
+
+    const menu =
+      document.createElement(
+        "div"
+      );
+
+    menu.className =
+      `e8-popover ${className}`
+        .trim();
+
+    menu.setAttribute(
+      "role",
+      "menu"
+    );
+
+    for (const item of items) {
+      const button =
+        document.createElement(
+          "button"
+        );
+
+      button.type =
+        "button";
+
+      button.className =
+        `e8-menu-item${item.dangerous ? " dangerous" : ""}${item.active ? " active" : ""}`;
+
+      const icon =
+        document.createElement(
+          "span"
+        );
+
+      icon.className =
+        "e8-menu-icon";
+
+      icon.innerHTML =
+        e8IconMarkup(
+          item.icon,
+          21
+        );
+
+      const label =
+        document.createElement(
+          "span"
+        );
+
+      label.className =
+        "e8-menu-label";
+
+      label.textContent =
+        item.label;
+
+      button.append(
+        icon,
+        label
+      );
+
+      button.addEventListener(
+        "click",
+        () => {
+          closeActiveChatUi();
+          item.onSelect?.();
+        }
+      );
+
+      menu.appendChild(
+        button
+      );
+    }
+
+    layer.appendChild(
+      menu
+    );
+
+    layer.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (
+          event.target ===
+          layer
+        ) {
+          closeActiveChatUi();
+        }
+      }
+    );
+
+    document.body.appendChild(
+      layer
+    );
+
+    activeChatUiLayer =
+      layer;
+
+    activeChatUiAnchor =
+      anchor;
+
+    anchor.setAttribute(
+      "aria-expanded",
+      "true"
+    );
+
+    requestAnimationFrame(
+      () =>
+        positionAnchoredPopover(
+          menu,
+          anchor
+        )
+    );
+  }
+
+  function openChatDialog(
+    title
+  ) {
+    closeActiveChatUi();
+
+    const layer =
+      document.createElement(
+        "div"
+      );
+
+    layer.className =
+      "e8-dialog-layer";
+
+    const card =
+      document.createElement(
+        "section"
+      );
+
+    card.className =
+      "e8-dialog-card";
+
+    card.setAttribute(
+      "role",
+      "dialog"
+    );
+
+    card.setAttribute(
+      "aria-modal",
+      "true"
+    );
+
+    const header =
+      document.createElement(
+        "div"
+      );
+
+    header.className =
+      "e8-dialog-header";
+
+    const heading =
+      document.createElement(
+        "h2"
+      );
+
+    heading.textContent =
+      title;
+
+    const close =
+      document.createElement(
+        "button"
+      );
+
+    close.type =
+      "button";
+
+    close.className =
+      "e8-dialog-close";
+
+    close.innerHTML =
+      e8IconMarkup(
+        "close",
+        20
+      );
+
+    close.setAttribute(
+      "aria-label",
+      copyText(
+        "Close",
+        "Fermer",
+        "إغلاق"
+      )
+    );
+
+    close.addEventListener(
+      "click",
+      closeActiveChatUi
+    );
+
+    header.append(
+      heading,
+      close
+    );
+
+    card.appendChild(
+      header
+    );
+
+    layer.appendChild(
+      card
+    );
+
+    layer.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (
+          event.target ===
+          layer
+        ) {
+          closeActiveChatUi();
+        }
+      }
+    );
+
+    document.body.appendChild(
+      layer
+    );
+
+    activeChatUiLayer =
+      layer;
+
+    return card;
+  }
+
+  function startNewChat() {
+    try {
+      activeChatController
+        ?.abort(
+          "new-chat"
+        );
+    } catch {}
+
+    activeChatController =
+      null;
+
+    activeChatRun++;
+
+    setBusy(false);
+    removeTypingIndicator();
+    closeActiveChatUi();
+
+    activeId =
+      createChat(true);
+
+    renderAll();
+    closeSidebar();
+
+    navigate(
+      ROUTES.chat,
+      {
+        apply: true
+      }
+    );
+  }
+
+  function togglePinChat() {
+    const chat =
+      currentChat();
+
+    if (!chat) return;
+
+    chat.pinned =
+      !chat.pinned;
+
+    chat.updatedAt =
+      Date.now();
+
+    saveChats();
+    renderRecents();
+
+    showToast(
+      chat.pinned
+        ? copyText(
+            "Chat pinned",
+            "Discussion épinglée",
+            "تم تثبيت المحادثة"
+          )
+        : copyText(
+            "Chat unpinned",
+            "Discussion désépinglée",
+            "تم إلغاء تثبيت المحادثة"
+          )
+    );
+  }
+
+  function openRenameChatDialog() {
+    const chat =
+      currentChat();
+
+    if (!chat) return;
+
+    const card =
+      openChatDialog(
+        copyText(
+          "Rename chat",
+          "Renommer la discussion",
+          "إعادة تسمية المحادثة"
+        )
+      );
+
+    const input =
+      document.createElement(
+        "input"
+      );
+
+    input.className =
+      "e8-dialog-input";
+
+    input.value =
+      chat.title || "";
+
+    input.maxLength = 96;
+
+    const actions =
+      document.createElement(
+        "div"
+      );
+
+    actions.className =
+      "e8-dialog-actions";
+
+    const cancel =
+      document.createElement(
+        "button"
+      );
+
+    cancel.type =
+      "button";
+
+    cancel.className =
+      "e8-dialog-button";
+
+    cancel.textContent =
+      copyText(
+        "Cancel",
+        "Annuler",
+        "إلغاء"
+      );
+
+    cancel.addEventListener(
+      "click",
+      closeActiveChatUi
+    );
+
+    const save =
+      document.createElement(
+        "button"
+      );
+
+    save.type =
+      "button";
+
+    save.className =
+      "e8-dialog-button primary";
+
+    save.textContent =
+      copyText(
+        "Save",
+        "Enregistrer",
+        "حفظ"
+      );
+
+    const commit =
+      () => {
+        const next =
+          input.value
+            .replace(
+              /\s+/g,
+              " "
+            )
+            .trim();
+
+        if (!next) return;
+
+        chat.title =
+          next.slice(
+            0,
+            96
+          );
+
+        chat.updatedAt =
+          Date.now();
+
+        saveChats();
+        renderRecents();
+        closeActiveChatUi();
+
+        showToast(
+          copyText(
+            "Chat renamed",
+            "Discussion renommée",
+            "تمت إعادة تسمية المحادثة"
+          )
+        );
+      };
+
+    save.addEventListener(
+      "click",
+      commit
+    );
+
+    input.addEventListener(
+      "keydown",
+      (event) => {
+        if (
+          event.key ===
+          "Enter"
+        ) {
+          event.preventDefault();
+          commit();
+        }
+      }
+    );
+
+    actions.append(
+      cancel,
+      save
+    );
+
+    card.append(
+      input,
+      actions
+    );
+
+    requestAnimationFrame(
+      () => {
+        input.focus();
+        input.select();
+      }
+    );
+  }
+
+  function deleteActiveChat() {
+    if (!activeId) return;
+
+    try {
+      activeChatController
+        ?.abort(
+          "delete-chat"
+        );
+    } catch {}
+
+    activeChatController =
+      null;
+
+    activeChatRun++;
+
+    setBusy(false);
+    removeTypingIndicator();
+
+    delete chats[activeId];
+
+    const next =
+      Object.values(chats)
+        .sort(
+          (a, b) =>
+            Number(Boolean(b.pinned)) -
+              Number(Boolean(a.pinned)) ||
+            b.updatedAt -
+              a.updatedAt
+        )[0];
+
+    activeId =
+      next?.id ||
+      createChat(false);
+
+    saveChats();
+    renderAll();
+
+    navigate(
+      ROUTES.chat,
+      {
+        replace: true,
+        apply: true
+      }
+    );
+
+    showToast(
+      copyText(
+        "Chat deleted",
+        "Discussion supprimée",
+        "تم حذف المحادثة"
+      )
+    );
+  }
+
+  function openDeleteChatDialog() {
+    const card =
+      openChatDialog(
+        copyText(
+          "Delete chat?",
+          "Supprimer la discussion ?",
+          "حذف المحادثة؟"
+        )
+      );
+
+    const note =
+      document.createElement(
+        "p"
+      );
+
+    note.className =
+      "e8-dialog-note";
+
+    note.textContent =
+      copyText(
+        "This action cannot be undone.",
+        "Cette action est irréversible.",
+        "لا يمكن التراجع عن هذا الإجراء."
+      );
+
+    const actions =
+      document.createElement(
+        "div"
+      );
+
+    actions.className =
+      "e8-dialog-actions";
+
+    const cancel =
+      document.createElement(
+        "button"
+      );
+
+    cancel.type =
+      "button";
+
+    cancel.className =
+      "e8-dialog-button";
+
+    cancel.textContent =
+      copyText(
+        "Cancel",
+        "Annuler",
+        "إلغاء"
+      );
+
+    cancel.addEventListener(
+      "click",
+      closeActiveChatUi
+    );
+
+    const remove =
+      document.createElement(
+        "button"
+      );
+
+    remove.type =
+      "button";
+
+    remove.className =
+      "e8-dialog-button dangerous";
+
+    remove.textContent =
+      copyText(
+        "Delete",
+        "Supprimer",
+        "حذف"
+      );
+
+    remove.addEventListener(
+      "click",
+      () => {
+        closeActiveChatUi();
+        deleteActiveChat();
+      }
+    );
+
+    actions.append(
+      cancel,
+      remove
+    );
+
+    card.append(
+      note,
+      actions
+    );
+  }
+
+  function flashFoundMessage(
+    index
+  ) {
+    const target =
+      els.messages
+        .querySelector(
+          `[data-message-index="${index}"]`
+        );
+
+    if (!target) return;
+
+    target.classList.add(
+      "find-target"
+    );
+
+    target.scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    });
+
+    setTimeout(
+      () =>
+        target.classList.remove(
+          "find-target"
+        ),
+      1600
+    );
+  }
+
+  function openFindChatDialog() {
+    const chat =
+      currentChat();
+
+    if (!chat) return;
+
+    const card =
+      openChatDialog(
+        copyText(
+          "Find in chat",
+          "Rechercher dans la discussion",
+          "بحث في المحادثة"
+        )
+      );
+
+    const input =
+      document.createElement(
+        "input"
+      );
+
+    input.className =
+      "e8-dialog-input";
+
+    input.placeholder =
+      copyText(
+        "Search messages",
+        "Rechercher des messages",
+        "ابحث في الرسائل"
+      );
+
+    const results =
+      document.createElement(
+        "div"
+      );
+
+    results.className =
+      "e8-find-results";
+
+    const render =
+      () => {
+        results.replaceChildren();
+
+        const query =
+          input.value
+            .trim()
+            .toLocaleLowerCase();
+
+        if (!query) return;
+
+        const matches =
+          chat.messages
+            .map(
+              (message, index) => ({
+                message,
+                index
+              })
+            )
+            .filter(
+              ({ message }) =>
+                String(
+                  message.content ||
+                  ""
+                )
+                  .toLocaleLowerCase()
+                  .includes(
+                    query
+                  )
+            )
+            .slice(0, 40);
+
+        if (!matches.length) {
+          const empty =
+            document.createElement(
+              "div"
+            );
+
+          empty.className =
+            "e8-find-empty";
+
+          empty.textContent =
+            copyText(
+              "No results",
+              "Aucun résultat",
+              "لا توجد نتائج"
+            );
+
+          results.appendChild(
+            empty
+          );
+
+          return;
+        }
+
+        for (
+          const {
+            message,
+            index
+          } of matches
+        ) {
+          const row =
+            document.createElement(
+              "button"
+            );
+
+          row.type =
+            "button";
+
+          row.className =
+            "e8-find-result";
+
+          const who =
+            document.createElement(
+              "strong"
+            );
+
+          who.textContent =
+            message.role ===
+            "assistant"
+              ? "E8"
+              : copyText(
+                  "You",
+                  "Vous",
+                  "أنت"
+                );
+
+          const snippet =
+            document.createElement(
+              "span"
+            );
+
+          const compact =
+            String(
+              message.content ||
+              ""
+            )
+              .replace(
+                /\s+/g,
+                " "
+              )
+              .trim();
+
+          snippet.textContent =
+            compact.length > 150
+              ? compact.slice(
+                  0,
+                  150
+                ) + "…"
+              : compact;
+
+          row.append(
+            who,
+            snippet
+          );
+
+          row.addEventListener(
+            "click",
+            () => {
+              closeActiveChatUi();
+
+              requestAnimationFrame(
+                () =>
+                  flashFoundMessage(
+                    index
+                  )
+              );
+            }
+          );
+
+          results.appendChild(
+            row
+          );
+        }
+      };
+
+    input.addEventListener(
+      "input",
+      render
+    );
+
+    card.append(
+      input,
+      results
+    );
+
+    requestAnimationFrame(
+      () =>
+        input.focus()
+    );
+  }
+
+  function openChatMenu() {
+    const chat =
+      currentChat();
+
+    if (
+      !chat ||
+      !els.chatMenuButton
+    ) {
+      return;
+    }
+
+    openAnchoredMenu(
+      els.chatMenuButton,
+      [
+        {
+          icon: "pin",
+          label:
+            chat.pinned
+              ? copyText(
+                  "Unpin chat",
+                  "Désépingler la discussion",
+                  "إلغاء تثبيت المحادثة"
+                )
+              : copyText(
+                  "Pin chat",
+                  "Épingler la discussion",
+                  "تثبيت المحادثة"
+                ),
+          active:
+            chat.pinned,
+          onSelect:
+            togglePinChat
+        },
+        {
+          icon: "search",
+          label:
+            copyText(
+              "Find in chat",
+              "Rechercher dans la discussion",
+              "بحث في المحادثة"
+            ),
+          onSelect:
+            openFindChatDialog
+        },
+        {
+          icon: "pencil",
+          label:
+            copyText(
+              "Rename",
+              "Renommer",
+              "إعادة التسمية"
+            ),
+          onSelect:
+            openRenameChatDialog
+        },
+        {
+          icon: "trash",
+          label:
+            copyText(
+              "Delete chat",
+              "Supprimer la discussion",
+              "حذف المحادثة"
+            ),
+          dangerous: true,
+          onSelect:
+            openDeleteChatDialog
+        }
+      ],
+      "e8-chat-menu"
+    );
+  }
+
+  function setAssistantFeedback(
+    message,
+    rating,
+    sourceButton
+  ) {
+    message.feedback =
+      rating;
+
+    const chat =
+      currentChat();
+
+    if (chat) {
+      chat.updatedAt =
+        Date.now();
+    }
+
+    saveChats();
+
+    sourceButton
+      ?.classList.add(
+        "active"
+      );
+
+    sourceButton
+      ?.setAttribute(
+        "aria-pressed",
+        "true"
+      );
+
+    showToast(
+      copyText(
+        "Thank you for your feedback",
+        "Merci pour votre retour",
+        "شكراً لملاحظتك"
+      )
+    );
+  }
+
+  function openFeedbackMenu(
+    anchor,
+    message
+  ) {
+    openAnchoredMenu(
+      anchor,
+      [
+        {
+          icon: "thumbUp",
+          label:
+            copyText(
+              "Good response",
+              "Bonne réponse",
+              "إجابة جيدة"
+            ),
+          active:
+            message.feedback ===
+            "good",
+          onSelect:
+            () =>
+              setAssistantFeedback(
+                message,
+                "good",
+                anchor
+              )
+        },
+        {
+          icon: "thumbDown",
+          label:
+            copyText(
+              "Bad response",
+              "Mauvaise réponse",
+              "إجابة سيئة"
+            ),
+          active:
+            message.feedback ===
+            "bad",
+          onSelect:
+            () =>
+              setAssistantFeedback(
+                message,
+                "bad",
+                anchor
+              )
+        }
+      ],
+      "e8-feedback-menu"
+    );
+  }
+
+  function syncChatChromeLabels() {
+    if (els.newChatTop) {
+      const label =
+        copyText(
+          "New chat",
+          "Nouvelle discussion",
+          "محادثة جديدة"
+        );
+
+      els.newChatTop
+        .setAttribute(
+          "aria-label",
+          label
+        );
+
+      els.newChatTop.title =
+        label;
+    }
+
+    if (els.chatMenuButton) {
+      const label =
+        copyText(
+          "Chat menu",
+          "Menu de discussion",
+          "قائمة المحادثة"
+        );
+
+      els.chatMenuButton
+        .setAttribute(
+          "aria-label",
+          label
+        );
+
+      els.chatMenuButton.title =
+        label;
+    }
+  }
+
   function setupEvents() {
     els.openSidebar
       ?.addEventListener(
