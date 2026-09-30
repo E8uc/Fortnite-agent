@@ -303,3 +303,153 @@ assert.equal(
 );
 console.log('Mesh View Image: environment material ranking prefers WS/layer diffuse over generic color textures.');
 
+// Texture-less Fortnite materials must preserve CUE4Parse parameter values
+// instead of being mislabeled as a failed Texture application.
+const beforeValueWorkers = workers.length;
+const valueMesh = runtime.resolveMeshImage('water-mesh.uasset');
+pending.get('water-mesh.uasset').resolve();
+await tick();
+
+const valueMeshWorker = workers.at(-1);
+valueMeshWorker.send({
+  type: 'mesh',
+  path: 'water-mesh.uasset',
+  positions: new Float32Array([
+    0, 0, 0,
+    1, 0, 0,
+    0, 1, 0
+  ]).buffer,
+  indices: new Uint32Array([0, 1, 2]).buffer,
+  uv0: new Float32Array([
+    0, 0,
+    1, 0,
+    0, 1
+  ]).buffer,
+  sections: [{
+    firstIndex: 0,
+    numTriangles: 1,
+    materialIndex: 0
+  }],
+  materialMetadata: [{
+    textureParameters: [],
+    vectorParameterValues: [{
+      name: 'BaseColor',
+      r: 0.02,
+      g: 0.18,
+      b: 0.31,
+      a: 1
+    }],
+    scalarParameterValues: []
+  }]
+});
+valueMeshWorker.send({
+  type: 'done',
+  exitCode: 0
+});
+
+const valueFirstFrame = await valueMesh;
+const valueFinalFrame =
+  await valueFirstFrame.materialPromise;
+
+assert.equal(
+  valueFinalFrame.previewMode,
+  'material-value-preview'
+);
+assert.equal(
+  valueFinalFrame.materialApplied,
+  true
+);
+assert.equal(
+  valueFinalFrame.missingMaterials.length,
+  0
+);
+assert.deepEqual(
+  Array.from(
+    renderCalls.at(-1).materials[0].baseColor
+  ),
+  [0.02, 0.18, 0.31, 1]
+);
+assert.equal(
+  workers.length,
+  beforeValueWorkers + 1,
+  'Vector-only material must not spawn a fake Texture worker'
+);
+
+const beforeEmissiveWorkers = workers.length;
+const emissiveMesh = runtime.resolveMeshImage('pirate-mesh.uasset');
+pending.get('pirate-mesh.uasset').resolve();
+await tick();
+
+const emissiveMeshWorker = workers.at(-1);
+emissiveMeshWorker.send({
+  type: 'mesh',
+  path: 'pirate-mesh.uasset',
+  positions: new Float32Array([
+    0, 0, 0,
+    1, 0, 0,
+    0, 1, 0
+  ]).buffer,
+  indices: new Uint32Array([0, 1, 2]).buffer,
+  uv0: new Float32Array([
+    0, 0,
+    1, 0,
+    0, 1
+  ]).buffer,
+  sections: [{
+    firstIndex: 0,
+    numTriangles: 1,
+    materialIndex: 0
+  }],
+  materialMetadata: [{
+    textureParameters: [],
+    vectorParameterValues: [{
+      name: 'Emissive',
+      r: 0.7,
+      g: 0.25,
+      b: 0.08,
+      a: 1
+    }],
+    scalarParameterValues: [{
+      name: 'Day',
+      value: 1
+    }]
+  }]
+});
+emissiveMeshWorker.send({
+  type: 'done',
+  exitCode: 0
+});
+
+const emissiveFirstFrame =
+  await emissiveMesh;
+const emissiveFinalFrame =
+  await emissiveFirstFrame.materialPromise;
+
+assert.equal(
+  emissiveFinalFrame.previewMode,
+  'material-value-preview'
+);
+assert.equal(
+  emissiveFinalFrame.materialApplied,
+  true
+);
+assert.deepEqual(
+  Array.from(
+    renderCalls.at(-1).materials[0].baseColor
+  ),
+  [0, 0, 0, 1]
+);
+assert.deepEqual(
+  Array.from(
+    renderCalls.at(-1).materials[0].emissiveColor
+  ),
+  [0.7, 0.25, 0.08, 1]
+);
+assert.equal(
+  workers.length,
+  beforeEmissiveWorkers + 1,
+  'Procedural emissive material must not spawn a fake Texture worker'
+);
+console.log('Mesh View Image: vector-only and procedural material values render without fake Texture failures.');
+
+
