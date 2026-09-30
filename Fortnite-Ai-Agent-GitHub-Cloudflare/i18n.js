@@ -9,20 +9,20 @@
 
   const COPY = {
     en: {
-      brand: "E8 Tools",
+      brand: "E8",
       newChat: "New chat",
       moreTools: "More Fortnite Tools",
       settings: "Settings",
       recents: "Recents",
 
       welcomeTitle:
-        "Chat with E8 (Fortnite Helper)",
+        "Chat with E8 Helper",
 
       welcomeSubtitle:
         "Fortnite files, UEFN, asset paths.",
 
       messagePlaceholder:
-        "Ask E8",
+        "Message E8 Helper",
 
       toolsTitle:
         "More Fortnite Tools",
@@ -199,7 +199,7 @@
     },
 
     fr: {
-      brand: "E8 Tools",
+      brand: "E8",
       newChat: "Nouveau chat",
       moreTools:
         "Plus d’outils Fortnite",
@@ -207,13 +207,13 @@
       recents: "Récents",
 
       welcomeTitle:
-        "Discuter avec E8 (Fortnite Ai Helper)",
+        "Discuter avec E8 Helper",
 
       welcomeSubtitle:
         "Fichiers Fortnite, UEFN, chemins d’assets et recherche.",
 
       messagePlaceholder:
-        "Demander à E8",
+        "Message E8 Helper",
 
       toolsTitle:
         "Plus d’outils Fortnite",
@@ -396,7 +396,7 @@
     },
 
     ar: {
-      brand: "E8 Tools",
+      brand: "E8",
       newChat: "محادثة جديدة",
       moreTools:
         "المزيد من أدوات فورتنايت",
@@ -405,13 +405,13 @@
         "المحادثات الأخيرة",
 
       welcomeTitle:
-        "تحدث مع E8 (Fortnite Ai Helper)",
+        "تحدث مع E8 Helper",
 
       welcomeSubtitle:
         "ملفات فورتنايت، FModel، UEFN، Verse، المسارات والبحث.",
 
       messagePlaceholder:
-        "اكتب إلى Fortnite Ai Agent",
+        "اكتب إلى E8 Helper",
 
       toolsTitle:
         "المزيد من أدوات فورتنايت",

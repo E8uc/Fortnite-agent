@@ -323,7 +323,7 @@
     releaseAssetPreviews();
 
     content.innerHTML =
-      '<div class="tool-section"><div class="tool-empty">Loading...</div></div>';
+      '<div class="tool-section"><div class="tool-empty">E8 Loading…</div></div>';
 
     try {
       if (active === "assets") {
@@ -531,7 +531,7 @@
 
         if (!rows.length) {
           results.textContent =
-            "No close results found.";
+            "E8 Found: 0 results.";
           return;
         }
 
@@ -569,7 +569,7 @@
           "tool-note asset-search-meta";
 
         meta.textContent =
-          `${data.total ?? rows.length} result${(data.total ?? rows.length) === 1 ? "" : "s"} · ${data.source || "database"}`;
+          `E8 Found: ${data.total ?? rows.length} result${(data.total ?? rows.length) === 1 ? "" : "s"} · ${data.source || "database"}`;
 
         results.prepend(meta);
       } catch (error) {
@@ -5221,11 +5221,12 @@
       return;
     }
 
-    setResult(
-      result,
-      "Working...",
-      "loading"
-    );
+    const stopConverting =
+      startStatusAnimation(
+        result,
+        "E8 Converting",
+        "loading"
+      );
 
     try {
       let data = null;
@@ -5262,9 +5263,11 @@
           !data.length
         )
       ) {
+        stopConverting();
+
         setResult(
           result,
-          "No data found.",
+          "E8 Converted: No data found.",
           "error"
         );
 
@@ -5283,9 +5286,11 @@
                 .join("\n")
             : String(data);
 
+      stopConverting();
+
       setResult(
         result,
-        text
+        `E8 Converted:\n${text}`
       );
 
       result.onclick =
@@ -5294,6 +5299,8 @@
       result.title =
         "Tap to copy";
     } catch (error) {
+      stopConverting();
+
       setResult(
         result,
         error?.message ||
@@ -6142,7 +6149,7 @@
 
       status.hidden = false;
       status.textContent =
-        "Searching...";
+        "E8 Searching…";
 
       const searches = [query];
 
@@ -6196,8 +6203,8 @@
 
       status.textContent =
         merged.length
-          ? `${merged.length} matching path${merged.length === 1 ? "" : "s"} found.`
-          : "No matching cosmetic paths.";
+          ? `E8 Found: ${merged.length} matching path${merged.length === 1 ? "" : "s"}.`
+          : "E8 Found: 0 matching paths.";
 
       renderCosmeticPage(true);
     };
@@ -6497,8 +6504,11 @@
         controller;
 
       status.hidden = false;
-      status.textContent =
-        "Searching...";
+
+      const stopSearching =
+        startSearchingAnimation(
+          status
+        );
 
       try {
         cosmeticResults =
@@ -6514,9 +6524,12 @@
           return;
         }
 
+        stopSearching();
+
         cosmeticShown = 0;
         renderCosmeticApiPage(true);
       } catch (error) {
+        stopSearching();
         if (
           controller.signal
             .aborted ||
@@ -6541,6 +6554,8 @@
           "#cosmeticMore"
         ).hidden = true;
       } finally {
+        stopSearching();
+
         if (
           cosmeticSearchController ===
           controller
@@ -6872,10 +6887,10 @@
     status.hidden = false;
     status.textContent =
       filtered.length
-        ? `${filtered.length} cosmetic${filtered.length === 1 ? "" : "s"} found.`
+        ? `E8 Found: ${filtered.length} cosmetic${filtered.length === 1 ? "" : "s"}.`
         : cosmeticResults.length
-          ? "No cosmetics match this filter."
-          : "No matching cosmetics.";
+          ? "E8 Found: 0 cosmetics in this filter."
+          : "E8 Found: 0 cosmetics.";
 
     more.hidden =
       cosmeticShown >=
@@ -7196,14 +7211,18 @@
     }
   }
 
-  function startSearchingAnimation(
-    element
+  function startStatusAnimation(
+    element,
+    label,
+    state = ""
   ) {
+    if (!element) {
+      return () => {};
+    }
+
     const base =
-      t(
-        "searching",
-        "Searching"
-      );
+      String(label || "E8 Working")
+        .trim();
 
     const frames = [
       `${base}.`,
@@ -7212,6 +7231,9 @@
     ];
 
     let index = 0;
+
+    element.dataset.state =
+      state;
 
     element.textContent =
       frames[0];
@@ -7231,6 +7253,15 @@
 
     return () =>
       clearInterval(timer);
+  }
+
+  function startSearchingAnimation(
+    element
+  ) {
+    return startStatusAnimation(
+      element,
+      `E8 ${t("searching", "Searching")}`
+    );
   }
 
   async function fetchWithTimeout(
@@ -7650,7 +7681,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.6.7",
+      version: "1.6.8",
       open,
       close,
       formatAssetPath,

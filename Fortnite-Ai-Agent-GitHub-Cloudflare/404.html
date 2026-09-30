@@ -4,15 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>FNAA</title>
+  <title>E8</title>
 </head>
 <body>
 <script>
 (() => {
   "use strict";
 
+  const firstSegment =
+    location.pathname
+      .split("/")
+      .filter(Boolean)[0] || "";
+
   const base =
-    "/Fortnite-agent/";
+    firstSegment
+      ? `/${firstSegment}/`
+      : "/";
 
   const authHash =
     /(?:^#|[&#])or_(?:session|login)=/i
