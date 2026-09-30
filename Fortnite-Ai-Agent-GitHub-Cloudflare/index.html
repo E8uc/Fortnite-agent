@@ -148,12 +148,36 @@
         <span data-i18n="brand">E8</span>
       </div>
 
-      <button
-        id="discordTop"
-        class="icon-btn"
-        type="button"
-        aria-label="Discord"
-      >•••</button>
+      <div class="topbar-actions">
+        <button
+          id="newChatTop"
+          class="icon-btn"
+          type="button"
+          aria-label="New chat"
+          title="New chat"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" />
+          </svg>
+        </button>
+
+        <button
+          id="chatMenuButton"
+          class="icon-btn"
+          type="button"
+          aria-label="Chat menu"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          title="Chat menu"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+            <circle cx="5" cy="12" r="1.6" />
+            <circle cx="12" cy="12" r="1.6" />
+            <circle cx="19" cy="12" r="1.6" />
+          </svg>
+        </button>
+      </div>
     </header>
 
     <main
