@@ -1025,6 +1025,12 @@
     card.dataset.assetKind =
       kind;
 
+    card.dataset.assetPreviewMode =
+      String(
+        capabilities.previewMode ||
+        ""
+      );
+
     card.dataset.assetConfidence =
       String(
         Number(
@@ -1050,7 +1056,22 @@
       );
 
     if (previewButton) {
-      if (kind === "staticmesh" && typeof window.NovaSparxTextureRuntime?.resolveMeshImage === "function" &&
+      if (
+        kind === "audio" &&
+        capabilities.canListen === true
+      ) {
+        previewButton.disabled = false;
+        previewButton.dataset.closedLabel =
+          t(
+            "listen",
+            "Listen"
+          );
+        previewButton.dataset.openLabel =
+          t(
+            "hideSound",
+            "Hide"
+          );
+      } else if (kind === "staticmesh" && typeof window.NovaSparxTextureRuntime?.resolveMeshImage === "function" &&
           ["typed-path", "export-json", "inspection"].includes(classification.source)) {
         previewButton.disabled = false;
         previewButton.dataset.closedLabel = t("viewImage", "View Image");

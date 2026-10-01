@@ -485,16 +485,19 @@
     // prove a Blueprint is renderable, and parser registration proves no asset.
     const eligibleView3D = ["staticmesh", "skeletalmesh"].includes(resolvedKind);
     const eligibleViewImage = resolvedKind === "texture";
+    const eligibleListen = resolvedKind === "audio";
     const canViewImage = eligibleViewImage;
     const canView3D = eligibleView3D && inspection?.facts?.renderablePreview === true;
+    const canListen = eligibleListen;
     return {
       kind: resolvedKind,
-      eligibleView3D, eligibleViewImage,
-      canPreview: canViewImage || canView3D,
+      eligibleView3D, eligibleViewImage, eligibleListen,
+      canPreview: canListen || canViewImage || canView3D,
       canView3D,
       canViewImage,
-      previewMode: canViewImage ? "image" : canView3D ? "3d" : "none",
-      canListen: false, canDownload: true, canExportUEFN: false,
+      canListen,
+      previewMode: canListen ? "audio" : canViewImage ? "image" : canView3D ? "3d" : "none",
+      canDownload: true, canExportUEFN: false,
       downloadFormats: ["json"],
       tags: (tagMap[resolvedKind] || tagMap.other).slice()
     };

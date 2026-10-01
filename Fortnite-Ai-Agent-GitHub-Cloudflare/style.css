@@ -1661,6 +1661,22 @@ html[dir="rtl"] .asset-search-meta{text-align:left}
   color:var(--text);
 }
 
+.mesh-image-stage[data-preview-state="audio"]{
+  min-height:150px;
+  padding:18px;
+}
+
+.novasparx-audio-player{
+  width:100%;
+  display:grid;
+  place-items:center;
+}
+
+.novasparx-audio-player audio{
+  width:min(100%,560px);
+  max-width:100%;
+}
+
 .mesh-image-stage[data-preview-state="live-3d"]{
   min-height:320px;
 }

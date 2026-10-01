@@ -7,9 +7,15 @@
     ""
   ).trim().replace(/\/+$/, "");
 
+  const DILLY_EXPORT =
+    "https://export-service-new.dillyapis.com/v1/export";
+
   const objectUrls = new Map();
 
   const viewerSessions =
+    new Map();
+
+  const audioSessions =
     new Map();
 
   function objectUrlLimit() {
@@ -126,6 +132,47 @@
 
     if (!key) return;
 
+    const audioSession =
+      audioSessions.get(
+        key
+      );
+
+    if (audioSession) {
+      try {
+        audioSession.audio
+          ?.pause?.();
+      } catch {}
+
+      try {
+        audioSession.audio
+          ?.removeAttribute?.(
+            "src"
+          );
+
+        audioSession.audio
+          ?.load?.();
+      } catch {}
+
+      try {
+        audioSession.host
+          ?.remove?.();
+      } catch {}
+
+      if (
+        audioSession.panel
+          ?.dataset
+          ?.audioPath ===
+        key
+      ) {
+        delete audioSession.panel
+          .dataset.audioPath;
+      }
+
+      audioSessions.delete(
+        key
+      );
+    }
+
     const session =
       viewerSessions.get(
         key
@@ -224,6 +271,7 @@
       const key of
       [
         ...viewerSessions.keys(),
+        ...audioSessions.keys(),
         ...objectUrls.keys()
       ]
     ) {
@@ -870,6 +918,25 @@
         mountedPath
       );
     }
+
+    const mountedAudioPath =
+      String(
+        ui.panel.dataset
+          .audioPath ||
+        ""
+      ).trim();
+
+    if (mountedAudioPath) {
+      release(
+        mountedAudioPath
+      );
+    }
+
+    ui.stage
+      ?.querySelector?.(
+        "[data-novasparx-audio]"
+      )
+      ?.remove?.();
 
     delete ui.panel
       .dataset.previewAssetPath;
@@ -3177,6 +3244,550 @@
     return false;
   }
 
+  function unwrapAudioAssetPath(
+    value
+  ) {
+    let text =
+      String(value || "")
+        .trim();
+
+    if (!text) {
+      return "";
+    }
+
+    const wrapped =
+      text.match(
+        /^(?:[A-Za-z0-9_]+)?['"]([^'"]+)['"]$/
+      );
+
+    if (wrapped?.[1]) {
+      text =
+        wrapped[1];
+    }
+
+    return text.replace(
+      /\\/g,
+      "/"
+    );
+  }
+
+  function audioObjectPath(
+    raw
+  ) {
+    let value =
+      unwrapAudioAssetPath(
+        raw
+      );
+
+    if (!value) {
+      return "";
+    }
+
+    value =
+      value.replace(
+        /\.(?:uasset|uexp|ubulk)$/i,
+        ""
+      );
+
+    const objectDot =
+      value.lastIndexOf(
+        "."
+      );
+
+    if (
+      objectDot >
+      value.lastIndexOf(
+        "/"
+      )
+    ) {
+      value =
+        value.slice(
+          0,
+          objectDot
+        );
+    }
+
+    if (
+      /^FortniteGame\/Content\//i
+        .test(value)
+    ) {
+      return (
+        "/Game/" +
+        value.slice(
+          "FortniteGame/Content/"
+            .length
+        )
+      );
+    }
+
+    if (
+      /^Engine\/Content\//i
+        .test(value)
+    ) {
+      return (
+        "/Engine/" +
+        value.slice(
+          "Engine/Content/"
+            .length
+        )
+      );
+    }
+
+    const plugin =
+      value.match(
+        /^(?:FortniteGame\/)?Plugins\/(?:GameFeatures\/)?([^/]+)\/Content\/(.+)$/i
+      );
+
+    if (plugin) {
+      return (
+        "/" +
+        plugin[1] +
+        "/" +
+        plugin[2]
+      );
+    }
+
+    return value;
+  }
+
+  function audioFilePath(
+    raw
+  ) {
+    let value =
+      unwrapAudioAssetPath(
+        raw
+      );
+
+    if (!value) {
+      return "";
+    }
+
+    if (
+      /\.uasset$/i
+        .test(value)
+    ) {
+      return value;
+    }
+
+    const objectDot =
+      value.lastIndexOf(
+        "."
+      );
+
+    if (
+      objectDot >
+      value.lastIndexOf(
+        "/"
+      )
+    ) {
+      value =
+        value.slice(
+          0,
+          objectDot
+        );
+    }
+
+    if (
+      /^FortniteGame\/Content\//i
+        .test(value) ||
+      /^FortniteGame\/Plugins\//i
+        .test(value) ||
+      /^Engine\/Content\//i
+        .test(value)
+    ) {
+      return value + ".uasset";
+    }
+
+    if (
+      value.startsWith(
+        "/Game/"
+      )
+    ) {
+      return (
+        "FortniteGame/Content/" +
+        value.slice(6) +
+        ".uasset"
+      );
+    }
+
+    if (
+      value.startsWith(
+        "/Engine/"
+      )
+    ) {
+      return (
+        "Engine/Content/" +
+        value.slice(8) +
+        ".uasset"
+      );
+    }
+
+    const mount =
+      value.match(
+        /^\/([^/]+)\/(.+)$/
+      );
+
+    if (mount) {
+      return (
+        "FortniteGame/Plugins/GameFeatures/" +
+        mount[1] +
+        "/Content/" +
+        mount[2] +
+        ".uasset"
+      );
+    }
+
+    return value + ".uasset";
+  }
+
+  function audioExportCandidates(
+    raw
+  ) {
+    return [
+      ...new Set(
+        [
+          audioObjectPath(
+            raw
+          ),
+          audioFilePath(
+            raw
+          )
+        ]
+          .map(
+            (value) =>
+              String(
+                value || ""
+              ).trim()
+          )
+          .filter(Boolean)
+      )
+    ].map(
+      (value) =>
+        DILLY_EXPORT +
+        "?path=" +
+        encodeURIComponent(
+          value
+        ) +
+        "&raw=false"
+    );
+  }
+
+  async function renderAudio(
+    path,
+    ui,
+    signal
+  ) {
+    const key =
+      String(path || "")
+        .trim();
+
+    if (
+      !key ||
+      !ui?.stage ||
+      !ui?.panel
+    ) {
+      return {
+        state: "error",
+        kind: "audio",
+        error:
+          "Audio preview target is unavailable."
+      };
+    }
+
+    release(key);
+
+    if (ui.viewer) {
+      ui.viewer.hidden =
+        true;
+
+      ui.viewer
+        .replaceChildren();
+    }
+
+    if (ui.controls) {
+      ui.controls.hidden =
+        true;
+    }
+
+    if (ui.image) {
+      ui.image.hidden =
+        true;
+
+      ui.image.removeAttribute(
+        "src"
+      );
+    }
+
+    ui.stage
+      .querySelector?.(
+        "[data-novasparx-audio]"
+      )
+      ?.remove?.();
+
+    ui.stage.dataset
+      .previewState =
+      "audio";
+
+    ui.panel.dataset
+      .audioPath =
+      key;
+
+    const host =
+      document.createElement(
+        "div"
+      );
+
+    host.className =
+      "novasparx-audio-player";
+
+    host.setAttribute(
+      "data-novasparx-audio",
+      "1"
+    );
+
+    const audio =
+      document.createElement(
+        "audio"
+      );
+
+    audio.controls = true;
+    audio.preload =
+      "metadata";
+
+    audio.setAttribute(
+      "playsinline",
+      ""
+    );
+
+    host.appendChild(
+      audio
+    );
+
+    ui.stage.appendChild(
+      host
+    );
+
+    audioSessions.set(
+      key,
+      {
+        audio,
+        host,
+        panel:
+          ui.panel
+      }
+    );
+
+    setStatus(
+      ui.status,
+      "E8 Loading audio…"
+    );
+
+    setMeta(
+      ui.meta,
+      ""
+    );
+
+    const candidates =
+      audioExportCandidates(
+        key
+      );
+
+    if (!candidates.length) {
+      release(key);
+
+      setStatus(
+        ui.status,
+        "Audio preview unavailable for this asset.",
+        "error"
+      );
+
+      return {
+        state: "error",
+        kind: "audio",
+        error:
+          "No audio export candidate was available."
+      };
+    }
+
+    let candidateIndex = 0;
+    let timer = null;
+
+    const ready =
+      await new Promise(
+        (resolve) => {
+          let settled = false;
+
+          const cleanup =
+            () => {
+              if (timer) {
+                clearTimeout(
+                  timer
+                );
+
+                timer = null;
+              }
+
+              audio.onloadedmetadata =
+                null;
+
+              audio.oncanplay =
+                null;
+
+              audio.onerror =
+                null;
+
+              signal
+                ?.removeEventListener?.(
+                  "abort",
+                  onAbort
+                );
+            };
+
+          const finish =
+            (value) => {
+              if (settled) {
+                return;
+              }
+
+              settled = true;
+              cleanup();
+
+              resolve(
+                Boolean(
+                  value
+                )
+              );
+            };
+
+          const onAbort =
+            () => {
+              if (settled) {
+                return;
+              }
+
+              release(key);
+              finish(false);
+            };
+
+          const loadCandidate =
+            () => {
+              if (
+                signal?.aborted
+              ) {
+                onAbort();
+                return;
+              }
+
+              if (
+                candidateIndex >=
+                candidates.length
+              ) {
+                finish(false);
+                return;
+              }
+
+              audio.src =
+                candidates[
+                  candidateIndex++
+                ];
+
+              try {
+                audio.load();
+              } catch {}
+
+              try {
+                audio.play()
+                  ?.catch?.(
+                    () => {}
+                  );
+              } catch {}
+            };
+
+          audio.onloadedmetadata =
+            () =>
+              finish(true);
+
+          audio.oncanplay =
+            () =>
+              finish(true);
+
+          audio.onerror =
+            () => {
+              if (settled) {
+                return;
+              }
+
+              loadCandidate();
+            };
+
+          signal
+            ?.addEventListener?.(
+              "abort",
+              onAbort,
+              {
+                once: true
+              }
+            );
+
+          timer =
+            setTimeout(
+              () =>
+                finish(false),
+              20_000
+            );
+
+          loadCandidate();
+        }
+      );
+
+    if (
+      signal?.aborted
+    ) {
+      release(key);
+
+      throw abortError(
+        signal
+      );
+    }
+
+    if (!ready) {
+      release(key);
+
+      setStatus(
+        ui.status,
+        "Audio preview unavailable for this asset.",
+        "error"
+      );
+
+      setMeta(
+        ui.meta,
+        "No playable audio export was returned.",
+        "partial"
+      );
+
+      return {
+        state: "error",
+        kind: "audio",
+        error:
+          "No playable audio export was returned."
+      };
+    }
+
+    ui.status.hidden =
+      true;
+
+    setMeta(
+      ui.meta,
+      "NovaSparx Audio • verified asset export",
+      "high"
+    );
+
+    return {
+      state: "ready",
+      kind: "audio"
+    };
+  }
+
   function readableAssetKind(info, path) {
     const kind = assetType(info, path);
     return ({ staticmesh: "static mesh asset", skeletalmesh: "skeletal mesh asset",
@@ -3322,6 +3933,18 @@
       throwIfAborted(
         signal
       );
+
+      if (
+        requestedKind ===
+        "audio"
+      ) {
+        return await renderAudio(
+          clean,
+          ui,
+          signal
+        );
+      }
+
       if (requestedKind === "staticmesh") {
         setStatus(ui.status, "Reading and rendering this Mesh in your browser…");
         try {
@@ -4729,7 +5352,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "2.3.3",
+      version: "2.3.4",
       toggle,
       render: renderPreview,
       release,

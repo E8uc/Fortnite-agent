@@ -237,6 +237,30 @@ assert.equal(
   "A SoundWave must stay audio even when it references a texture"
 );
 
+assert.equal(
+  result.capabilities.canListen,
+  true,
+  "Verified audio must expose Listen"
+);
+
+assert.equal(
+  result.capabilities.previewMode,
+  "audio",
+  "Verified audio must use the audio preview mode"
+);
+
+assert.equal(
+  result.capabilities.canViewImage,
+  false,
+  "Audio must never advertise View Image"
+);
+
+assert.equal(
+  result.capabilities.canView3D,
+  false,
+  "Audio must never advertise View 3D"
+);
+
 payload = [
   {
     Name:
@@ -365,12 +389,14 @@ assert.equal((await associations.classify("/Game/BP_Test.uasset", {
 for (const kind of ["staticmesh", "skeletalmesh", "blueprint", "texture", "audio", "animation", "vfx", "data", "other"]) {
   const caps = associations.capabilityProfile(kind, { Properties: { Mesh: "StaticMesh'/Game/SM_X.SM_X'" } });
   const isTexture = kind === "texture";
+  const isAudio = kind === "audio";
   assert.equal(caps.eligibleViewImage, isTexture, `eligibleViewImage: ${kind}`);
   assert.equal(caps.canViewImage, isTexture, `canViewImage: ${kind}`);
-  assert.equal(caps.canPreview, isTexture, `canPreview: ${kind}`);
-  assert.equal(caps.previewMode, isTexture ? "image" : "none", `previewMode: ${kind}`);
+  assert.equal(caps.eligibleListen, isAudio, `eligibleListen: ${kind}`);
+  assert.equal(caps.canPreview, isTexture || isAudio, `canPreview: ${kind}`);
+  assert.equal(caps.previewMode, isAudio ? "audio" : isTexture ? "image" : "none", `previewMode: ${kind}`);
   assert.equal(caps.canExportUEFN, false, kind);
-  assert.equal(caps.canListen, false, kind);
+  assert.equal(caps.canListen, isAudio, `canListen: ${kind}`);
   assert.deepEqual(caps.downloadFormats, ["json"]);
   assert.ok(!caps.tags.some(tag => ["VISUAL", "IMAGE", "LOGIC"].includes(tag)));
 }
