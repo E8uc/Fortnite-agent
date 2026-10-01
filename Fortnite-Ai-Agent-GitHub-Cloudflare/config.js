@@ -60,7 +60,7 @@
 
   window.FNAA_CONFIG = Object.freeze({
     version: "1.0.4",
-    fortniteVersion: "42.20",
+    fortniteVersion: "42.30",
     dailyChatLimit: 50,
     apiEndpoint: API,
     siteUrl: SITE,

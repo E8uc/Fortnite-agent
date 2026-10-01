@@ -5,7 +5,7 @@ const ACCOUNT_MODEL = "openai/gpt-oss-120b";
 const FAST_RESEARCH_MODEL = "openai/gpt-oss-120b";
 const DEEP_RESEARCH_MODEL = "openai/gpt-oss-120b";
 
-const CURRENT_FORTNITE_VERSION = "42.20";
+const CURRENT_FORTNITE_VERSION = "42.30";
 const CURRENT_YEAR = 2026;
 
 const DILLY_EXPORT_BASE =
