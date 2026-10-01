@@ -616,6 +616,65 @@ html[dir="rtl"] .user-edit-card{
   opacity:1;
 }
 
+.e8-usage-settings-icon svg{
+  display:block;
+}
+
+.e8-usage-settings-card .settings-card-main{
+  min-width:0;
+}
+
+.e8-usage-track{
+  width:100%;
+  height:6px;
+  margin-top:10px;
+  overflow:hidden;
+  border-radius:999px;
+  background:var(--panel-3);
+}
+
+.e8-usage-track > span{
+  display:block;
+  width:0;
+  height:100%;
+  border-radius:inherit;
+  background:var(--accent);
+  transition:width 180ms ease;
+}
+
+#e8UsageReset{
+  display:block;
+  margin-top:7px;
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.4;
+}
+
+.e8-usage-banner{
+  width:min(780px,100%);
+  margin:0 auto 5px;
+  padding:7px 12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--panel-2);
+  color:var(--text);
+  font-size:11px;
+  line-height:1.4;
+  text-align:left;
+}
+
+html[dir="rtl"] .e8-usage-banner{
+  text-align:right;
+}
+
+.e8-usage-banner[hidden]{
+  display:none!important;
+}
+
+html.e8-usage-limit-active #sendButton:not(.stop){
+  opacity:.38;
+}
+
 .fnaa-guest-slowmode-banner{
   width:min(780px,100%);
   margin:0 auto 5px;
