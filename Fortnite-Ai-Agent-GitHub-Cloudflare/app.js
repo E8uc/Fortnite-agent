@@ -38,7 +38,7 @@
 
   const CURRENT_FN_VERSION =
     CONFIG.fortniteVersion ||
-    "42.30";
+    "current";
 
   const LOGIN_MODE_SESSION =
     "fortniteAiAgent.loginMode.session";
