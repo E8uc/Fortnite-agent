@@ -242,6 +242,8 @@
 
   let busy = false;
 
+  let editingUserMessageIndex = -1;
+
   let activeChatController =
     null;
 
@@ -561,7 +563,7 @@
     if (!chatUiPromise) {
       chatUiPromise =
         import(
-          `${SITE_BASE_PATH}e8-chat-ui.js?v=1`
+          `${SITE_BASE_PATH}e8-chat-ui.js?v=2`
         )
           .then(
             (module) => {
@@ -589,7 +591,7 @@
       ?.close?.();
   }
 
-  function startNewChat() {
+  async function startNewChat() {
     try {
       activeChatController
         ?.abort(
@@ -606,6 +608,31 @@
     removeTypingIndicator();
     closeChatUiIfLoaded();
 
+    editingUserMessageIndex =
+      -1;
+
+    const reducedMotion =
+      window.matchMedia
+        ?.("(prefers-reduced-motion: reduce)")
+        ?.matches === true;
+
+    if (
+      !reducedMotion &&
+      els.chat
+    ) {
+      els.chat.classList.add(
+        "e8-new-chat-leave"
+      );
+
+      await new Promise(
+        (resolve) =>
+          setTimeout(
+            resolve,
+            90
+          )
+      );
+    }
+
     activeId =
       createChat(true);
 
@@ -618,6 +645,27 @@
         apply: true
       }
     );
+
+    if (els.chat) {
+      els.chat.classList.remove(
+        "e8-new-chat-leave"
+      );
+
+      if (!reducedMotion) {
+        els.chat.classList.add(
+          "e8-new-chat-enter"
+        );
+
+        setTimeout(
+          () =>
+            els.chat
+              ?.classList.remove(
+                "e8-new-chat-enter"
+              ),
+          220
+        );
+      }
+    }
   }
 
   function togglePinChat() {
@@ -710,6 +758,9 @@
 
     setBusy(false);
     removeTypingIndicator();
+
+    editingUserMessageIndex =
+      -1;
 
     delete chats[activeId];
 
@@ -883,6 +934,27 @@
           "أنت"
         ),
 
+      copy:
+        copyText(
+          "Copy",
+          "Copier",
+          "نسخ"
+        ),
+
+      edit:
+        copyText(
+          "Edit",
+          "Modifier",
+          "تعديل"
+        ),
+
+      send:
+        copyText(
+          "Send",
+          "Envoyer",
+          "إرسال"
+        ),
+
       goodResponse:
         copyText(
           "Good response",
@@ -1025,6 +1097,290 @@
         true
       );
     }
+  }
+
+  function beginUserMessageEdit(
+    messageIndex
+  ) {
+    if (
+      busy ||
+      activeChatController
+    ) {
+      showToast(
+        copyText(
+          "Stop the current response first.",
+          "Arrêtez d’abord la réponse en cours.",
+          "أوقف الرد الحالي أولاً."
+        ),
+        true
+      );
+
+      return;
+    }
+
+    const chat =
+      currentChat();
+
+    const message =
+      chat?.messages?.[
+        messageIndex
+      ];
+
+    if (
+      !message ||
+      message.role !== "user"
+    ) {
+      return;
+    }
+
+    editingUserMessageIndex =
+      messageIndex;
+
+    closeChatUiIfLoaded();
+    renderMessages();
+  }
+
+  function cancelUserMessageEdit() {
+    editingUserMessageIndex =
+      -1;
+
+    renderMessages();
+  }
+
+  async function commitUserMessageEdit(
+    messageIndex,
+    nextText
+  ) {
+    const clean =
+      String(
+        nextText || ""
+      ).trim();
+
+    if (
+      !clean ||
+      busy ||
+      activeChatController
+    ) {
+      return;
+    }
+
+    const chat =
+      currentChat();
+
+    if (
+      !chat ||
+      chat.messages?.[
+        messageIndex
+      ]?.role !== "user"
+    ) {
+      editingUserMessageIndex =
+        -1;
+
+      renderMessages();
+      return;
+    }
+
+    chat.messages =
+      chat.messages.slice(
+        0,
+        messageIndex
+      );
+
+    if (
+      messageIndex === 0
+    ) {
+      chat.title =
+        titleFromMessage(
+          clean
+        );
+    }
+
+    chat.updatedAt =
+      Date.now();
+
+    editingUserMessageIndex =
+      -1;
+
+    saveChats();
+    renderAll();
+
+    await sendTextMessage(
+      clean,
+      {
+        skipRoute: true
+      }
+    );
+  }
+
+  async function openUserMessageMenu(
+    anchor,
+    message,
+    messageIndex
+  ) {
+    try {
+      const ui =
+        await loadChatUi();
+
+      await ui.openUserMessageMenu({
+        anchor,
+
+        labels:
+          chatUiLabels(),
+
+        onCopy:
+          async () => {
+            try {
+              await copyTextToClipboard(
+                message.content
+              );
+
+              showToast(
+                copyText(
+                  "Copied",
+                  "Copié",
+                  "تم النسخ"
+                )
+              );
+            } catch {
+              showToast(
+                copyText(
+                  "Copy failed",
+                  "Échec de la copie",
+                  "فشل النسخ"
+                ),
+                true
+              );
+            }
+          },
+
+        onEdit:
+          () =>
+            beginUserMessageEdit(
+              messageIndex
+            )
+      });
+    } catch {
+      showToast(
+        copyText(
+          "Couldn't open message menu",
+          "Impossible d’ouvrir le menu du message",
+          "تعذر فتح قائمة الرسالة"
+        ),
+        true
+      );
+    }
+  }
+
+  function attachUserMessageHold(
+    bubble,
+    message,
+    messageIndex
+  ) {
+    let timer = 0;
+    let startX = 0;
+    let startY = 0;
+    let opened = false;
+
+    const clear =
+      () => {
+        if (timer) {
+          clearTimeout(
+            timer
+          );
+
+          timer = 0;
+        }
+      };
+
+    bubble.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (
+          event.button !== 0 &&
+          event.pointerType ===
+            "mouse"
+        ) {
+          return;
+        }
+
+        startX =
+          event.clientX;
+
+        startY =
+          event.clientY;
+
+        opened = false;
+        clear();
+
+        timer =
+          setTimeout(
+            () => {
+              timer = 0;
+              opened = true;
+
+              openUserMessageMenu(
+                bubble,
+                message,
+                messageIndex
+              );
+            },
+            430
+          );
+      }
+    );
+
+    bubble.addEventListener(
+      "pointermove",
+      (event) => {
+        if (
+          Math.abs(
+            event.clientX -
+            startX
+          ) > 10 ||
+          Math.abs(
+            event.clientY -
+            startY
+          ) > 10
+        ) {
+          clear();
+        }
+      }
+    );
+
+    bubble.addEventListener(
+      "pointerup",
+      clear
+    );
+
+    bubble.addEventListener(
+      "pointercancel",
+      clear
+    );
+
+    bubble.addEventListener(
+      "contextmenu",
+      (event) => {
+        event.preventDefault();
+        clear();
+
+        openUserMessageMenu(
+          bubble,
+          message,
+          messageIndex
+        );
+      }
+    );
+
+    bubble.addEventListener(
+      "click",
+      (event) => {
+        if (opened) {
+          event.preventDefault();
+          event.stopPropagation();
+          opened = false;
+        }
+      }
+    );
   }
 
   function syncChatChromeLabels() {
@@ -2045,6 +2401,141 @@
     if (
       message.role === "user"
     ) {
+      if (
+        messageIndex ===
+        editingUserMessageIndex
+      ) {
+        const editor =
+          document.createElement(
+            "div"
+          );
+
+        editor.className =
+          "user-edit-card";
+
+        const input =
+          document.createElement(
+            "textarea"
+          );
+
+        input.className =
+          "user-edit-input";
+
+        input.value =
+          message.content;
+
+        input.rows = 2;
+        input.maxLength =
+          6_000;
+
+        const actions =
+          document.createElement(
+            "div"
+          );
+
+        actions.className =
+          "user-edit-actions";
+
+        const cancel =
+          document.createElement(
+            "button"
+          );
+
+        cancel.type =
+          "button";
+
+        cancel.className =
+          "user-edit-button";
+
+        cancel.textContent =
+          chatUiLabels()
+            .cancel;
+
+        cancel.addEventListener(
+          "click",
+          cancelUserMessageEdit
+        );
+
+        const send =
+          document.createElement(
+            "button"
+          );
+
+        send.type =
+          "button";
+
+        send.className =
+          "user-edit-button primary";
+
+        send.textContent =
+          chatUiLabels()
+            .send;
+
+        const commit =
+          () =>
+            commitUserMessageEdit(
+              messageIndex,
+              input.value
+            );
+
+        send.addEventListener(
+          "click",
+          commit
+        );
+
+        input.addEventListener(
+          "keydown",
+          (event) => {
+            if (
+              event.key ===
+                "Escape"
+            ) {
+              event.preventDefault();
+              cancelUserMessageEdit();
+              return;
+            }
+
+            if (
+              event.key ===
+                "Enter" &&
+              !event.shiftKey &&
+              !event.isComposing &&
+              !isMobileComposerDevice()
+            ) {
+              event.preventDefault();
+              commit();
+            }
+          }
+        );
+
+        actions.append(
+          cancel,
+          send
+        );
+
+        editor.append(
+          input,
+          actions
+        );
+
+        outer.appendChild(
+          editor
+        );
+
+        requestAnimationFrame(
+          () => {
+            input.focus();
+
+            input.setSelectionRange(
+              input.value.length,
+              input.value.length
+            );
+          }
+        );
+
+        return outer;
+      }
+
       const bubble =
         document.createElement(
           "div"
@@ -2055,6 +2546,12 @@
 
       bubble.textContent =
         message.content;
+
+      attachUserMessageHold(
+        bubble,
+        message,
+        messageIndex
+      );
 
       outer.appendChild(
         bubble
@@ -7079,7 +7576,7 @@
 
   window.FortniteAgent =
     Object.freeze({
-      version: "1.0.9",
+      version: "1.0.10",
 
       searchDatabase,
       describePath,
