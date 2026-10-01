@@ -923,12 +923,14 @@ try {
 
   assert.equal(
     result.width,
-    256
+    64,
+    "Fortnite 42.30 current FaithPerch reference width changed from the older 256px fixture"
   );
 
   assert.equal(
     result.height,
-    256
+    64,
+    "Fortnite 42.30 current FaithPerch reference height changed from the older 256px fixture"
   );
 
   assert.equal(
