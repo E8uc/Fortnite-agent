@@ -842,6 +842,9 @@
         error?.status === 401
       ) {
         persistSession("");
+
+        await clearAuthSessionBackup();
+
         currentUser = null;
         currentProfile = null;
         lastError = null;
@@ -929,7 +932,11 @@
 
   async function signOutUser() {
     const token = sessionToken;
+
     persistSession("");
+
+    await clearAuthSessionBackup();
+
     currentUser = null;
     currentProfile = null;
     lastError = null;
