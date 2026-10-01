@@ -269,6 +269,9 @@ a:focus-visible{
   white-space:pre-wrap;
   overflow-wrap:anywhere;
   -webkit-touch-callout:none;
+  -webkit-user-select:none;
+  user-select:none;
+  touch-action:pan-y;
 }
 
 .user-edit-card{
