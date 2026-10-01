@@ -146,7 +146,7 @@ jobs:
 
           git add \
             "Fortnite-Ai-Agent-GitHub-Cloudflare/config.js" \
-            "Fortnite-Ai-Agent-GitHub-Cloudflare/app.js" \
+            "Fortnite-Ai-Agent-GitHub-Cloudflare/index.html" \
             "Fortnite-Ai-Agent-GitHub-Cloudflare/cloudflare-worker/worker.js"
 
           for file in \
