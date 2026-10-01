@@ -150,6 +150,35 @@
     }
   }
 
+  async function requestPersistentStorage() {
+    try {
+      const storage =
+        navigator.storage;
+
+      if (
+        !storage ||
+        typeof storage.persist !==
+          "function"
+      ) {
+        return false;
+      }
+
+      if (
+        typeof storage.persisted ===
+          "function" &&
+        await storage.persisted()
+      ) {
+        return true;
+      }
+
+      return (
+        await storage.persist()
+      ) === true;
+    } catch {
+      return false;
+    }
+  }
+
   function openChatBackupDb() {
     if (
       !("indexedDB" in window)
@@ -535,8 +564,17 @@
     .finally(
       () => {
         chatBackupReady = true;
-        queueChatBackup();
+
+        flushChatBackup()
+          .catch(
+            () => {}
+          );
       }
+    );
+
+  requestPersistentStorage()
+    .catch(
+      () => {}
     );
 
   maybeShowLoginGate();
@@ -557,9 +595,29 @@
     }
   );
 
+  document.addEventListener(
+    "visibilitychange",
+    () => {
+      if (
+        document.visibilityState ===
+          "hidden"
+      ) {
+        flushChatBackup()
+          .catch(
+            () => {}
+          );
+      }
+    }
+  );
+
   window.addEventListener(
     "pagehide",
     () => {
+      flushChatBackup()
+        .catch(
+          () => {}
+        );
+
       try {
         activeChatController
           ?.abort(
@@ -2448,6 +2506,28 @@
     }
   }
 
+  async function flushChatBackup() {
+    if (!chatBackupReady) {
+      return false;
+    }
+
+    if (chatBackupTimer) {
+      clearTimeout(
+        chatBackupTimer
+      );
+
+      chatBackupTimer =
+        null;
+    }
+
+    return writeChatBackup(
+      sanitizeChats(
+        chats
+      ),
+      activeId
+    );
+  }
+
   function queueChatBackup() {
     if (!chatBackupReady) {
       return;
@@ -2465,14 +2545,10 @@
           chatBackupTimer =
             null;
 
-          writeChatBackup(
-            sanitizeChats(
-              chats
-            ),
-            activeId
-          ).catch(
-            () => {}
-          );
+          flushChatBackup()
+            .catch(
+              () => {}
+            );
         },
         80
       );
@@ -2636,17 +2712,34 @@
         chats
       );
 
-    safeStorageSet(
-      STORAGE_KEY,
-      JSON.stringify(
-        snapshot
-      )
-    );
+    const chatsSaved =
+      safeStorageSet(
+        STORAGE_KEY,
+        JSON.stringify(
+          snapshot
+        )
+      );
 
-    safeStorageSet(
-      ACTIVE_KEY,
-      activeId
-    );
+    const activeSaved =
+      safeStorageSet(
+        ACTIVE_KEY,
+        activeId
+      );
+
+    if (
+      chatBackupReady &&
+      (
+        !chatsSaved ||
+        !activeSaved
+      )
+    ) {
+      flushChatBackup()
+        .catch(
+          () => {}
+        );
+
+      return;
+    }
 
     queueChatBackup();
   }
@@ -8492,7 +8585,7 @@
 
   window.FortniteAgent =
     Object.freeze({
-      version: "1.0.13",
+      version: "1.0.14",
 
       searchDatabase,
       describePath,
