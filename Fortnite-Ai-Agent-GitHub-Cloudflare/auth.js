@@ -2,7 +2,10 @@
   "use strict";
 
   const API_ENDPOINT = String(window.FORTNITE_AI_API_ENDPOINT || "").trim().replace(/\/+$/, "");
-  const SITE_BASE_PATH = String(window.FNAA_CONFIG?.siteBasePath || "/Fortnite-agent/");
+  const SITE_BASE_PATH = String(
+    window.FNAA_CONFIG?.siteBasePath ||
+    new URL(".", document.baseURI).pathname
+  );
   const SESSION_KEY = "fortniteAiAgent.openrouterSession.v3";
   const LOGIN_PENDING_KEY = "fortniteAiAgent.openrouterLoginPending.v3";
   const LOGIN_PENDING_TTL_MS =
