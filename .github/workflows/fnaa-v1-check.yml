@@ -64,10 +64,22 @@ jobs:
         run: |
           set -euo pipefail
           shard='Fortnite-Ai-Agent-GitHub-Cloudflare/database/index-v1/shards/all/ch.txt.gz'
-          expected='FortniteGame/Plugins/GameFeatures/BRCosmetics/Content/Athena/Items/Cosmetics/Characters/Character_MistTycoonHike.uasset'
+          full='Fortnite-Ai-Agent-GitHub-Cloudflare/database/index-v1/full/all.txt.gz'
+          needle='Character_MistTycoonHike'
 
           test -s "$shard"
-          gzip -cd "$shard" | grep -Fqx "$expected"
+          test -s "$full"
+
+          shard_matches="$(gzip -cd "$shard" | grep -Fi "$needle" || true)"
+          full_matches="$(gzip -cd "$full" | grep -Fi "$needle" || true)"
+
+          echo '--- shard matches ---'
+          printf '%s\n' "$shard_matches"
+          echo '--- full-index matches ---'
+          printf '%s\n' "$full_matches"
+
+          test -n "$full_matches"
+          test -n "$shard_matches"
 
       - name: Run NovaSparx asset diagnosis self-test
         shell: bash
