@@ -562,7 +562,8 @@
     const capabilities = {
       ...baseCapabilities,
       canListen:
-        directSoundWave
+        result.kind === "audio",
+      directSoundWave
     };
 
     return {
