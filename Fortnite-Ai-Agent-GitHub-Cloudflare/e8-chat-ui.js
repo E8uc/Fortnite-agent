@@ -117,6 +117,9 @@ function iconMarkup(
     pencil:
       '<path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"></path>',
 
+    copy:
+      '<rect x="8" y="8" width="12" height="12" rx="2"></rect><rect x="4" y="4" width="12" height="12" rx="2"></rect>',
+
     trash:
       '<path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path><path d="M10 10v6M14 10v6"></path>',
 
@@ -853,6 +856,40 @@ export async function openFeedbackMenu(
       }
     ],
     "e8-feedback-menu"
+  );
+}
+
+export async function openUserMessageMenu(
+  options
+) {
+  await styleReady;
+
+  const {
+    anchor,
+    labels,
+    onCopy,
+    onEdit
+  } = options;
+
+  openMenu(
+    anchor,
+    [
+      {
+        icon: "copy",
+        label:
+          labels.copy,
+        onSelect:
+          onCopy
+      },
+      {
+        icon: "pencil",
+        label:
+          labels.edit,
+        onSelect:
+          onEdit
+      }
+    ],
+    "e8-user-message-menu"
   );
 }
 
