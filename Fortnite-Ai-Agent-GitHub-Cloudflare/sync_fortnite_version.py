@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent
 
 TARGETS = {
     "config": ROOT / "config.js",
-    "app": ROOT / "app.js",
+    "index": ROOT / "index.html",
     "worker": ROOT / "cloudflare-worker" / "worker.js",
 }
 
@@ -61,7 +61,7 @@ def update_sources(
     changed: list[Path] = []
 
     config_path = files["config"]
-    app_path = files["app"]
+    index_path = files["index"]
     worker_path = files["worker"]
 
     config = config_path.read_text(
@@ -76,19 +76,20 @@ def update_sources(
         "config.js",
     )
 
-    app = app_path.read_text(
+    index = index_path.read_text(
         encoding="utf-8"
     )
-    next_app = replace_exactly_once(
-        app,
+    cache_key = (
+        "fortnite-" +
+        version.replace(".", "-")
+    )
+    next_index = replace_exactly_once(
+        index,
         re.compile(
-            r'(const CURRENT_FN_VERSION\s*=\s*'
-            r'CONFIG\.fortniteVersion\s*\|\|\s*")'
-            r'[0-9]{1,2}\.[0-9]{1,2}(";)',
-            re.MULTILINE,
+            r'(config\.js\?v=)[^"]+'
         ),
-        rf"\g<1>{version}\g<2>",
-        "app.js fallback",
+        rf"\g<1>{cache_key}",
+        "index.html config cache",
     )
 
     worker = worker_path.read_text(
@@ -107,7 +108,7 @@ def update_sources(
 
     updates = (
         (config_path, config, next_config),
-        (app_path, app, next_app),
+        (index_path, index, next_index),
         (worker_path, worker, next_worker),
     )
 
@@ -157,7 +158,7 @@ def self_test() -> None:
 
         files = {
             "config": root / "config.js",
-            "app": root / "app.js",
+            "index": root / "index.html",
             "worker": root / "worker.js",
         }
 
@@ -165,10 +166,8 @@ def self_test() -> None:
             'window.FNAA_CONFIG = { fortniteVersion: "42.20" };\n',
             encoding="utf-8",
         )
-        files["app"].write_text(
-            'const CURRENT_FN_VERSION =\n'
-            '  CONFIG.fortniteVersion ||\n'
-            '  "42.20";\n',
+        files["index"].write_text(
+            '<script src="config.js?v=104"></script>\n',
             encoding="utf-8",
         )
         files["worker"].write_text(
@@ -187,20 +186,30 @@ def self_test() -> None:
                 f"Expected three changed files, got {len(changed)}."
             )
 
-        for file_path in files.values():
-            text = file_path.read_text(
-                encoding="utf-8"
+        config_text = files["config"].read_text(
+            encoding="utf-8"
+        )
+        index_text = files["index"].read_text(
+            encoding="utf-8"
+        )
+        worker_text = files["worker"].read_text(
+            encoding="utf-8"
+        )
+
+        if 'fortniteVersion: "42.30"' not in config_text:
+            raise AssertionError(
+                "Config version was not updated."
             )
 
-            if "42.20" in text:
-                raise AssertionError(
-                    f"Stale version remained in {file_path.name}."
-                )
+        if "config.js?v=fortnite-42-30" not in index_text:
+            raise AssertionError(
+                "Config cache key was not updated."
+            )
 
-            if "42.30" not in text:
-                raise AssertionError(
-                    f"New version missing from {file_path.name}."
-                )
+        if 'CURRENT_FORTNITE_VERSION = "42.30"' not in worker_text:
+            raise AssertionError(
+                "Worker version was not updated."
+            )
 
         changed_again = update_sources(
             "42.30",
