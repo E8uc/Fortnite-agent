@@ -3039,6 +3039,24 @@
           runId,
           controller
         );
+      } else if (
+        !assetPath &&
+        isDirectPathLookupRequest(
+          clean
+        )
+      ) {
+        await runNaturalPathLookup(
+          chat,
+          clean,
+          signal,
+          runId,
+          controller
+        );
+
+        throwIfChatStale(
+          runId,
+          controller
+        );
       } else {
         const assetContext =
           assetPath
@@ -4478,6 +4496,17 @@
     );
   }
 
+  function looksLikeCosmeticQuestion(
+    text
+  ) {
+    return /\b(skin|outfit|cosmetic|character|emote|back\s*bling|pickaxe|glider|wrap|music\s*pack|cid_|eid_|bid_|pickaxe_|glider_)\b|\b(tenue|cosm[eé]tique|personnage|emote|émote|pioche|planeur)\b|سكن|سكين|كوزمتك|كوسمتك|شخصية|ايموت|إيموت|رقصة|باك\s*بلنغ|بيكاكس|مظلة/i
+      .test(
+        String(
+          text || ""
+        )
+      );
+  }
+
   function looksLikeAssetQuestion(
     text
   ) {
@@ -4488,12 +4517,63 @@
             text || ""
           )
         ) ||
-      /\b(path|asset path|mesh|staticmesh|static mesh|skeletalmesh|texture|material|icon|uasset|fortnite files|sm_|sk_|mi_|m_)\b|مسار|باث|ميش|تكستشر|ماتيريال|ملفات اللعبة|ملفات فورتنايت/i
+      looksLikeCosmeticQuestion(
+        text
+      ) ||
+      /\b(path|asset path|mesh|staticmesh|static mesh|skeletalmesh|texture|material|icon|uasset|fortnite files|sm_|sk_|mi_|m_)\b|\b(chemin|asset|fichier|mesh|texture|mat[eé]riau)\b|مسار|باث|ميش|تكستشر|ماتيريال|ملفات اللعبة|ملفات فورتنايت/i
         .test(
           String(
             text || ""
           )
         )
+    );
+  }
+
+  function isDirectPathLookupRequest(
+    text
+  ) {
+    const value =
+      String(text || "")
+        .trim();
+
+    if (!value) {
+      return false;
+    }
+
+    if (
+      /^\s*@SearchForPath\b/i
+        .test(value)
+    ) {
+      return true;
+    }
+
+    if (
+      /\b(describe|description|explain|what is|what does)\b|\b(d[eé]cris|description|explique)\b|اشرح|وصف|اوصف|شنو هذا|شنو هاذا/i
+        .test(value)
+    ) {
+      return false;
+    }
+
+    const explicitPath =
+      /\b(path|asset path|uasset|file path|filesystem path)\b|\b(chemin|chemin d['’]asset|fichier)\b|مسار|باث|ملف/i
+        .test(value);
+
+    const asksToFind =
+      /\b(find|search|show|lookup|locate|get me|give me|where is)\b|\b(cherche|trouve|montre|recherche|localise|donne[- ]moi)\b|شوفلي|شوفيلي|دورلي|دوريلي|طلعلي|طلعيلي|جيبلي|جيبيلي|لكيلي|لقيلِي|ابحث|أبحث|اريد ابحث|أريد أبحث/i
+        .test(value);
+
+    return (
+      explicitPath ||
+      (
+        asksToFind &&
+        (
+          looksLikeCosmeticQuestion(
+            value
+          ) ||
+          /\b(asset|mesh|texture|material|icon|fortnite file)\b|\b(asset|mesh|texture|mat[eé]riau)\b|ميش|تكستشر|ماتيريال|ملفات فورتنايت/i
+            .test(value)
+        )
+      )
     );
   }
 
@@ -4584,11 +4664,15 @@
           " "
         )
         .replace(
-          /\b(give|me|the|a|an|for|of|please|find|search|what|whats|what's|is|path|asset|mesh|static|skeletal|fortnite|files?|current|latest|new|describe)\b/gi,
+          /\b(give|me|the|a|an|for|of|please|pls|find|search|show|lookup|locate|get|where|what|whats|what's|is|path|asset|mesh|static|skeletal|fortnite|files?|current|latest|new|describe|skin|outfit|cosmetic|character|emote|back\s*bling|pickaxe|glider|wrap|music\s*pack)\b/gi,
           " "
         )
         .replace(
-          /(انطيني|اعطيني|اريد|أريد|شنو|شسم|مسار|باث|مال|ملفات|فورتنايت|الميش|ميش)/g,
+          /\b(trouve|chercher|cherche|recherche|montre|localise|donne|moi|le|la|les|un|une|pour|de|du|des|chemin|fichier|fortnite|tenue|cosm[eé]tique|personnage|emote|émote|pioche|planeur)\b/gi,
+          " "
+        )
+        .replace(
+          /(انطيني|اعطيني|أعطيني|اريد|أريد|شوفلي|شوفيلي|دورلي|دوريلي|طلعلي|طلعيلي|جيبلي|جيبيلي|لكيلي|لقيلِي|ابحث|أبحث|شنو|شسم|مسار|باث|مال|ملفات|فورتنايت|الميش|ميش|سكن|سكين|كوزمتك|كوسمتك|شخصية|ايموت|إيموت|رقصة|باك\s*بلنغ|بيكاكس|مظلة)/g,
           " "
         )
         .replace(
@@ -4605,6 +4689,1266 @@
       cleaned.slice(0, 100) ||
       raw.slice(0, 100)
     );
+  }
+
+  function normalizedLookupText(
+    value
+  ) {
+    return String(value || "")
+      .normalize("NFKD")
+      .replace(
+        /[\u0300-\u036f]/g,
+        ""
+      )
+      .toLowerCase()
+      .replace(
+        /[^a-z0-9_\u0600-\u06ff]+/g,
+        " "
+      )
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .trim();
+  }
+
+  function cosmeticLookupQueries(
+    query
+  ) {
+    const clean =
+      String(query || "")
+        .replace(
+          /\s+/g,
+          " "
+        )
+        .trim()
+        .slice(
+          0,
+          100
+        );
+
+    if (!clean) {
+      return [];
+    }
+
+    const tokens =
+      clean
+        .split(" ")
+        .filter(Boolean);
+
+    const candidates = [
+      clean
+    ];
+
+    if (tokens.length >= 3) {
+      candidates.push(
+        tokens
+          .slice(0, 3)
+          .join(" ")
+      );
+
+      candidates.push(
+        tokens
+          .slice(-3)
+          .join(" ")
+      );
+    }
+
+    if (tokens.length >= 2) {
+      candidates.push(
+        tokens
+          .slice(0, 2)
+          .join(" ")
+      );
+
+      candidates.push(
+        tokens
+          .slice(-2)
+          .join(" ")
+      );
+    }
+
+    return [
+      ...new Set(
+        candidates
+          .map(
+            (item) =>
+              item.trim()
+          )
+          .filter(
+            (item) =>
+              item.length >= 2
+          )
+      )
+    ].slice(0, 5);
+  }
+
+  function cosmeticAssetName(
+    value
+  ) {
+    let text =
+      String(value || "")
+        .replace(/\\/g, "/")
+        .trim();
+
+    if (!text) {
+      return "";
+    }
+
+    const wrapped =
+      text.match(
+        /^(?:[A-Za-z0-9_]+)?['"]([^'"]+)['"]$/
+      );
+
+    if (wrapped?.[1]) {
+      text =
+        wrapped[1];
+    }
+
+    text =
+      text
+        .split("?")[0]
+        .split("#")[0];
+
+    const slash =
+      text.lastIndexOf("/");
+
+    let file =
+      slash >= 0
+        ? text.slice(
+            slash + 1
+          )
+        : text;
+
+    file =
+      file.replace(
+        /\.(uasset|uexp|ubulk|umap)$/i,
+        ""
+      );
+
+    const dot =
+      file.indexOf(".");
+
+    if (dot >= 0) {
+      file =
+        file.slice(
+          0,
+          dot
+        );
+    }
+
+    return file
+      .trim()
+      .slice(
+        0,
+        180
+      );
+  }
+
+  function lookupTokens(
+    value
+  ) {
+    return normalizedLookupText(
+      value
+    )
+      .split(" ")
+      .filter(
+        (token) =>
+          token.length >= 2
+      );
+  }
+
+  function scoreCosmeticCandidate(
+    item,
+    query
+  ) {
+    const wanted =
+      normalizedLookupText(
+        query
+      );
+
+    const name =
+      normalizedLookupText(
+        item?.name
+      );
+
+    const id =
+      normalizedLookupText(
+        item?.id
+      );
+
+    const path =
+      normalizedLookupText(
+        item?.path
+      );
+
+    const combined =
+      [name, id, path]
+        .filter(Boolean)
+        .join(" ");
+
+    const tokens =
+      lookupTokens(
+        query
+      );
+
+    let score = 0;
+
+    if (
+      wanted &&
+      name === wanted
+    ) {
+      score += 5000;
+    }
+
+    if (
+      wanted &&
+      id === wanted
+    ) {
+      score += 4500;
+    }
+
+    if (
+      wanted &&
+      name.includes(
+        wanted
+      )
+    ) {
+      score += 1800;
+    }
+
+    if (
+      wanted &&
+      path.includes(
+        wanted
+      )
+    ) {
+      score += 900;
+    }
+
+    let matchedTokens = 0;
+
+    for (
+      const token of
+      tokens
+    ) {
+      if (
+        combined.includes(
+          token
+        )
+      ) {
+        matchedTokens++;
+        score += 220;
+      }
+    }
+
+    if (
+      tokens.length >= 2 &&
+      matchedTokens ===
+        tokens.length
+    ) {
+      score += 2200;
+    }
+
+    if (item?.path) {
+      score += 100;
+    }
+
+    return score;
+  }
+
+  async function fetchPublicJsonBounded(
+    url,
+    signal,
+    maxBytes =
+      8 * 1024 * 1024
+  ) {
+    const controller =
+      new AbortController();
+
+    const abortFromExternal =
+      () => {
+        try {
+          controller.abort(
+            signal?.reason ||
+            "chat-search-cancelled"
+          );
+        } catch {}
+      };
+
+    if (signal?.aborted) {
+      abortFromExternal();
+    } else {
+      signal
+        ?.addEventListener?.(
+          "abort",
+          abortFromExternal,
+          {
+            once: true
+          }
+        );
+    }
+
+    const timer =
+      setTimeout(
+        () => {
+          try {
+            controller.abort(
+              "cosmetic-search-timeout"
+            );
+          } catch {}
+        },
+        14_000
+      );
+
+    try {
+      const response =
+        await fetch(
+          url,
+          {
+            cache:
+              "force-cache",
+            signal:
+              controller.signal
+          }
+        );
+
+      if (!response.ok) {
+        throw new Error(
+          `Cosmetic search returned ${response.status}.`
+        );
+      }
+
+      const declared =
+        Number(
+          response.headers.get(
+            "content-length"
+          ) || 0
+        );
+
+      if (
+        declared > 0 &&
+        declared > maxBytes
+      ) {
+        try {
+          await response.body
+            ?.cancel();
+        } catch {}
+
+        throw new Error(
+          "Cosmetic search response is too large."
+        );
+      }
+
+      const text =
+        await response.text();
+
+      if (
+        new TextEncoder()
+          .encode(text)
+          .byteLength >
+        maxBytes
+      ) {
+        throw new Error(
+          "Cosmetic search response is too large."
+        );
+      }
+
+      return JSON.parse(text);
+    } finally {
+      clearTimeout(timer);
+
+      signal
+        ?.removeEventListener?.(
+          "abort",
+          abortFromExternal
+        );
+    }
+  }
+
+  async function fetchCosmeticCandidates(
+    query,
+    signal
+  ) {
+    const looksLikeId =
+      /^(?:CID_|EID_|BID_|Pickaxe_|Glider_|Wrap_|MusicPack_|LSID_|Emoji_|Spray_|SparksAura_)/i
+        .test(
+          String(query || "")
+        );
+
+    const params =
+      new URLSearchParams();
+
+    params.set(
+      looksLikeId
+        ? "id"
+        : "name",
+      String(query || "")
+        .slice(
+          0,
+          100
+        )
+    );
+
+    params.set(
+      "matchMethod",
+      "contains"
+    );
+
+    params.set(
+      "language",
+      "en"
+    );
+
+    const payload =
+      await fetchPublicJsonBounded(
+        `https://fortnite-api.com/v2/cosmetics/br/search/all?${params.toString()}`,
+        signal
+      );
+
+    const rows =
+      Array.isArray(
+        payload?.data
+      )
+        ? payload.data
+        : [];
+
+    return rows
+      .filter(
+        (item) =>
+          typeof item?.path ===
+            "string" &&
+          item.path.trim()
+      )
+      .sort(
+        (a, b) =>
+          scoreCosmeticCandidate(
+            b,
+            query
+          ) -
+          scoreCosmeticCandidate(
+            a,
+            query
+          )
+      )
+      .slice(0, 12);
+  }
+
+  async function verifyCosmeticCandidate(
+    item,
+    query,
+    signal
+  ) {
+    const assetName =
+      cosmeticAssetName(
+        item?.path
+      );
+
+    if (!assetName) {
+      return null;
+    }
+
+    const result =
+      await searchDatabase(
+        "all",
+        assetName,
+        signal
+      );
+
+    const expected =
+      assetName.toLowerCase();
+
+    const verified =
+      (
+        Array.isArray(
+          result?.results
+        )
+          ? result.results
+          : []
+      )
+        .find(
+          (row) =>
+            cosmeticAssetName(
+              row?.path
+            )
+              .toLowerCase() ===
+            expected
+        );
+
+    if (!verified?.path) {
+      return null;
+    }
+
+    return {
+      path:
+        String(
+          verified.path
+        ).slice(
+          0,
+          1000
+        ),
+
+      match:
+        verified.match ||
+        "verified",
+
+      source:
+        "cosmetic+database",
+
+      name:
+        String(
+          item?.name || ""
+        ).slice(
+          0,
+          120
+        ),
+
+      id:
+        String(
+          item?.id || ""
+        ).slice(
+          0,
+          120
+        ),
+
+      type:
+        String(
+          item?.type
+            ?.displayValue ||
+          item?.type?.value ||
+          item?.backendType ||
+          "Cosmetic"
+        ).slice(
+          0,
+          80
+        ),
+
+      score:
+        scoreCosmeticCandidate(
+          item,
+          query
+        )
+    };
+  }
+
+  async function resolveCosmeticPaths(
+    query,
+    signal
+  ) {
+    const output = [];
+    const seen =
+      new Set();
+
+    for (
+      const lookup of
+      cosmeticLookupQueries(
+        query
+      )
+    ) {
+      let candidates = [];
+
+      try {
+        candidates =
+          await fetchCosmeticCandidates(
+            lookup,
+            signal
+          );
+      } catch (error) {
+        if (
+          signal?.aborted ||
+          error?.name ===
+            "AbortError"
+        ) {
+          throw error;
+        }
+
+        continue;
+      }
+
+      for (
+        const item of
+        candidates
+      ) {
+        const verified =
+          await verifyCosmeticCandidate(
+            item,
+            query,
+            signal
+          );
+
+        if (!verified) {
+          continue;
+        }
+
+        const key =
+          verified.path
+            .toLowerCase();
+
+        if (seen.has(key)) {
+          continue;
+        }
+
+        seen.add(key);
+        output.push(
+          verified
+        );
+
+        if (
+          output.length >= 4
+        ) {
+          break;
+        }
+      }
+
+      if (
+        output.length >= 1
+      ) {
+        break;
+      }
+    }
+
+    return output
+      .sort(
+        (a, b) =>
+          b.score -
+          a.score
+      )
+      .slice(0, 4);
+  }
+
+  function chatObjectPath(
+    raw
+  ) {
+    const nova =
+      window.NovaSparx
+        ?.objectPath?.(
+          raw
+        );
+
+    if (nova) {
+      return nova;
+    }
+
+    let path =
+      String(raw || "")
+        .trim();
+
+    const wrapped =
+      path.match(
+        /^(?:[A-Za-z0-9_]+)?['"]([^'"]+)['"]$/
+      );
+
+    if (wrapped?.[1]) {
+      path =
+        wrapped[1];
+    }
+
+    path =
+      path.replace(
+        /\\/g,
+        "/"
+      );
+
+    path =
+      path.replace(
+        /^\.?\//,
+        ""
+      );
+
+    path =
+      path.replace(
+        /\.(uasset|uexp|ubulk)$/i,
+        ""
+      );
+
+    const objectDot =
+      path.lastIndexOf(".");
+
+    if (
+      objectDot >
+      path.lastIndexOf("/")
+    ) {
+      path =
+        path.slice(
+          0,
+          objectDot
+        );
+    }
+
+    if (
+      /^FortniteGame\/Content\//i
+        .test(path)
+    ) {
+      path =
+        "/Game/" +
+        path.slice(
+          "FortniteGame/Content/"
+            .length
+        );
+    } else if (
+      /^Engine\/Content\//i
+        .test(path)
+    ) {
+      path =
+        "/Engine/" +
+        path.slice(
+          "Engine/Content/"
+            .length
+        );
+    } else {
+      const plugin =
+        path.match(
+          /^(?:FortniteGame\/)?Plugins\/(?:GameFeatures\/)?([^/]+)\/Content\/(.+)$/i
+        );
+
+      if (plugin) {
+        path =
+          `/${plugin[1]}/${plugin[2]}`;
+      } else {
+        const mount =
+          path.match(
+            /^([^/]+)\/Content\/(.+)$/i
+          );
+
+        if (
+          mount &&
+          mount[1]
+            .toLowerCase() !==
+            "fortnitegame"
+        ) {
+          path =
+            `/${mount[1]}/${mount[2]}`;
+        } else if (
+          !path.startsWith("/")
+        ) {
+          path =
+            "/" + path;
+        }
+      }
+    }
+
+    const name =
+      path.slice(
+        path.lastIndexOf("/") +
+        1
+      );
+
+    return name
+      ? `${path}.${name}`
+      : path;
+  }
+
+  function pathReplyLanguage(
+    text
+  ) {
+    const value =
+      String(text || "");
+
+    if (
+      /[\u0600-\u06ff]/
+        .test(value)
+    ) {
+      return "ar";
+    }
+
+    if (
+      /\b(cherche|trouve|chemin|tenue|cosm[eé]tique|personnage|montre|recherche)\b/i
+        .test(value)
+    ) {
+      return "fr";
+    }
+
+    const selected =
+      window.FortniteI18n
+        ?.getLanguage?.();
+
+    return [
+      "en",
+      "fr",
+      "ar"
+    ].includes(selected)
+      ? selected
+      : "en";
+  }
+
+  function dedupePathRows(
+    rows,
+    limit = 8
+  ) {
+    const output = [];
+    const seen =
+      new Set();
+
+    for (
+      const row of
+      Array.isArray(rows)
+        ? rows
+        : []
+    ) {
+      const path =
+        String(
+          row?.path || ""
+        )
+          .trim();
+
+      if (!path) {
+        continue;
+      }
+
+      const key =
+        path.toLowerCase();
+
+      if (seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+
+      output.push({
+        ...row,
+        path
+      });
+
+      if (
+        output.length >=
+        limit
+      ) {
+        break;
+      }
+    }
+
+    return output;
+  }
+
+  function bestDatabasePathRows(
+    result
+  ) {
+    const rows =
+      dedupePathRows(
+        result?.results,
+        10
+      );
+
+    if (!rows.length) {
+      return {
+        rows: [],
+        confidence:
+          "none"
+      };
+    }
+
+    const exact =
+      rows.filter(
+        (row) =>
+          row.match ===
+          "exact"
+      );
+
+    if (exact.length) {
+      return {
+        rows:
+          exact.slice(
+            0,
+            5
+          ),
+        confidence:
+          exact.length === 1
+            ? "exact"
+            : "multiple"
+      };
+    }
+
+    const full =
+      rows.filter(
+        (row) =>
+          row.match ===
+          "full"
+      );
+
+    if (full.length) {
+      return {
+        rows:
+          full.slice(
+            0,
+            5
+          ),
+        confidence:
+          full.length === 1
+            ? "full"
+            : "multiple"
+      };
+    }
+
+    return {
+      rows:
+        rows.slice(
+          0,
+          5
+        ),
+      confidence:
+        rows.length === 1
+          ? "related"
+          : "multiple"
+    };
+  }
+
+  function pathLookupText(
+    language,
+    key
+  ) {
+    const copy = {
+      ar: {
+        verified:
+          "أكيد، هذا هو المسار المؤكد:",
+        closest:
+          "لكيت هذا كأقرب مسار مؤكد بالداتابيس:",
+        multiple:
+          "لكيت أكثر من مسار قريب. هاي أفضل النتائج المؤكدة:",
+        object:
+          "والمسار الجاهز:",
+        noResult:
+          "ما لكيت مسار مؤكد بهذا الاسم. جرّب الاسم أو الـID بشكل أدق.",
+        option:
+          "نتيجة"
+      },
+
+      fr: {
+        verified:
+          "Bien sûr. Voici le chemin vérifié :",
+        closest:
+          "Voici le chemin vérifié le plus proche :",
+        multiple:
+          "J’ai trouvé plusieurs chemins proches. Voici les meilleurs résultats vérifiés :",
+        object:
+          "Chemin prêt à utiliser :",
+        noResult:
+          "Je n’ai pas trouvé de chemin vérifié avec ce nom. Essaie un nom ou un ID plus précis.",
+        option:
+          "Résultat"
+      },
+
+      en: {
+        verified:
+          "Sure — here’s the verified path:",
+        closest:
+          "Here’s the closest verified path I found:",
+        multiple:
+          "I found several close paths. These are the best verified results:",
+        object:
+          "Ready-to-use object path:",
+        noResult:
+          "I couldn’t find a verified path with that name. Try a more exact name or ID.",
+        option:
+          "Result"
+      }
+    };
+
+    return (
+      copy[language]?.[key] ||
+      copy.en[key]
+    );
+  }
+
+  function formatSinglePathResult(
+    row,
+    language,
+    lead
+  ) {
+    const raw =
+      String(
+        row?.path || ""
+      ).trim();
+
+    if (!raw) {
+      return "";
+    }
+
+    const objectPath =
+      chatObjectPath(
+        raw
+      );
+
+    const fence =
+      String.fromCharCode(96)
+        .repeat(3);
+
+    const parts = [
+      lead,
+      "",
+      fence + "text",
+      raw,
+      fence
+    ];
+
+    if (
+      objectPath &&
+      objectPath !== raw
+    ) {
+      parts.push(
+        "",
+        pathLookupText(
+          language,
+          "object"
+        ),
+        "",
+        fence + "text",
+        objectPath,
+        fence
+      );
+    }
+
+    return parts.join(
+      "\n"
+    );
+  }
+
+  function formatMultiplePathResults(
+    rows,
+    language
+  ) {
+    const fence =
+      String.fromCharCode(96)
+        .repeat(3);
+
+    const parts = [
+      pathLookupText(
+        language,
+        "multiple"
+      )
+    ];
+
+    rows
+      .slice(0, 5)
+      .forEach(
+        (
+          row,
+          index
+        ) => {
+          const raw =
+            String(
+              row?.path || ""
+            ).trim();
+
+          if (!raw) return;
+
+          const objectPath =
+            chatObjectPath(
+              raw
+            );
+
+          parts.push(
+            "",
+            "**" +
+              pathLookupText(
+                language,
+                "option"
+              ) +
+              " " +
+              (index + 1) +
+              "**",
+            "",
+            fence + "text",
+            raw,
+            fence
+          );
+
+          if (
+            objectPath &&
+            objectPath !== raw
+          ) {
+            parts.push(
+              "",
+              pathLookupText(
+                language,
+                "object"
+              ),
+              "",
+              fence + "text",
+              objectPath,
+              fence
+            );
+          }
+        }
+      );
+
+    return parts.join(
+      "\n"
+    );
+  }
+
+  async function resolveNaturalPathLookup(
+    userText,
+    signal
+  ) {
+    const query =
+      coreSearchQuery(
+        userText
+      );
+
+    if (!query) {
+      return {
+        query: "",
+        rows: [],
+        confidence:
+          "none",
+        source:
+          "none"
+      };
+    }
+
+    const database =
+      await searchDatabase(
+        searchScope(
+          userText
+        ),
+        query,
+        signal
+      );
+
+    if (signal?.aborted) {
+      throw chatAbortError(
+        signal
+      );
+    }
+
+    const databasePick =
+      bestDatabasePathRows(
+        database
+      );
+
+    let cosmeticRows = [];
+
+    if (
+      looksLikeCosmeticQuestion(
+        userText
+      )
+    ) {
+      try {
+        cosmeticRows =
+          await resolveCosmeticPaths(
+            query,
+            signal
+          );
+      } catch (error) {
+        if (
+          signal?.aborted ||
+          error?.name ===
+            "AbortError"
+        ) {
+          throw error;
+        }
+      }
+    }
+
+    if (
+      cosmeticRows.length
+    ) {
+      const top =
+        cosmeticRows[0];
+
+      const second =
+        cosmeticRows[1];
+
+      const clearWinner =
+        !second ||
+        top.score -
+          second.score >=
+          500;
+
+      return {
+        query,
+        rows:
+          clearWinner
+            ? [top]
+            : cosmeticRows
+                .slice(0, 4),
+        confidence:
+          clearWinner
+            ? "exact"
+            : "multiple",
+        source:
+          "cosmetic+database"
+      };
+    }
+
+    return {
+      query,
+      rows:
+        databasePick.rows,
+      confidence:
+        databasePick.confidence,
+      source:
+        "database"
+    };
+  }
+
+  async function runNaturalPathLookup(
+    chat,
+    userText,
+    signal,
+    runId,
+    controller
+  ) {
+    const result =
+      await resolveNaturalPathLookup(
+        userText,
+        signal
+      );
+
+    throwIfChatStale(
+      runId,
+      controller
+    );
+
+    removeTypingIndicator();
+
+    const language =
+      pathReplyLanguage(
+        userText
+      );
+
+    let content;
+
+    if (!result.rows.length) {
+      content =
+        pathLookupText(
+          language,
+          "noResult"
+        );
+    } else if (
+      result.rows.length === 1
+    ) {
+      const lead =
+        result.confidence ===
+          "exact"
+          ? pathLookupText(
+              language,
+              "verified"
+            )
+          : pathLookupText(
+              language,
+              "closest"
+            );
+
+      content =
+        formatSinglePathResult(
+          result.rows[0],
+          language,
+          lead
+        );
+    } else {
+      content =
+        formatMultiplePathResults(
+          result.rows,
+          language
+        );
+    }
+
+    chat.messages.push({
+      role:
+        "assistant",
+      content
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -4628,7 +5972,10 @@
 
     if (
       /^\s*@SearchForPath\b/i
-        .test(value)
+        .test(value) ||
+      isDirectPathLookupRequest(
+        value
+      )
     ) {
       return true;
     }
@@ -6653,7 +8000,7 @@
 
   window.FortniteAgent =
     Object.freeze({
-      version: "1.0.5",
+      version: "1.0.6",
 
       searchDatabase,
       describePath,
