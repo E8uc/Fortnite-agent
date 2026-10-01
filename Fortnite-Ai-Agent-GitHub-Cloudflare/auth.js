@@ -7,6 +7,9 @@
     new URL(".", document.baseURI).pathname
   );
   const SESSION_KEY = "fortniteAiAgent.openrouterSession.v3";
+  const AUTH_BACKUP_DB = "fortniteAiAgent.authPersistence.v1";
+  const AUTH_BACKUP_STORE = "state";
+  const AUTH_BACKUP_KEY = "openrouter-session.v3";
   const LOGIN_PENDING_KEY = "fortniteAiAgent.openrouterLoginPending.v3";
   const LOGIN_PENDING_TTL_MS =
     15 * 60 * 1000;
@@ -85,6 +88,234 @@
       sessionStorage
         .removeItem(key);
     } catch {}
+  }
+
+  function openAuthBackupDb() {
+    if (!("indexedDB" in window)) {
+      return Promise.resolve(null);
+    }
+
+    return new Promise((resolve) => {
+      let request;
+
+      try {
+        request =
+          window.indexedDB.open(
+            AUTH_BACKUP_DB,
+            1
+          );
+      } catch {
+        resolve(null);
+        return;
+      }
+
+      request.onupgradeneeded =
+        () => {
+          const db =
+            request.result;
+
+          if (
+            !db.objectStoreNames.contains(
+              AUTH_BACKUP_STORE
+            )
+          ) {
+            db.createObjectStore(
+              AUTH_BACKUP_STORE,
+              {
+                keyPath: "id"
+              }
+            );
+          }
+        };
+
+      request.onsuccess =
+        () =>
+          resolve(
+            request.result
+          );
+
+      request.onerror =
+        () =>
+          resolve(null);
+
+      request.onblocked =
+        () =>
+          resolve(null);
+    });
+  }
+
+  async function readAuthSessionBackup() {
+    const db =
+      await openAuthBackupDb();
+
+    if (!db) {
+      return "";
+    }
+
+    try {
+      return await new Promise((resolve) => {
+        const tx =
+          db.transaction(
+            AUTH_BACKUP_STORE,
+            "readonly"
+          );
+
+        const request =
+          tx.objectStore(
+            AUTH_BACKUP_STORE
+          ).get(
+            AUTH_BACKUP_KEY
+          );
+
+        request.onsuccess =
+          () =>
+            resolve(
+              cleanSessionToken(
+                request.result?.token
+              )
+            );
+
+        request.onerror =
+          () =>
+            resolve("");
+      });
+    } catch {
+      return "";
+    } finally {
+      try {
+        db.close();
+      } catch {}
+    }
+  }
+
+  async function writeAuthSessionBackup(
+    token
+  ) {
+    token =
+      cleanSessionToken(
+        token
+      );
+
+    if (!token) {
+      return false;
+    }
+
+    const db =
+      await openAuthBackupDb();
+
+    if (!db) {
+      return false;
+    }
+
+    try {
+      return await new Promise((resolve) => {
+        const tx =
+          db.transaction(
+            AUTH_BACKUP_STORE,
+            "readwrite"
+          );
+
+        tx.oncomplete =
+          () =>
+            resolve(true);
+
+        tx.onerror =
+          () =>
+            resolve(false);
+
+        tx.onabort =
+          () =>
+            resolve(false);
+
+        tx.objectStore(
+          AUTH_BACKUP_STORE
+        ).put({
+          id:
+            AUTH_BACKUP_KEY,
+          token,
+          savedAt:
+            Date.now()
+        });
+      });
+    } catch {
+      return false;
+    } finally {
+      try {
+        db.close();
+      } catch {}
+    }
+  }
+
+  async function clearAuthSessionBackup() {
+    const db =
+      await openAuthBackupDb();
+
+    if (!db) {
+      return false;
+    }
+
+    try {
+      return await new Promise((resolve) => {
+        const tx =
+          db.transaction(
+            AUTH_BACKUP_STORE,
+            "readwrite"
+          );
+
+        tx.oncomplete =
+          () =>
+            resolve(true);
+
+        tx.onerror =
+          () =>
+            resolve(false);
+
+        tx.onabort =
+          () =>
+            resolve(false);
+
+        tx.objectStore(
+          AUTH_BACKUP_STORE
+        ).delete(
+          AUTH_BACKUP_KEY
+        );
+      });
+    } catch {
+      return false;
+    } finally {
+      try {
+        db.close();
+      } catch {}
+    }
+  }
+
+  async function requestPersistentStorage() {
+    try {
+      const storage =
+        navigator.storage;
+
+      if (
+        !storage ||
+        typeof storage.persist !==
+          "function"
+      ) {
+        return false;
+      }
+
+      if (
+        typeof storage.persisted ===
+          "function" &&
+        await storage.persisted()
+      ) {
+        return true;
+      }
+
+      return (
+        await storage.persist()
+      ) === true;
+    } catch {
+      return false;
+    }
   }
 
   function profileStorageKey(uid) {
@@ -297,34 +528,37 @@
       );
 
     if (sessionToken) {
-      let persisted = false;
-
       try {
         localStorage.setItem(
           SESSION_KEY,
           sessionToken
         );
-
-        persisted = true;
       } catch {}
 
-      if (!persisted) {
-        sessionStorageSet(
-          SESSION_KEY,
-          sessionToken
+      sessionStorageSet(
+        SESSION_KEY,
+        sessionToken
+      );
+
+      writeAuthSessionBackup(
+        sessionToken
+      ).catch(
+        () => {}
+      );
+
+      requestPersistentStorage()
+        .catch(
+          () => {}
         );
-      } else {
-        try {
-          sessionStorage.setItem(
-            SESSION_KEY,
-            sessionToken
-          );
-        } catch {}
-      }
     } else {
       storageRemove(
         SESSION_KEY
       );
+
+      clearAuthSessionBackup()
+        .catch(
+          () => {}
+        );
     }
   }
 
@@ -608,6 +842,9 @@
         error?.status === 401
       ) {
         persistSession("");
+
+        await clearAuthSessionBackup();
+
         currentUser = null;
         currentProfile = null;
         lastError = null;
@@ -695,7 +932,11 @@
 
   async function signOutUser() {
     const token = sessionToken;
+
     persistSession("");
+
+    await clearAuthSessionBackup();
+
     currentUser = null;
     currentProfile = null;
     lastError = null;
@@ -714,6 +955,7 @@
 
     let persistentToken = "";
     let sessionScopedToken = "";
+    let indexedDbToken = "";
 
     try {
       persistentToken =
@@ -731,15 +973,29 @@
         )
       );
 
+    if (
+      !persistentToken &&
+      !sessionScopedToken
+    ) {
+      indexedDbToken =
+        await readAuthSessionBackup();
+    }
+
     sessionToken =
       persistentToken ||
-      sessionScopedToken;
+      sessionScopedToken ||
+      indexedDbToken;
 
     if (sessionToken) {
       persistSession(
         sessionToken
       );
     }
+
+    requestPersistentStorage()
+      .catch(
+        () => {}
+      );
 
     window.FortniteAuth = {
       configured,
