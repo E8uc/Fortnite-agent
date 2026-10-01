@@ -8511,7 +8511,7 @@ export default {
           ok: true,
           service: "FNAA",
           version:
-            "1.0.14",
+            "1.0.15",
           fortnite:
             CURRENT_FORTNITE_VERSION,
           authProvider:
@@ -8617,6 +8617,14 @@ export default {
         `user${suffix}`
           .slice(0, 9);
 
+      const refreshedSessionToken =
+        await createSession(
+          env,
+          uid,
+          identity.session
+            .apiKey
+        );
+
       return json(
         request,
         env,
@@ -8624,6 +8632,13 @@ export default {
           connected: true,
           provider:
             "openrouter",
+
+          sessionToken:
+            refreshedSessionToken,
+
+          sessionExpiresAt:
+            Date.now() +
+            SESSION_TTL_MS,
 
           user: {
             uid,
