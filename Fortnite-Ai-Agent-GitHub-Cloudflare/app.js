@@ -49,6 +49,15 @@
   const ACTIVE_KEY =
     "fortniteAiAgent.active.v4";
 
+  const CHAT_BACKUP_DB =
+    "fortniteAiAgent.persistence.v1";
+
+  const CHAT_BACKUP_STORE =
+    "state";
+
+  const CHAT_BACKUP_KEY =
+    "chats.v4";
+
   const THEME_KEY =
     "fortniteAiAgent.theme.v1";
 
@@ -139,6 +148,197 @@
     } catch {
       return false;
     }
+  }
+
+  function openChatBackupDb() {
+    if (
+      !("indexedDB" in window)
+    ) {
+      return Promise.resolve(
+        null
+      );
+    }
+
+    return new Promise(
+      (resolve) => {
+        let request;
+
+        try {
+          request =
+            window.indexedDB.open(
+              CHAT_BACKUP_DB,
+              1
+            );
+        } catch {
+          resolve(null);
+          return;
+        }
+
+        request.onupgradeneeded =
+          () => {
+            const db =
+              request.result;
+
+            if (
+              !db.objectStoreNames.contains(
+                CHAT_BACKUP_STORE
+              )
+            ) {
+              db.createObjectStore(
+                CHAT_BACKUP_STORE,
+                {
+                  keyPath: "id"
+                }
+              );
+            }
+          };
+
+        request.onsuccess =
+          () =>
+            resolve(
+              request.result
+            );
+
+        request.onerror =
+          () =>
+            resolve(null);
+
+        request.onblocked =
+          () =>
+            resolve(null);
+      }
+    );
+  }
+
+  async function readChatBackup() {
+    const db =
+      await openChatBackupDb();
+
+    if (!db) return null;
+
+    try {
+      return await new Promise(
+        (resolve) => {
+          const tx =
+            db.transaction(
+              CHAT_BACKUP_STORE,
+              "readonly"
+            );
+
+          const request =
+            tx.objectStore(
+              CHAT_BACKUP_STORE
+            ).get(
+              CHAT_BACKUP_KEY
+            );
+
+          request.onsuccess =
+            () =>
+              resolve(
+                request.result ||
+                null
+              );
+
+          request.onerror =
+            () =>
+              resolve(null);
+        }
+      );
+    } finally {
+      try {
+        db.close();
+      } catch {}
+    }
+  }
+
+  async function writeChatBackup(
+    snapshot,
+    selectedId
+  ) {
+    const db =
+      await openChatBackupDb();
+
+    if (!db) return false;
+
+    try {
+      return await new Promise(
+        (resolve) => {
+          const tx =
+            db.transaction(
+              CHAT_BACKUP_STORE,
+              "readwrite"
+            );
+
+          tx.oncomplete =
+            () =>
+              resolve(true);
+
+          tx.onerror =
+            () =>
+              resolve(false);
+
+          tx.onabort =
+            () =>
+              resolve(false);
+
+          tx.objectStore(
+            CHAT_BACKUP_STORE
+          ).put({
+            id:
+              CHAT_BACKUP_KEY,
+            savedAt:
+              Date.now(),
+            activeId:
+              String(
+                selectedId || ""
+              ),
+            chats:
+              snapshot
+          });
+        }
+      );
+    } catch {
+      return false;
+    } finally {
+      try {
+        db.close();
+      } catch {}
+    }
+  }
+
+  function meaningfulChatCount(
+    value
+  ) {
+    return Object.values(
+      value || {}
+    ).filter(
+      (chat) =>
+        Array.isArray(
+          chat?.messages
+        ) &&
+        chat.messages.length >
+          0
+    ).length;
+  }
+
+  function newestChatUpdate(
+    value
+  ) {
+    return Object.values(
+      value || {}
+    ).reduce(
+      (
+        latest,
+        chat
+      ) =>
+        Math.max(
+          latest,
+          Number(
+            chat?.updatedAt || 0
+          ) || 0
+        ),
+      0
+    );
   }
 
   const PLUGINS = [
@@ -294,6 +494,10 @@
 
   let usageTimer = null;
 
+  let chatBackupReady = false;
+
+  let chatBackupTimer = null;
+
   let accountState = {
     configured: false,
     user: null,
@@ -326,6 +530,14 @@
   renderAll();
   ensureGuestLoginButton();
   ensureSettingsApiCard();
+
+  restoreChatsFromBackup()
+    .finally(
+      () => {
+        chatBackupReady = true;
+        queueChatBackup();
+      }
+    );
 
   maybeShowLoginGate();
   syncVisualViewport();
@@ -2236,6 +2448,188 @@
     }
   }
 
+  function queueChatBackup() {
+    if (!chatBackupReady) {
+      return;
+    }
+
+    if (chatBackupTimer) {
+      clearTimeout(
+        chatBackupTimer
+      );
+    }
+
+    chatBackupTimer =
+      setTimeout(
+        () => {
+          chatBackupTimer =
+            null;
+
+          writeChatBackup(
+            sanitizeChats(
+              chats
+            ),
+            activeId
+          ).catch(
+            () => {}
+          );
+        },
+        80
+      );
+  }
+
+  async function restoreChatsFromBackup() {
+    const backup =
+      await readChatBackup();
+
+    if (
+      !backup ||
+      typeof backup !==
+        "object"
+    ) {
+      return false;
+    }
+
+    const backupChats =
+      sanitizeChats(
+        backup.chats
+      );
+
+    if (
+      !Object.keys(
+        backupChats
+      ).length
+    ) {
+      return false;
+    }
+
+    const combined =
+      Object.create(null);
+
+    const ids =
+      new Set([
+        ...Object.keys(
+          backupChats
+        ),
+        ...Object.keys(
+          chats
+        )
+      ]);
+
+    for (
+      const id of
+      ids
+    ) {
+      const localChat =
+        chats[id];
+
+      const backupChat =
+        backupChats[id];
+
+      if (
+        localChat &&
+        backupChat
+      ) {
+        combined[id] =
+          Number(
+            localChat.updatedAt || 0
+          ) >=
+          Number(
+            backupChat.updatedAt || 0
+          )
+            ? localChat
+            : backupChat;
+      } else {
+        combined[id] =
+          localChat ||
+          backupChat;
+      }
+    }
+
+    const merged =
+      sanitizeChats(
+        combined
+      );
+
+    const localMeaningful =
+      meaningfulChatCount(
+        chats
+      );
+
+    const mergedMeaningful =
+      meaningfulChatCount(
+        merged
+      );
+
+    const localUpdated =
+      newestChatUpdate(
+        chats
+      );
+
+    const mergedUpdated =
+      newestChatUpdate(
+        merged
+      );
+
+    const shouldRestore =
+      (
+        localMeaningful === 0 &&
+        mergedMeaningful > 0
+      ) ||
+      mergedMeaningful >
+        localMeaningful ||
+      mergedUpdated >
+        localUpdated;
+
+    if (!shouldRestore) {
+      return false;
+    }
+
+    chats =
+      merged;
+
+    const backupActiveId =
+      String(
+        backup.activeId || ""
+      );
+
+    if (
+      activeId &&
+      chats[activeId]
+    ) {
+      // Keep the local selection when it still exists.
+    } else if (
+      backupActiveId &&
+      chats[backupActiveId]
+    ) {
+      activeId =
+        backupActiveId;
+    } else {
+      activeId =
+        Object.keys(
+          chats
+        )[0] ||
+        createChat(false);
+    }
+
+    safeStorageSet(
+      STORAGE_KEY,
+      JSON.stringify(
+        merged
+      )
+    );
+
+    safeStorageSet(
+      ACTIVE_KEY,
+      activeId
+    );
+
+    renderAll();
+
+    return true;
+  }
+
+
   function saveChats() {
     const snapshot =
       sanitizeChats(
@@ -2253,6 +2647,8 @@
       ACTIVE_KEY,
       activeId
     );
+
+    queueChatBackup();
   }
 
   function createChat(
@@ -8096,7 +8492,7 @@
 
   window.FortniteAgent =
     Object.freeze({
-      version: "1.0.12",
+      version: "1.0.13",
 
       searchDatabase,
       describePath,

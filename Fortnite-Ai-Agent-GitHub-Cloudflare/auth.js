@@ -296,23 +296,33 @@
         token
       );
 
-    // Bearer credentials must never survive in localStorage. This limits
-    // exposure if a future DOM bug is introduced and also avoids leaving a
-    // reusable token behind after the tab/browser session ends.
-    try {
-      localStorage
-        .removeItem(
-          SESSION_KEY
-        );
-    } catch {}
-
     if (sessionToken) {
-      sessionStorageSet(
-        SESSION_KEY,
-        sessionToken
-      );
+      let persisted = false;
+
+      try {
+        localStorage.setItem(
+          SESSION_KEY,
+          sessionToken
+        );
+
+        persisted = true;
+      } catch {}
+
+      if (!persisted) {
+        sessionStorageSet(
+          SESSION_KEY,
+          sessionToken
+        );
+      } else {
+        try {
+          sessionStorage.setItem(
+            SESSION_KEY,
+            sessionToken
+          );
+        } catch {}
+      }
     } else {
-      sessionStorageRemove(
+      storageRemove(
         SESSION_KEY
       );
     }
@@ -569,6 +579,22 @@
     }
     try {
       const data = await api("/auth/session");
+
+      const refreshedToken =
+        cleanSessionToken(
+          data?.sessionToken
+        );
+
+      if (
+        refreshedToken &&
+        refreshedToken !==
+          sessionToken
+      ) {
+        persistSession(
+          refreshedToken
+        );
+      }
+
       const rawUser = data.user || { uid: data.uid, displayName: "" };
       const uid = String(rawUser?.uid || data.uid || "");
       if (!uid) throw new Error("Invalid OpenRouter account session.");
@@ -578,10 +604,19 @@
       publish();
       return !!currentUser;
     } catch (error) {
-      persistSession("");
-      currentUser = null;
-      currentProfile = null;
-      lastError = error?.status === 401 ? null : error;
+      if (
+        error?.status === 401
+      ) {
+        persistSession("");
+        currentUser = null;
+        currentProfile = null;
+        lastError = null;
+      } else {
+        // Keep the persistent session through temporary network/service
+        // failures so reopening E8 does not silently sign the user out.
+        lastError = error;
+      }
+
       publish();
       return false;
     }
@@ -676,40 +711,36 @@
 
   async function boot() {
     consumeLoginRedirect();
-    // Delete any token left by older builds, then restore only the
-    // current tab-scoped session token.
-    let legacySessionToken = "";
+
+    let persistentToken = "";
+    let sessionScopedToken = "";
 
     try {
-      legacySessionToken =
+      persistentToken =
         cleanSessionToken(
-          localStorage
-            .getItem(
-              SESSION_KEY
-            )
-        );
-
-      localStorage
-        .removeItem(
-          SESSION_KEY
+          localStorage.getItem(
+            SESSION_KEY
+          )
         );
     } catch {}
 
-    sessionToken =
+    sessionScopedToken =
       cleanSessionToken(
         sessionStorageGet(
           SESSION_KEY
-        ) ||
-        legacySessionToken
+        )
       );
 
+    sessionToken =
+      persistentToken ||
+      sessionScopedToken;
+
     if (sessionToken) {
-      // One-time migration from legacy localStorage into sessionStorage.
-      sessionStorageSet(
-        SESSION_KEY,
+      persistSession(
         sessionToken
       );
     }
+
     window.FortniteAuth = {
       configured,
       provider: "openrouter",
@@ -729,10 +760,15 @@
       signOut: signOutUser
     };
 
-    if (sessionToken) await refreshSession();
-    else publish();
+    if (sessionToken) {
+      await refreshSession();
+    } else {
+      publish();
+    }
 
-    window.__resolveFortniteAuthReady?.(window.FortniteAuth);
+    window.__resolveFortniteAuthReady?.(
+      window.FortniteAuth
+    );
   }
 
   boot().catch((error) => {
