@@ -2495,14 +2495,70 @@
         backup.chats
       );
 
+    if (
+      !Object.keys(
+        backupChats
+      ).length
+    ) {
+      return false;
+    }
+
+    const combined =
+      Object.create(null);
+
+    const ids =
+      new Set([
+        ...Object.keys(
+          backupChats
+        ),
+        ...Object.keys(
+          chats
+        )
+      ]);
+
+    for (
+      const id of
+      ids
+    ) {
+      const localChat =
+        chats[id];
+
+      const backupChat =
+        backupChats[id];
+
+      if (
+        localChat &&
+        backupChat
+      ) {
+        combined[id] =
+          Number(
+            localChat.updatedAt || 0
+          ) >=
+          Number(
+            backupChat.updatedAt || 0
+          )
+            ? localChat
+            : backupChat;
+      } else {
+        combined[id] =
+          localChat ||
+          backupChat;
+      }
+    }
+
+    const merged =
+      sanitizeChats(
+        combined
+      );
+
     const localMeaningful =
       meaningfulChatCount(
         chats
       );
 
-    const backupMeaningful =
+    const mergedMeaningful =
       meaningfulChatCount(
-        backupChats
+        merged
       );
 
     const localUpdated =
@@ -2510,35 +2566,27 @@
         chats
       );
 
-    const backupUpdated =
+    const mergedUpdated =
       newestChatUpdate(
-        backupChats
+        merged
       );
 
     const shouldRestore =
       (
         localMeaningful === 0 &&
-        backupMeaningful > 0
+        mergedMeaningful > 0
       ) ||
-      (
-        backupUpdated >
-          localUpdated &&
-        backupMeaningful >=
-          localMeaningful
-      ) ||
-      (
-        backupUpdated ===
-          localUpdated &&
-        backupMeaningful >
-          localMeaningful
-      );
+      mergedMeaningful >
+        localMeaningful ||
+      mergedUpdated >
+        localUpdated;
 
     if (!shouldRestore) {
       return false;
     }
 
     chats =
-      backupChats;
+      merged;
 
     const backupActiveId =
       String(
@@ -2546,6 +2594,11 @@
       );
 
     if (
+      activeId &&
+      chats[activeId]
+    ) {
+      // Keep the local selection when it still exists.
+    } else if (
       backupActiveId &&
       chats[backupActiveId]
     ) {
@@ -2562,7 +2615,7 @@
     safeStorageSet(
       STORAGE_KEY,
       JSON.stringify(
-        backupChats
+        merged
       )
     );
 
@@ -2575,6 +2628,7 @@
 
     return true;
   }
+
 
   function saveChats() {
     const snapshot =
