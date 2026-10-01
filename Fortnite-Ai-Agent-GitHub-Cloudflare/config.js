@@ -59,8 +59,9 @@
   });
 
   window.FNAA_CONFIG = Object.freeze({
-    version: "1.0.3",
+    version: "1.0.4",
     fortniteVersion: "42.20",
+    dailyChatLimit: 50,
     apiEndpoint: API,
     siteUrl: SITE,
     siteBasePath: BASE,
