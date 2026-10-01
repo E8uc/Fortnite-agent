@@ -237,6 +237,40 @@ assert.equal(
   "A SoundWave must stay audio even when it references a texture"
 );
 
+assert.equal(
+  result.capabilities.canListen,
+  true,
+  "Verified SoundWave must expose Listen"
+);
+
+const pathSoundWave =
+  await associations.classify(
+    "/Game/Audio/SW_PathFallback.SW_PathFallback",
+    {
+      data: {}
+    }
+  );
+
+assert.equal(
+  pathSoundWave.capabilities.canListen,
+  true,
+  "SW_ path fallback may expose Listen and must still be runtime-verified"
+);
+
+const soundCue =
+  await associations.classify(
+    "SoundCue'/Game/Audio/SC_Test.SC_Test'",
+    {
+      data: {}
+    }
+  );
+
+assert.equal(
+  soundCue.capabilities.canListen,
+  false,
+  "SoundCue must not expose direct Listen until cue resolution exists"
+);
+
 payload = [
   {
     Name:
