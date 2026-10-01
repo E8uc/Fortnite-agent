@@ -3757,9 +3757,16 @@
     return rows
       .filter(
         (item) =>
-          typeof item?.path ===
-            "string" &&
-          item.path.trim()
+          (
+            typeof item?.path ===
+              "string" &&
+            item.path.trim()
+          ) ||
+          (
+            typeof item?.id ===
+              "string" &&
+            item.id.trim()
+          )
       )
       .sort(
         (a, b) =>
@@ -3782,9 +3789,21 @@
     const assetName =
       cosmeticAssetName(
         item?.path
-      );
+      ) ||
+      String(
+        item?.id || ""
+      )
+        .trim()
+        .slice(
+          0,
+          160
+        );
 
-    if (!assetName) {
+    if (
+      !assetName ||
+      !/^[A-Za-z0-9_]+$/
+        .test(assetName)
+    ) {
       return null;
     }
 
