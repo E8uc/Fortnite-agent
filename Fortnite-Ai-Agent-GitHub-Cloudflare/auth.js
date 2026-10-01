@@ -604,10 +604,19 @@
       publish();
       return !!currentUser;
     } catch (error) {
-      persistSession("");
-      currentUser = null;
-      currentProfile = null;
-      lastError = error?.status === 401 ? null : error;
+      if (
+        error?.status === 401
+      ) {
+        persistSession("");
+        currentUser = null;
+        currentProfile = null;
+        lastError = null;
+      } else {
+        // Keep the persistent session through temporary network/service
+        // failures so reopening E8 does not silently sign the user out.
+        lastError = error;
+      }
+
       publish();
       return false;
     }
