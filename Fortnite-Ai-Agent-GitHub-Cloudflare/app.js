@@ -4499,7 +4499,7 @@
   function looksLikeCosmeticQuestion(
     text
   ) {
-    return /\b(skin|outfit|cosmetic|character|emote|back\s*bling|pickaxe|glider|wrap|music\s*pack|cid_|eid_|bid_|pickaxe_|glider_)\b|\b(tenue|cosm[eé]tique|personnage|emote|émote|pioche|planeur)\b|سكن|سكين|كوزمتك|كوسمتك|شخصية|ايموت|إيموت|رقصة|باك\s*بلنغ|بيكاكس|مظلة/i
+    return /\b(skin|outfit|cosmetic|character|emote|back\s*bling|pickaxe|glider|wrap|music\s*pack|cid_|eid_|bid_|pickaxe_|glider_)\b|(?:^|[\s/._-])character_|\b(tenue|cosm[eé]tique|personnage|emote|émote|pioche|planeur)\b|سكن|سكين|كوزمتك|كوسمتك|شخصية|ايموت|إيموت|رقصة|باك\s*بلنغ|بيكاكس|مظلة/i
       .test(
         String(
           text || ""
@@ -5116,9 +5116,16 @@
     return rows
       .filter(
         (item) =>
-          typeof item?.path ===
-            "string" &&
-          item.path.trim()
+          (
+            typeof item?.id ===
+              "string" &&
+            item.id.trim()
+          ) ||
+          (
+            typeof item?.path ===
+              "string" &&
+            item.path.trim()
+          )
       )
       .sort(
         (a, b) =>
@@ -5134,14 +5141,42 @@
       .slice(0, 12);
   }
 
+  function cosmeticCandidateAssetName(
+    item
+  ) {
+    const fromPath =
+      cosmeticAssetName(
+        item?.path
+      );
+
+    if (fromPath) {
+      return fromPath;
+    }
+
+    const id =
+      String(
+        item?.id || ""
+      )
+        .trim()
+        .slice(
+          0,
+          180
+        );
+
+    return /^[A-Za-z0-9_]+$/
+      .test(id)
+        ? id
+        : "";
+  }
+
   async function verifyCosmeticCandidate(
     item,
     query,
     signal
   ) {
     const assetName =
-      cosmeticAssetName(
-        item?.path
+      cosmeticCandidateAssetName(
+        item
       );
 
     if (!assetName) {
@@ -5796,6 +5831,73 @@
       };
     }
 
+    const cosmeticRequest =
+      looksLikeCosmeticQuestion(
+        userText
+      );
+
+    if (cosmeticRequest) {
+      let cosmeticRows = [];
+
+      try {
+        cosmeticRows =
+          await resolveCosmeticPaths(
+            query,
+            signal
+          );
+      } catch (error) {
+        if (
+          signal?.aborted ||
+          error?.name ===
+            "AbortError"
+        ) {
+          throw error;
+        }
+      }
+
+      if (
+        cosmeticRows.length
+      ) {
+        const top =
+          cosmeticRows[0];
+
+        const second =
+          cosmeticRows[1];
+
+        const clearWinner =
+          !second ||
+          top.score -
+            second.score >=
+            500;
+
+        return {
+          query,
+          rows:
+            clearWinner
+              ? [top]
+              : cosmeticRows
+                  .slice(0, 4),
+          confidence:
+            clearWinner
+              ? "exact"
+              : "multiple",
+          source:
+            "cosmetic+database"
+        };
+      }
+
+      // Never fall back to an unrelated generic asset for an explicit
+      // cosmetic request. No verified cosmetic is safer than a false path.
+      return {
+        query,
+        rows: [],
+        confidence:
+          "none",
+        source:
+          "cosmetic"
+      };
+    }
+
     const database =
       await searchDatabase(
         searchScope(
@@ -5815,61 +5917,6 @@
       bestDatabasePathRows(
         database
       );
-
-    let cosmeticRows = [];
-
-    if (
-      looksLikeCosmeticQuestion(
-        userText
-      )
-    ) {
-      try {
-        cosmeticRows =
-          await resolveCosmeticPaths(
-            query,
-            signal
-          );
-      } catch (error) {
-        if (
-          signal?.aborted ||
-          error?.name ===
-            "AbortError"
-        ) {
-          throw error;
-        }
-      }
-    }
-
-    if (
-      cosmeticRows.length
-    ) {
-      const top =
-        cosmeticRows[0];
-
-      const second =
-        cosmeticRows[1];
-
-      const clearWinner =
-        !second ||
-        top.score -
-          second.score >=
-          500;
-
-      return {
-        query,
-        rows:
-          clearWinner
-            ? [top]
-            : cosmeticRows
-                .slice(0, 4),
-        confidence:
-          clearWinner
-            ? "exact"
-            : "multiple",
-        source:
-          "cosmetic+database"
-      };
-    }
 
     return {
       query,
@@ -8000,7 +8047,7 @@
 
   window.FortniteAgent =
     Object.freeze({
-      version: "1.0.6",
+      version: "1.0.7",
 
       searchDatabase,
       describePath,
