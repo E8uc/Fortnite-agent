@@ -453,3 +453,120 @@ assert.equal(
 console.log('Mesh View Image: vector-only and procedural material values render without fake Texture failures.');
 
 
+
+
+// Listen: Audio requests must use the dedicated worker mode, validate path
+// identity, keep raw bytes bounded, and transfer a successful SoundWave result.
+const beforeAudioWorkers =
+  workers.length;
+
+const audioRequest =
+  runtime.resolveAudio(
+    'SW_Test.uasset'
+  );
+
+pending.get(
+  'SW_Test.uasset'
+).resolve();
+
+await tick();
+
+assert.equal(
+  workers.length,
+  beforeAudioWorkers + 1
+);
+
+const audioWorker =
+  workers.at(-1);
+
+assert.equal(
+  audioWorker.url.searchParams.get(
+    'test'
+  ),
+  'resolve-audio-relay'
+);
+
+audioWorker.send({
+  type: 'audio',
+  path: 'SW_Test.uasset',
+  format: 'OGG',
+  bytes:
+    new Uint8Array([
+      0x4f,
+      0x67,
+      0x67,
+      0x53,
+      1,
+      2,
+      3,
+      4
+    ]).buffer
+});
+
+audioWorker.send({
+  type: 'done',
+  exitCode: 0
+});
+
+const audioResult =
+  await audioRequest;
+
+assert.equal(
+  audioResult.format,
+  'OGG'
+);
+
+assert.equal(
+  audioResult.bytes
+    .byteLength,
+  8
+);
+
+assert.equal(
+  audioResult.path,
+  'SW_Test.uasset'
+);
+
+assert.equal(
+  audioWorker.terminated,
+  true
+);
+
+const badAudio =
+  runtime.resolveAudio(
+    'SW_Bad.uasset'
+  );
+
+pending.get(
+  'SW_Bad.uasset'
+).resolve();
+
+await tick();
+
+const badAudioWorker =
+  workers.at(-1);
+
+const rejectedAudio =
+  assert.rejects(
+    badAudio,
+    /mismatched Audio/
+  );
+
+badAudioWorker.send({
+  type: 'audio',
+  path: 'SW_Other.uasset',
+  format: 'OGG',
+  bytes:
+    new ArrayBuffer(8)
+});
+
+await rejectedAudio;
+
+assert.equal(
+  badAudioWorker.terminated,
+  true
+);
+
+console.log(
+  'Listen: audio worker mode, bounded bytes, path identity and cleanup passed.'
+);
