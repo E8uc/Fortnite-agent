@@ -271,6 +271,8 @@
 
   let editingUserMessageIndex = -1;
 
+  let newChatTransitioning = false;
+
   let activeChatController =
     null;
 
@@ -623,6 +625,13 @@
   }
 
   async function startNewChat() {
+    if (newChatTransitioning) {
+      return;
+    }
+
+    newChatTransitioning = true;
+
+    try {
     try {
       activeChatController
         ?.abort(
@@ -697,8 +706,10 @@
         );
       }
     }
+    } finally {
+      newChatTransitioning = false;
+    }
   }
-
   function togglePinChat() {
     const chat =
       currentChat();
@@ -8085,7 +8096,7 @@
 
   window.FortniteAgent =
     Object.freeze({
-      version: "1.0.11",
+      version: "1.0.12",
 
       searchDatabase,
       describePath,
