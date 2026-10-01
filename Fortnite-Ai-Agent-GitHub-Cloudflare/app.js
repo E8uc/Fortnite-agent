@@ -38,7 +38,7 @@
 
   const CURRENT_FN_VERSION =
     CONFIG.fortniteVersion ||
-    "42.00";
+    "42.20";
 
   const LOGIN_MODE_SESSION =
     "fortniteAiAgent.loginMode.session";
@@ -57,6 +57,21 @@
 
   const GUEST_NEXT_AT =
     "fortniteAiAgent.guestNextAt.v1";
+
+  const USAGE_KEY =
+    "fortniteAiAgent.usage.v1";
+
+  const DAILY_CHAT_LIMIT =
+    Math.max(
+      1,
+      Math.min(
+        500,
+        Number(
+          CONFIG.dailyChatLimit ||
+          50
+        ) || 50
+      )
+    );
 
   const GUEST_SLOWMODE_MS =
     15_000;
@@ -204,7 +219,19 @@
       $("profileAvatarInput"),
 
     accountActionButton:
-      $("accountActionButton")
+      $("accountActionButton"),
+
+    usageTitle:
+      $("e8UsageTitle"),
+
+    usageSummary:
+      $("e8UsageSummary"),
+
+    usageProgress:
+      $("e8UsageProgress"),
+
+    usageReset:
+      $("e8UsageReset")
   };
 
   if (
@@ -242,6 +269,8 @@
 
   let busy = false;
 
+  let editingUserMessageIndex = -1;
+
   let activeChatController =
     null;
 
@@ -260,6 +289,8 @@
   let dbSeq = 0;
 
   let slowmodeTimer = null;
+
+  let usageTimer = null;
 
   let accountState = {
     configured: false,
@@ -297,6 +328,7 @@
   maybeShowLoginGate();
   syncVisualViewport();
   syncGuestSlowmodeUI();
+  syncUsageUI();
 
   queueMicrotask(
     applyCurrentRoute
@@ -307,6 +339,7 @@
     () => {
       resetOpenRouterButton();
       syncGuestSlowmodeUI();
+      syncUsageUI();
     }
   );
 
@@ -561,7 +594,7 @@
     if (!chatUiPromise) {
       chatUiPromise =
         import(
-          `${SITE_BASE_PATH}e8-chat-ui.js?v=1`
+          `${SITE_BASE_PATH}e8-chat-ui.js?v=2`
         )
           .then(
             (module) => {
@@ -589,7 +622,7 @@
       ?.close?.();
   }
 
-  function startNewChat() {
+  async function startNewChat() {
     try {
       activeChatController
         ?.abort(
@@ -606,6 +639,31 @@
     removeTypingIndicator();
     closeChatUiIfLoaded();
 
+    editingUserMessageIndex =
+      -1;
+
+    const reducedMotion =
+      window.matchMedia
+        ?.("(prefers-reduced-motion: reduce)")
+        ?.matches === true;
+
+    if (
+      !reducedMotion &&
+      els.chat
+    ) {
+      els.chat.classList.add(
+        "e8-new-chat-leave"
+      );
+
+      await new Promise(
+        (resolve) =>
+          setTimeout(
+            resolve,
+            90
+          )
+      );
+    }
+
     activeId =
       createChat(true);
 
@@ -618,6 +676,27 @@
         apply: true
       }
     );
+
+    if (els.chat) {
+      els.chat.classList.remove(
+        "e8-new-chat-leave"
+      );
+
+      if (!reducedMotion) {
+        els.chat.classList.add(
+          "e8-new-chat-enter"
+        );
+
+        setTimeout(
+          () =>
+            els.chat
+              ?.classList.remove(
+                "e8-new-chat-enter"
+              ),
+          220
+        );
+      }
+    }
   }
 
   function togglePinChat() {
@@ -710,6 +789,9 @@
 
     setBusy(false);
     removeTypingIndicator();
+
+    editingUserMessageIndex =
+      -1;
 
     delete chats[activeId];
 
@@ -883,6 +965,27 @@
           "أنت"
         ),
 
+      copy:
+        copyText(
+          "Copy",
+          "Copier",
+          "نسخ"
+        ),
+
+      edit:
+        copyText(
+          "Edit",
+          "Modifier",
+          "تعديل"
+        ),
+
+      send:
+        copyText(
+          "Send",
+          "Envoyer",
+          "إرسال"
+        ),
+
       goodResponse:
         copyText(
           "Good response",
@@ -1025,6 +1128,311 @@
         true
       );
     }
+  }
+
+  function beginUserMessageEdit(
+    messageIndex
+  ) {
+    if (
+      busy ||
+      activeChatController
+    ) {
+      showToast(
+        copyText(
+          "Stop the current response first.",
+          "Arrêtez d’abord la réponse en cours.",
+          "أوقف الرد الحالي أولاً."
+        ),
+        true
+      );
+
+      return;
+    }
+
+    const chat =
+      currentChat();
+
+    const message =
+      chat?.messages?.[
+        messageIndex
+      ];
+
+    if (
+      !message ||
+      message.role !== "user"
+    ) {
+      return;
+    }
+
+    editingUserMessageIndex =
+      messageIndex;
+
+    closeChatUiIfLoaded();
+    renderMessages();
+  }
+
+  function cancelUserMessageEdit() {
+    editingUserMessageIndex =
+      -1;
+
+    renderMessages();
+  }
+
+  async function commitUserMessageEdit(
+    messageIndex,
+    nextText
+  ) {
+    const clean =
+      String(
+        nextText || ""
+      ).trim();
+
+    if (
+      !clean ||
+      busy ||
+      activeChatController
+    ) {
+      return;
+    }
+
+    if (
+      usageBlocks(
+        clean
+      )
+    ) {
+      syncUsageUI();
+
+      showToast(
+        `${copyText(
+          "Usage limit reached",
+          "Limite d’utilisation atteinte",
+          "وصلت لحد الاستخدام"
+        )} • ${usageResetLabel(
+          usageSnapshot()
+        )}`,
+        true
+      );
+
+      return;
+    }
+
+    const chat =
+      currentChat();
+
+    if (
+      !chat ||
+      chat.messages?.[
+        messageIndex
+      ]?.role !== "user"
+    ) {
+      editingUserMessageIndex =
+        -1;
+
+      renderMessages();
+      return;
+    }
+
+    chat.messages =
+      chat.messages.slice(
+        0,
+        messageIndex
+      );
+
+    if (
+      messageIndex === 0
+    ) {
+      chat.title =
+        titleFromMessage(
+          clean
+        );
+    }
+
+    chat.updatedAt =
+      Date.now();
+
+    editingUserMessageIndex =
+      -1;
+
+    saveChats();
+    renderAll();
+
+    await sendTextMessage(
+      clean,
+      {
+        skipRoute: true
+      }
+    );
+  }
+
+  async function openUserMessageMenu(
+    anchor,
+    message,
+    messageIndex
+  ) {
+    try {
+      const ui =
+        await loadChatUi();
+
+      await ui.openUserMessageMenu({
+        anchor,
+
+        labels:
+          chatUiLabels(),
+
+        onCopy:
+          async () => {
+            try {
+              await copyTextToClipboard(
+                message.content
+              );
+
+              showToast(
+                copyText(
+                  "Copied",
+                  "Copié",
+                  "تم النسخ"
+                )
+              );
+            } catch {
+              showToast(
+                copyText(
+                  "Copy failed",
+                  "Échec de la copie",
+                  "فشل النسخ"
+                ),
+                true
+              );
+            }
+          },
+
+        onEdit:
+          () =>
+            beginUserMessageEdit(
+              messageIndex
+            )
+      });
+    } catch {
+      showToast(
+        copyText(
+          "Couldn't open message menu",
+          "Impossible d’ouvrir le menu du message",
+          "تعذر فتح قائمة الرسالة"
+        ),
+        true
+      );
+    }
+  }
+
+  function attachUserMessageHold(
+    bubble,
+    message,
+    messageIndex
+  ) {
+    let timer = 0;
+    let startX = 0;
+    let startY = 0;
+    let opened = false;
+
+    const clear =
+      () => {
+        if (timer) {
+          clearTimeout(
+            timer
+          );
+
+          timer = 0;
+        }
+      };
+
+    bubble.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (
+          event.button !== 0 &&
+          event.pointerType ===
+            "mouse"
+        ) {
+          return;
+        }
+
+        startX =
+          event.clientX;
+
+        startY =
+          event.clientY;
+
+        opened = false;
+        clear();
+
+        timer =
+          setTimeout(
+            () => {
+              timer = 0;
+              opened = true;
+
+              openUserMessageMenu(
+                bubble,
+                message,
+                messageIndex
+              );
+            },
+            430
+          );
+      }
+    );
+
+    bubble.addEventListener(
+      "pointermove",
+      (event) => {
+        if (
+          Math.abs(
+            event.clientX -
+            startX
+          ) > 10 ||
+          Math.abs(
+            event.clientY -
+            startY
+          ) > 10
+        ) {
+          clear();
+        }
+      }
+    );
+
+    bubble.addEventListener(
+      "pointerup",
+      clear
+    );
+
+    bubble.addEventListener(
+      "pointercancel",
+      clear
+    );
+
+    bubble.addEventListener(
+      "contextmenu",
+      (event) => {
+        event.preventDefault();
+        clear();
+
+        openUserMessageMenu(
+          bubble,
+          message,
+          messageIndex
+        );
+      }
+    );
+
+    bubble.addEventListener(
+      "click",
+      (event) => {
+        if (opened) {
+          event.preventDefault();
+          event.stopPropagation();
+          opened = false;
+        }
+      }
+    );
   }
 
   function syncChatChromeLabels() {
@@ -1310,6 +1718,7 @@
       "fortnite-language-changed",
       () => {
         syncSettingsApiCard();
+        syncUsageUI();
         closeChatUiIfLoaded();
         syncChatChromeLabels();
       }
@@ -1493,6 +1902,13 @@
           GUEST_NEXT_AT
         ) {
           syncGuestSlowmodeUI();
+        }
+
+        if (
+          event.key ===
+          USAGE_KEY
+        ) {
+          syncUsageUI();
         }
       }
     );
@@ -2045,6 +2461,141 @@
     if (
       message.role === "user"
     ) {
+      if (
+        messageIndex ===
+        editingUserMessageIndex
+      ) {
+        const editor =
+          document.createElement(
+            "div"
+          );
+
+        editor.className =
+          "user-edit-card";
+
+        const input =
+          document.createElement(
+            "textarea"
+          );
+
+        input.className =
+          "user-edit-input";
+
+        input.value =
+          message.content;
+
+        input.rows = 2;
+        input.maxLength =
+          6_000;
+
+        const actions =
+          document.createElement(
+            "div"
+          );
+
+        actions.className =
+          "user-edit-actions";
+
+        const cancel =
+          document.createElement(
+            "button"
+          );
+
+        cancel.type =
+          "button";
+
+        cancel.className =
+          "user-edit-button";
+
+        cancel.textContent =
+          chatUiLabels()
+            .cancel;
+
+        cancel.addEventListener(
+          "click",
+          cancelUserMessageEdit
+        );
+
+        const send =
+          document.createElement(
+            "button"
+          );
+
+        send.type =
+          "button";
+
+        send.className =
+          "user-edit-button primary";
+
+        send.textContent =
+          chatUiLabels()
+            .send;
+
+        const commit =
+          () =>
+            commitUserMessageEdit(
+              messageIndex,
+              input.value
+            );
+
+        send.addEventListener(
+          "click",
+          commit
+        );
+
+        input.addEventListener(
+          "keydown",
+          (event) => {
+            if (
+              event.key ===
+                "Escape"
+            ) {
+              event.preventDefault();
+              cancelUserMessageEdit();
+              return;
+            }
+
+            if (
+              event.key ===
+                "Enter" &&
+              !event.shiftKey &&
+              !event.isComposing &&
+              !isMobileComposerDevice()
+            ) {
+              event.preventDefault();
+              commit();
+            }
+          }
+        );
+
+        actions.append(
+          cancel,
+          send
+        );
+
+        editor.append(
+          input,
+          actions
+        );
+
+        outer.appendChild(
+          editor
+        );
+
+        requestAnimationFrame(
+          () => {
+            input.focus();
+
+            input.setSelectionRange(
+              input.value.length,
+              input.value.length
+            );
+          }
+        );
+
+        return outer;
+      }
+
       const bubble =
         document.createElement(
           "div"
@@ -2055,6 +2606,12 @@
 
       bubble.textContent =
         message.content;
+
+      attachUserMessageHold(
+        bubble,
+        message,
+        messageIndex
+      );
 
       outer.appendChild(
         bubble
@@ -2828,6 +3385,27 @@
     }
 
     if (
+      usageBlocks(
+        text
+      )
+    ) {
+      const snapshot =
+        usageSnapshot();
+
+      showToast(
+        `${copyText(
+          "Usage limit reached",
+          "Limite d’utilisation atteinte",
+          "وصلت لحد الاستخدام"
+        )} • ${usageResetLabel(snapshot)}`,
+        true
+      );
+
+      syncUsageUI();
+      return;
+    }
+
+    if (
       guestSlowmodeBlocks(
         text
       )
@@ -3222,6 +3800,36 @@
       skipRoute = false
     } = options;
 
+    if (
+      usageBlocks(
+        clean,
+        {
+          assetPath
+        }
+      )
+    ) {
+      const snapshot =
+        usageSnapshot();
+
+      showToast(
+        `${copyText(
+          "Usage limit reached",
+          "Limite d’utilisation atteinte",
+          "وصلت لحد الاستخدام"
+        )} • ${usageResetLabel(snapshot)}`,
+        true
+      );
+
+      syncUsageUI();
+
+      return {
+        blocked: true,
+        usage: true,
+        resetAt:
+          snapshot.resetAt
+      };
+    }
+
     // Check the guest gate before changing routes. Description is allowed to
     // flash "X sec left" inside Tools without unexpectedly jumping to Chat.
     if (
@@ -3391,6 +3999,8 @@
           runId,
           controller
         );
+
+        incrementUsage();
 
         await revealAssistantReply(
           chat,
@@ -5087,6 +5697,395 @@
     );
   }
 
+  function usageDayKey(
+    date = new Date()
+  ) {
+    return [
+      date.getFullYear(),
+      String(
+        date.getMonth() + 1
+      ).padStart(2, "0"),
+      String(
+        date.getDate()
+      ).padStart(2, "0")
+    ].join("-");
+  }
+
+  function nextUsageResetAt(
+    now = new Date()
+  ) {
+    return new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1,
+      0,
+      0,
+      0,
+      0
+    ).getTime();
+  }
+
+  function readUsageRecord() {
+    const today =
+      usageDayKey();
+
+    let parsed = null;
+
+    try {
+      parsed =
+        JSON.parse(
+          safeStorageGet(
+            USAGE_KEY
+          ) || "null"
+        );
+    } catch {}
+
+    if (
+      !parsed ||
+      parsed.day !== today
+    ) {
+      return {
+        day: today,
+        count: 0
+      };
+    }
+
+    return {
+      day: today,
+      count:
+        Math.max(
+          0,
+          Math.min(
+            DAILY_CHAT_LIMIT,
+            Number(
+              parsed.count || 0
+            ) || 0
+          )
+        )
+    };
+  }
+
+  function writeUsageRecord(
+    record
+  ) {
+    safeStorageSet(
+      USAGE_KEY,
+      JSON.stringify({
+        day:
+          record.day,
+        count:
+          record.count
+      })
+    );
+  }
+
+  function usageSnapshot() {
+    const record =
+      readUsageRecord();
+
+    const remaining =
+      Math.max(
+        0,
+        DAILY_CHAT_LIMIT -
+          record.count
+      );
+
+    return {
+      ...record,
+      limit:
+        DAILY_CHAT_LIMIT,
+      remaining,
+      exhausted:
+        remaining <= 0,
+      resetAt:
+        nextUsageResetAt()
+    };
+  }
+
+  function messageUsesAi(
+    text,
+    options = {}
+  ) {
+    if (options.assetPath) {
+      return true;
+    }
+
+    const clean =
+      String(
+        text || ""
+      ).trim();
+
+    if (!clean) {
+      return false;
+    }
+
+    const plugin =
+      parsePlugin(
+        clean
+      );
+
+    if (
+      plugin?.id ===
+        "path" ||
+      isDirectPathLookupRequest(
+        clean
+      )
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function usageBlocks(
+    text,
+    options = {}
+  ) {
+    return (
+      messageUsesAi(
+        text,
+        options
+      ) &&
+      usageSnapshot()
+        .exhausted
+    );
+  }
+
+  function formatUsageResetTime(
+    resetAt
+  ) {
+    const language =
+      window.FortniteI18n
+        ?.getLanguage?.() ||
+      "en";
+
+    const locale =
+      language === "ar"
+        ? "ar-IQ"
+        : language === "fr"
+          ? "fr-FR"
+          : "en-US";
+
+    try {
+      return new Intl.DateTimeFormat(
+        locale,
+        {
+          hour:
+            "numeric",
+          minute:
+            "2-digit"
+        }
+      ).format(
+        new Date(
+          resetAt
+        )
+      );
+    } catch {
+      return "00:00";
+    }
+  }
+
+  function usageResetLabel(
+    snapshot
+  ) {
+    const time =
+      formatUsageResetTime(
+        snapshot.resetAt
+      );
+
+    return copyText(
+      `Resets at ${time}`,
+      `Réinitialisation à ${time}`,
+      `يتجدد الساعة ${time}`
+    );
+  }
+
+  function ensureUsageBanner() {
+    let banner =
+      $("e8UsageBanner");
+
+    if (banner) {
+      return banner;
+    }
+
+    const inner =
+      els.composer
+        ?.querySelector(
+          ".composer-inner"
+        );
+
+    if (
+      !els.composer ||
+      !inner
+    ) {
+      return null;
+    }
+
+    banner =
+      document.createElement(
+        "div"
+      );
+
+    banner.id =
+      "e8UsageBanner";
+
+    banner.className =
+      "e8-usage-banner";
+
+    banner.hidden = true;
+
+    banner.setAttribute(
+      "role",
+      "status"
+    );
+
+    banner.setAttribute(
+      "aria-live",
+      "polite"
+    );
+
+    els.composer.insertBefore(
+      banner,
+      inner
+    );
+
+    return banner;
+  }
+
+  function syncUsageUI() {
+    const snapshot =
+      usageSnapshot();
+
+    const percent =
+      Math.min(
+        100,
+        Math.round(
+          (
+            snapshot.count /
+            snapshot.limit
+          ) * 100
+        )
+      );
+
+    if (els.usageTitle) {
+      els.usageTitle.textContent =
+        copyText(
+          "Usage",
+          "Utilisation",
+          "الاستخدام"
+        );
+    }
+
+    if (els.usageSummary) {
+      els.usageSummary.textContent =
+        copyText(
+          `${snapshot.count} of ${snapshot.limit} AI messages used today`,
+          `${snapshot.count} sur ${snapshot.limit} messages IA utilisés aujourd’hui`,
+          `تم استخدام ${snapshot.count} من ${snapshot.limit} رسالة ذكاء اصطناعي اليوم`
+        );
+    }
+
+    if (els.usageProgress) {
+      els.usageProgress.style.width =
+        `${percent}%`;
+
+      const track =
+        els.usageProgress
+          .parentElement;
+
+      track?.setAttribute(
+        "aria-valuemax",
+        String(
+          snapshot.limit
+        )
+      );
+
+      track?.setAttribute(
+        "aria-valuenow",
+        String(
+          snapshot.count
+        )
+      );
+    }
+
+    if (els.usageReset) {
+      els.usageReset.textContent =
+        usageResetLabel(
+          snapshot
+        );
+    }
+
+    const banner =
+      ensureUsageBanner();
+
+    if (snapshot.exhausted) {
+      document.documentElement
+        .classList.add(
+          "e8-usage-limit-active"
+        );
+
+      if (banner) {
+        banner.hidden = false;
+
+        banner.textContent =
+          `${copyText(
+            "You've reached today's E8 usage limit.",
+            "Vous avez atteint la limite E8 d’aujourd’hui.",
+            "وصلت لحد استخدام E8 لليوم."
+          )} ${usageResetLabel(snapshot)}`;
+      }
+
+      if (!usageTimer) {
+        usageTimer =
+          setInterval(
+            syncUsageUI,
+            30_000
+          );
+      }
+    } else {
+      document.documentElement
+        .classList.remove(
+          "e8-usage-limit-active"
+        );
+
+      if (banner) {
+        banner.hidden = true;
+        banner.textContent = "";
+      }
+
+      if (usageTimer) {
+        clearInterval(
+          usageTimer
+        );
+
+        usageTimer = null;
+      }
+    }
+
+    updateSendState();
+  }
+
+  function incrementUsage() {
+    const current =
+      usageSnapshot();
+
+    const next = {
+      day:
+        current.day,
+      count:
+        Math.min(
+          current.limit,
+          current.count + 1
+        )
+    };
+
+    writeUsageRecord(
+      next
+    );
+
+    syncUsageUI();
+  }
+
   function guestSlowmodeRemainingMs() {
     if (
       getPublicAuthState()
@@ -5634,8 +6633,13 @@
 
     const blocked =
       text &&
-      guestSlowmodeBlocks(
-        text
+      (
+        guestSlowmodeBlocks(
+          text
+        ) ||
+        usageBlocks(
+          text
+        )
       );
 
     els.send.textContent =
@@ -5788,6 +6792,7 @@
     renderAccountUI();
     syncThemeButtons();
     syncSettingsApiCard();
+    syncUsageUI();
 
     els.settingsOverlay.hidden =
       false;
@@ -6005,6 +7010,7 @@
     renderAccountUI();
     syncGuestUI();
     syncGuestSlowmodeUI();
+    syncUsageUI();
     syncSettingsApiCard();
 
     window.dispatchEvent(
@@ -7079,7 +8085,7 @@
 
   window.FortniteAgent =
     Object.freeze({
-      version: "1.0.9",
+      version: "1.0.11",
 
       searchDatabase,
       describePath,

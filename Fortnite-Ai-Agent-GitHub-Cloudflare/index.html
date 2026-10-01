@@ -54,7 +54,7 @@
 
   <title>E8</title>
 
-  <link rel="stylesheet" href="style.css?v=109" />
+  <link rel="stylesheet" href="style.css?v=110" />
   <link rel="stylesheet" href="fnaa-v101.css?v=103" />
 </head>
 
@@ -482,6 +482,51 @@
           </div>
         </section>
 
+        <section
+          class="settings-card settings-stack-card e8-usage-settings-card"
+          aria-labelledby="e8UsageTitle"
+        >
+          <div class="settings-card-icon e8-usage-settings-icon">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              width="22"
+              height="22"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="8"></circle>
+              <path d="M12 8v5l3 2"></path>
+            </svg>
+          </div>
+
+          <div class="settings-card-main">
+            <h2 id="e8UsageTitle">Usage</h2>
+
+            <p id="e8UsageSummary">
+              0 of 50 AI messages used today
+            </p>
+
+            <div
+              class="e8-usage-track"
+              role="progressbar"
+              aria-label="Daily AI usage"
+              aria-valuemin="0"
+              aria-valuemax="50"
+              aria-valuenow="0"
+            >
+              <span id="e8UsageProgress"></span>
+            </div>
+
+            <small id="e8UsageReset">
+              Resets at midnight
+            </small>
+          </div>
+        </section>
+
         <section class="settings-card owner-settings-card">
           <div class="settings-card-icon">@</div>
 
@@ -538,7 +583,7 @@
   </section>
 
   <script src="i18n.js?v=106"></script>
-  <script src="config.js?v=103"></script>
+  <script src="config.js?v=104"></script>
   <script src="auth.js?v=135"></script>
 
   <script src="novasparx-browser-guard.js?v=121"></script>
@@ -555,7 +600,7 @@
   <script src="preview.js?v=147"></script>
 
   <script src="tools.js?v=151"></script>
-  <script src="app.js?v=142"></script>
+  <script src="app.js?v=143"></script>
   <script src="fnaa-v101.js?v=137"></script>
 </body>
 </html>
