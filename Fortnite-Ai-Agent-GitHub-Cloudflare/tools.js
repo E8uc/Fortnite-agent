@@ -1050,7 +1050,32 @@
       );
 
     if (previewButton) {
-      if (kind === "staticmesh" && typeof window.NovaSparxTextureRuntime?.resolveMeshImage === "function" &&
+      if (
+        kind === "audio" &&
+        capabilities.canListen ===
+          true &&
+        typeof window
+          .NovaSparxTextureRuntime
+          ?.resolveAudio ===
+          "function"
+      ) {
+        previewButton.disabled =
+          false;
+
+        previewButton.dataset
+          .closedLabel =
+          t(
+            "listen",
+            "Listen"
+          );
+
+        previewButton.dataset
+          .openLabel =
+          t(
+            "hide",
+            "Hide"
+          );
+      } else if (kind === "staticmesh" && typeof window.NovaSparxTextureRuntime?.resolveMeshImage === "function" &&
           ["typed-path", "export-json", "inspection"].includes(classification.source)) {
         previewButton.disabled = false;
         previewButton.dataset.closedLabel = t("viewImage", "View Image");
@@ -7681,7 +7706,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.6.8",
+      version: "1.6.9",
       open,
       close,
       formatAssetPath,

@@ -516,9 +516,66 @@
         ? { kind: evidence.kind, source: "export-json", confidence: evidence.conflict ? 0 : 99,
             assetType: evidence.value }
         : local;
-    const capabilities = capabilityProfile(result.kind, evidence?.object, inspected ? options.inspection : null);
-    return { ...result, family: diagnosis.familyOf(result.kind), capabilities,
-      tags: capabilities.tags, data };
+    const baseCapabilities =
+      capabilityProfile(
+        result.kind,
+        evidence?.object,
+        inspected
+          ? options.inspection
+          : null
+      );
+
+    const assetType =
+      String(
+        result.assetType ||
+        result.value ||
+        ""
+      )
+        .replace(/^U/i, "")
+        .trim();
+
+    const leafName =
+      clean(path)
+        .split("/")
+        .pop()
+        ?.replace(
+          /\.(?:uasset|umap)$/i,
+          ""
+        )
+        .split(".")[0] ||
+      "";
+
+    const directSoundWave =
+      result.kind === "audio" &&
+      (
+        /^SoundWave$/i
+          .test(assetType) ||
+        (
+          !assetType &&
+          result.source ===
+            "path-fallback" &&
+          /^(?:SW_|USW_|SoundWave_)/i
+            .test(leafName)
+        )
+      );
+
+    const capabilities = {
+      ...baseCapabilities,
+      canListen:
+        directSoundWave
+    };
+
+    return {
+      ...result,
+      family:
+        diagnosis.familyOf(
+          result.kind
+        ),
+      capabilities,
+      tags:
+        capabilities.tags,
+      data
+    };
   }
 
   function blueprintEvidence(data, requestedPath) {
@@ -2005,7 +2062,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.8.3",
+        "1.9.0",
       family,
       diagnosePath,
       classify,

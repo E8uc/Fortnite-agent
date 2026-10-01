@@ -47,6 +47,8 @@ try {
     ...fixtures.map(x => ({path:x.physicalPath, expected:x.rootTypes[0]})),
     {path:"StaticMesh'/Game/Audio/SW_NotActuallySound.SW_NotActuallySound'",expected:'StaticMesh'},
     {path:"Texture2D'/Game/Test/T_Layer8_Probe.T_Layer8_Probe'",expected:'Texture2D'},
+    {path:'/Game/Audio/SW_ListenProof.SW_ListenProof',expected:'SoundWave',listen:true},
+    {path:"SoundCue'/Game/Audio/SC_NotDirect.SC_NotDirect'",expected:'SoundCue',listen:false},
     {path:'/CRD_AnimatedMesh/Device_AnimatedMesh.Device_AnimatedMesh_C',expected:'Blueprint'},
     {path:'/Game/S_Ambiguous.S_Ambiguous',expected:'Unknown'}
   ];
@@ -70,6 +72,7 @@ try {
   })));
 
   let textureIndex = -1;
+  let audioIndex = -1;
 
   for (let i=0;i<cases.length;i++) {
     const expected = await page.evaluate(type => window.FNAAAssetDiagnosis.kindFromType(type), cases[i].expected);
@@ -79,6 +82,13 @@ try {
       if (expected === 'texture') textureIndex = i;
       assert.equal(results[i].previewDisabled, false, cases[i].path);
       assert.equal(results[i].previewText, 'View Image', cases[i].path);
+    } else if (
+      expected === 'audio' &&
+      cases[i].listen === true
+    ) {
+      audioIndex = i;
+      assert.equal(results[i].previewDisabled, false, cases[i].path);
+      assert.equal(results[i].previewText, 'Listen', cases[i].path);
     } else {
       assert.ok(results[i].previewDisabled, cases[i].path);
     }
@@ -144,6 +154,133 @@ try {
   console.log(
     'FNAA_TEXTURE_VIEW_IMAGE_CLICK_PROVEN',
     JSON.stringify(clickProof)
+  );
+
+  assert.ok(
+    audioIndex >= 0,
+    'Diagnosis cases contain no direct SoundWave Listen case.'
+  );
+
+  const audioClickProof =
+    await page.evaluate(
+      async audioIndex => {
+        const cards =
+          [
+            ...document.querySelectorAll(
+              '.asset-result-card'
+            )
+          ];
+
+        const card =
+          cards[audioIndex];
+
+        const button =
+          card?.querySelector(
+            '[data-asset-action="preview"]'
+          );
+
+        if (
+          !card ||
+          !button ||
+          button.disabled
+        ) {
+          throw new Error(
+            'SoundWave Listen button is not actionable.'
+          );
+        }
+
+        let call = null;
+
+        window.FortnitePreview = {
+          toggle:
+            async (
+              host,
+              path,
+              _button,
+              options
+            ) => {
+              call = {
+                path,
+                assetKind:
+                  options
+                    ?.assetKind ||
+                  ''
+              };
+
+              host.innerHTML =
+                '<audio data-proof-audio></audio>';
+
+              return {
+                state:
+                  'ready',
+                kind:
+                  'audio'
+              };
+            },
+          release:
+            () => {}
+        };
+
+        button.click();
+
+        const deadline =
+          Date.now() +
+          3000;
+
+        while (
+          !call &&
+          Date.now() <
+            deadline
+        ) {
+          await new Promise(
+            resolve =>
+              setTimeout(
+                resolve,
+                20
+              )
+          );
+        }
+
+        if (!call) {
+          throw new Error(
+            'SoundWave Listen click never reached FortnitePreview.toggle().'
+          );
+        }
+
+        return {
+          call,
+          panelVisible:
+            card.querySelector(
+              '[data-asset-panel]'
+            )?.hidden ===
+            false,
+          label:
+            button.textContent
+        };
+      },
+      audioIndex
+    );
+
+  assert.equal(
+    audioClickProof.call.assetKind,
+    'audio'
+  );
+
+  assert.equal(
+    audioClickProof.panelVisible,
+    true
+  );
+
+  assert.equal(
+    audioClickProof.label,
+    'Hide'
+  );
+
+  console.log(
+    'FNAA_SOUNDWAVE_LISTEN_CLICK_PROVEN',
+    JSON.stringify(
+      audioClickProof
+    )
   );
   const generated = await page.evaluate(() => ({
     kind:window.FNAAAssetDiagnosis.diagnosePath('/CRD_AnimatedMesh/Device_AnimatedMesh.Device_AnimatedMesh_C').kind,

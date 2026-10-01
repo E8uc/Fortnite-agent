@@ -12,6 +12,9 @@
   const viewerSessions =
     new Map();
 
+  const audioSessions =
+    new Map();
+
   function objectUrlLimit() {
     const state =
       window.NovaSparxBrowserGuard
@@ -62,6 +65,18 @@
 
       if (!oldestKey) {
         break;
+      }
+
+      if (
+        audioSessions.has(
+          oldestKey
+        )
+      ) {
+        release(
+          oldestKey
+        );
+
+        continue;
       }
 
       const oldestUrl =
@@ -201,6 +216,32 @@
       );
     }
 
+    const audio =
+      audioSessions.get(
+        key
+      );
+
+    if (audio) {
+      try {
+        audio.pause();
+      } catch {}
+
+      try {
+        audio.removeAttribute(
+          "src"
+        );
+
+        audio.load?.();
+      } catch {}
+
+      audio.hidden =
+        true;
+
+      audioSessions.delete(
+        key
+      );
+    }
+
     const old =
       objectUrls.get(
         key
@@ -224,6 +265,7 @@
       const key of
       [
         ...viewerSessions.keys(),
+        ...audioSessions.keys(),
         ...objectUrls.keys()
       ]
     ) {
@@ -665,6 +707,13 @@
             decoding="async"
             hidden
           />
+
+          <audio
+            class="novasparx-audio-player"
+            controls
+            preload="metadata"
+            hidden
+          ></audio>
         </div>
 
         <div
@@ -776,6 +825,11 @@
           ".mesh-preview-image"
         ),
 
+      audio:
+        host.querySelector(
+          ".novasparx-audio-player"
+        ),
+
       viewer:
         host.querySelector(
           "[data-novasparx-viewer]"
@@ -830,6 +884,11 @@
             ".mesh-preview-image"
           ),
 
+        audio:
+          existingPanel.querySelector(
+            ".novasparx-audio-player"
+          ),
+
         viewer:
           existingPanel.querySelector(
             "[data-novasparx-viewer]"
@@ -871,6 +930,23 @@
       );
     }
 
+    const previousPath =
+      String(
+        ui.panel.dataset
+          .previewAssetPath ||
+        ""
+      ).trim();
+
+    if (
+      previousPath &&
+      previousPath !==
+        mountedPath
+    ) {
+      release(
+        previousPath
+      );
+    }
+
     delete ui.panel
       .dataset.previewAssetPath;
 
@@ -899,6 +975,23 @@
     ui.image.removeAttribute(
       "src"
     );
+
+    if (ui.audio) {
+      try {
+        ui.audio.pause();
+      } catch {}
+
+      ui.audio.hidden =
+        true;
+
+      ui.audio.removeAttribute(
+        "src"
+      );
+
+      try {
+        ui.audio.load();
+      } catch {}
+    }
 
     setStatus(
       ui.status,
@@ -3201,6 +3294,86 @@
     ).replace(/_C$/i, "");
   }
 
+  function audioMimeType(
+    format,
+    bytes
+  ) {
+    const clean =
+      String(format || "")
+        .trim()
+        .toUpperCase();
+
+    let magic = "";
+
+    try {
+      const view =
+        new Uint8Array(
+          bytes,
+          0,
+          Math.min(
+            12,
+            bytes.byteLength
+          )
+        );
+
+      magic =
+        String.fromCharCode(
+          ...view
+        );
+    } catch {}
+
+    if (
+      clean.includes("OGG")
+    ) {
+      return "audio/ogg";
+    }
+
+    if (
+      clean === "WAV" ||
+      (
+        ["PCM", "ADPCM"]
+          .includes(clean) &&
+        magic.startsWith("RIFF")
+      )
+    ) {
+      return "audio/wav";
+    }
+
+    if (
+      clean === "OPUS" &&
+      magic.startsWith("OggS")
+    ) {
+      return "audio/ogg; codecs=opus";
+    }
+
+    return "";
+  }
+
+  function audioSizeLabel(
+    bytes
+  ) {
+    const size =
+      Number(
+        bytes?.byteLength ||
+        0
+      );
+
+    if (size >= 1024 * 1024) {
+      return (
+        size /
+        (1024 * 1024)
+      ).toFixed(1) +
+        " MB";
+    }
+
+    return Math.max(
+      1,
+      Math.round(
+        size / 1024
+      )
+    ) + " KB";
+  }
+
   async function renderPreview(
     target,
     path,
@@ -3297,6 +3470,8 @@
     if (button) {
       button.disabled = true;
       button.textContent =
+        button.dataset
+          .openLabel ||
         t(
           "hideImage",
           "Hide Preview"
@@ -3322,6 +3497,182 @@
       throwIfAborted(
         signal
       );
+      if (
+        requestedKind ===
+        "audio"
+      ) {
+        if (
+          !ui.audio ||
+          typeof window
+            .NovaSparxTextureRuntime
+            ?.resolveAudio !==
+            "function"
+        ) {
+          throw new Error(
+            "NovaSparx browser audio runtime is unavailable."
+          );
+        }
+
+        setStatus(
+          ui.status,
+          "Reading this SoundWave in your browser…"
+        );
+
+        let result;
+
+        try {
+          result =
+            await window
+              .NovaSparxTextureRuntime
+              .resolveAudio(
+                clean,
+                {
+                  signal
+                }
+              );
+        } catch (error) {
+          const failure =
+            new Error(
+              error?.message ||
+              String(error),
+              {
+                cause:
+                  error
+              }
+            );
+
+          failure.code =
+            "NOVASPARX_AUDIO_FAILED";
+
+          throw failure;
+        }
+
+        throwIfAborted(
+          signal
+        );
+
+        const mime =
+          audioMimeType(
+            result.format,
+            result.bytes
+          );
+
+        if (!mime) {
+          ui.audio.hidden =
+            true;
+
+          setStatus(
+            ui.status,
+            `SoundWave extracted, but codec ${result.format || "Unknown"} is not browser-playable yet.`,
+            "partial"
+          );
+
+          setMeta(
+            ui.meta,
+            `Browser CUE4Parse SoundWave • ${result.format || "Unknown"} • ${audioSizeLabel(result.bytes)}`,
+            "partial"
+          );
+
+          return {
+            state:
+              "partial",
+            kind:
+              "audio",
+            format:
+              result.format,
+            playable:
+              false
+          };
+        }
+
+        const support =
+          ui.audio.canPlayType?.(
+            mime
+          ) ||
+          "";
+
+        if (!support) {
+          setStatus(
+            ui.status,
+            `This browser cannot play extracted ${result.format} audio.`,
+            "partial"
+          );
+
+          setMeta(
+            ui.meta,
+            `Browser CUE4Parse SoundWave • ${result.format} • ${audioSizeLabel(result.bytes)}`,
+            "partial"
+          );
+
+          return {
+            state:
+              "partial",
+            kind:
+              "audio",
+            format:
+              result.format,
+            playable:
+              false
+          };
+        }
+
+        const blob =
+          new Blob(
+            [
+              result.bytes
+            ],
+            {
+              type:
+                mime
+            }
+          );
+
+        const url =
+          URL.createObjectURL(
+            blob
+          );
+
+        rememberObjectUrl(
+          clean,
+          url
+        );
+
+        ui.audio.src =
+          url;
+
+        ui.audio.hidden =
+          false;
+
+        ui.status.hidden =
+          true;
+
+        audioSessions.set(
+          clean,
+          ui.audio
+        );
+
+        try {
+          ui.audio.load();
+        } catch {}
+
+        setMeta(
+          ui.meta,
+          `Browser CUE4Parse SoundWave • ${result.format} • ${audioSizeLabel(result.bytes)}`,
+          "high"
+        );
+
+        return {
+          state:
+            "ready",
+          kind:
+            "audio",
+          format:
+            result.format,
+          playable:
+            true
+        };
+      }
+
       if (requestedKind === "staticmesh") {
         setStatus(ui.status, "Reading and rendering this Mesh in your browser…");
         try {
@@ -4652,6 +5003,35 @@
         };
       }
 
+      if (
+        error?.code ===
+          "NOVASPARX_AUDIO_FAILED"
+      ) {
+        if (ui.audio) {
+          ui.audio.hidden =
+            true;
+
+          ui.audio.removeAttribute(
+            "src"
+          );
+        }
+
+        setStatus(
+          ui.status,
+          "Listen unavailable: " +
+          error.message
+        );
+
+        return {
+          state:
+            "error",
+          kind:
+            "audio",
+          error:
+            error.message
+        };
+      }
+
       if (["NOVASPARX_TEXTURE_FAILED", "NOVASPARX_MESH_FAILED"].includes(error?.code)) {
         ui.image.hidden = true;
         ui.image.removeAttribute("src");
@@ -4699,6 +5079,8 @@
           !ui.panel.hidden
         ) {
           button.textContent =
+            button.dataset
+              .openLabel ||
             t(
               "hideImage",
               "Hide Preview"
@@ -4729,7 +5111,7 @@
 
   window.FortnitePreview =
     Object.freeze({
-      version: "2.3.3",
+      version: "2.4.0",
       toggle,
       render: renderPreview,
       release,
