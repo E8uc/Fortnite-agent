@@ -3464,24 +3464,6 @@
     }
   }
 
-  async function runLocalPathCommand(
-    chat,
-    plugin,
-    signal,
-    runId,
-    controller
-  ) {
-    await runPathSearchGuide(
-      chat,
-      plugin?.query ||
-        plugin?.command ||
-        "",
-      signal,
-      runId,
-      controller
-    );
-  }
-
 
   async function requestChat(
     chat,
@@ -5001,20 +4983,20 @@
 
     if (language === "ar") {
       return [
-        "أكيد. افتح القائمة ☰ وروح إلى **More Fortnite Tools** وبعدها **Search**.",
+        "أكيد. افتح القائمة وروح إلى **More Fortnite Tools** وبعدها **Search**.",
         "اكتب اسم الـasset أو الـID أو جزء من المسار، وE8 Search راح يعرضلك النتائج المؤكدة من الداتابيس."
       ].join("\n\n");
     }
 
     if (language === "fr") {
       return [
-        "Bien sûr. Ouvre le menu ☰, puis **More Fortnite Tools** → **Search**.",
+        "Bien sûr. Ouvre le menu, puis **More Fortnite Tools** → **Search**.",
         "Entre le nom de l’asset, son ID ou une partie du chemin pour afficher les résultats vérifiés de la base E8."
       ].join("\n\n");
     }
 
     return [
-      "Sure. Open the ☰ menu, then go to **More Fortnite Tools** → **Search**.",
+      "Sure. Open the menu, then go to **More Fortnite Tools** → **Search**.",
       "Enter the asset name, ID, or part of the path to see verified results from the E8 database."
     ].join("\n\n");
   }
