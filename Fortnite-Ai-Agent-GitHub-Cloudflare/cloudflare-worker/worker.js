@@ -2840,6 +2840,464 @@ function pruneEvidence(
   return undefined;
 }
 
+function normalizedEvidenceKey(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function evidenceScalar(value) {
+  if (typeof value === "string") {
+    const clean =
+      value
+        .replace(/[\u0000-\u001f\u007f]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    return clean
+      ? clean.slice(0, 300)
+      : null;
+  }
+
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value)
+  ) {
+    return value;
+  }
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  return null;
+}
+
+function findEvidenceValue(
+  root,
+  aliases
+) {
+  const wanted =
+    new Set(
+      aliases.map(
+        normalizedEvidenceKey
+      )
+    );
+
+  const seen =
+    new WeakSet();
+
+  function visit(
+    value,
+    depth = 0
+  ) {
+    if (
+      !value ||
+      typeof value !== "object" ||
+      depth > 5
+    ) {
+      return null;
+    }
+
+    if (seen.has(value)) {
+      return null;
+    }
+
+    seen.add(value);
+
+    const entries =
+      Array.isArray(value)
+        ? value
+            .slice(0, 32)
+            .map(
+              (child, index) => [
+                String(index),
+                child
+              ]
+            )
+        : Object.entries(value)
+            .slice(0, 100);
+
+    for (
+      const [key, child] of
+      entries
+    ) {
+      if (
+        wanted.has(
+          normalizedEvidenceKey(
+            key
+          )
+        )
+      ) {
+        const scalar =
+          evidenceScalar(
+            child
+          );
+
+        if (
+          scalar !== null
+        ) {
+          return scalar;
+        }
+      }
+    }
+
+    for (
+      const [, child] of
+      entries
+    ) {
+      const nested =
+        visit(
+          child,
+          depth + 1
+        );
+
+      if (
+        nested !== null
+      ) {
+        return nested;
+      }
+    }
+
+    return null;
+  }
+
+  return visit(root);
+}
+
+function collectEvidencePaths(
+  root,
+  limit = 24
+) {
+  const output = [];
+  const keys =
+    new Set();
+  const seen =
+    new WeakSet();
+
+  function add(raw) {
+    if (
+      output.length >= limit ||
+      typeof raw !== "string"
+    ) {
+      return;
+    }
+
+    let value =
+      raw
+        .replace(
+          /[\u0000-\u001f\u007f]/g,
+          " "
+        )
+        .trim();
+
+    if (
+      !value ||
+      value.length > 1200
+    ) {
+      return;
+    }
+
+    const firstQuote =
+      value.indexOf("'");
+
+    const lastQuote =
+      value.lastIndexOf("'");
+
+    if (
+      firstQuote >= 0 &&
+      lastQuote > firstQuote
+    ) {
+      value =
+        value.slice(
+          firstQuote + 1,
+          lastQuote
+        ).trim();
+    }
+
+    value =
+      value.replace(
+        /\\/g,
+        "/"
+      );
+
+    const lower =
+      value.toLowerCase();
+
+    const looksLikePath =
+      lower.startsWith(
+        "fortnitegame/"
+      ) ||
+      lower.startsWith(
+        "engine/"
+      ) ||
+      lower.startsWith(
+        "/game/"
+      ) ||
+      lower.startsWith(
+        "/engine/"
+      ) ||
+      lower.startsWith(
+        "/fortnitegame/"
+      ) ||
+      lower.startsWith(
+        "/brcosmetics/"
+      ) ||
+      lower.startsWith(
+        "/script/"
+      ) ||
+      lower.includes(
+        ".uasset"
+      ) ||
+      lower.includes(
+        ".umap"
+      );
+
+    if (!looksLikePath) {
+      return;
+    }
+
+    const clean =
+      value.slice(
+        0,
+        1000
+      );
+
+    const key =
+      clean.toLowerCase();
+
+    if (keys.has(key)) {
+      return;
+    }
+
+    keys.add(key);
+    output.push(clean);
+  }
+
+  function visit(
+    value,
+    depth = 0
+  ) {
+    if (
+      output.length >= limit ||
+      value == null ||
+      depth > 5
+    ) {
+      return;
+    }
+
+    if (
+      typeof value === "string"
+    ) {
+      add(value);
+      return;
+    }
+
+    if (
+      typeof value !== "object"
+    ) {
+      return;
+    }
+
+    if (seen.has(value)) {
+      return;
+    }
+
+    seen.add(value);
+
+    const children =
+      Array.isArray(value)
+        ? value.slice(0, 64)
+        : Object.values(value)
+            .slice(0, 120);
+
+    for (
+      const child of
+      children
+    ) {
+      visit(
+        child,
+        depth + 1
+      );
+
+      if (
+        output.length >= limit
+      ) {
+        break;
+      }
+    }
+  }
+
+  visit(root);
+
+  return output;
+}
+
+function buildAssetFacts(
+  path,
+  inspection,
+  references,
+  fidelity
+) {
+  const facts = {
+    path
+  };
+
+  function assign(
+    key,
+    aliases
+  ) {
+    const value =
+      findEvidenceValue(
+        inspection,
+        aliases
+      );
+
+    if (
+      value !== null
+    ) {
+      facts[key] =
+        value;
+    }
+  }
+
+  assign(
+    "name",
+    [
+      "name",
+      "assetName",
+      "objectName",
+      "exportName"
+    ]
+  );
+
+  assign(
+    "assetType",
+    [
+      "assetType",
+      "type",
+      "class",
+      "className",
+      "exportType",
+      "objectType"
+    ]
+  );
+
+  assign(
+    "format",
+    [
+      "format",
+      "pixelFormat",
+      "textureFormat",
+      "compressionFormat"
+    ]
+  );
+
+  assign(
+    "width",
+    [
+      "width",
+      "sizeX",
+      "sourceWidth"
+    ]
+  );
+
+  assign(
+    "height",
+    [
+      "height",
+      "sizeY",
+      "sourceHeight"
+    ]
+  );
+
+  assign(
+    "depth",
+    [
+      "depth",
+      "sizeZ"
+    ]
+  );
+
+  assign(
+    "triangleCount",
+    [
+      "triangleCount",
+      "triangles",
+      "numTriangles"
+    ]
+  );
+
+  assign(
+    "vertexCount",
+    [
+      "vertexCount",
+      "verticesCount",
+      "numVertices"
+    ]
+  );
+
+  assign(
+    "lodCount",
+    [
+      "lodCount",
+      "numLODs",
+      "numLods"
+    ]
+  );
+
+  assign(
+    "materialCount",
+    [
+      "materialCount",
+      "numMaterials"
+    ]
+  );
+
+  assign(
+    "textureCount",
+    [
+      "textureCount",
+      "numTextures"
+    ]
+  );
+
+  if (fidelity) {
+    facts.fidelity =
+      fidelity;
+  }
+
+  const relatedPaths =
+    collectEvidencePaths(
+      {
+        inspection,
+        references
+      },
+      24
+    )
+      .filter(
+        (item) =>
+          item.toLowerCase() !==
+          String(path || "")
+            .toLowerCase()
+      );
+
+  if (
+    Array.isArray(references) &&
+    references.length
+  ) {
+    facts.referenceCount =
+      references.length;
+  }
+
+  if (relatedPaths.length) {
+    facts.relatedPaths =
+      relatedPaths;
+  }
+
+  return facts;
+}
+
 function assetContextMessage(
   context
 ) {
