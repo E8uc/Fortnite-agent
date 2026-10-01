@@ -271,6 +271,8 @@
 
   let editingUserMessageIndex = -1;
 
+  let newChatTransitioning = false;
+
   let activeChatController =
     null;
 
@@ -623,79 +625,90 @@
   }
 
   async function startNewChat() {
-    try {
-      activeChatController
-        ?.abort(
-          "new-chat"
-        );
-    } catch {}
-
-    activeChatController =
-      null;
-
-    activeChatRun++;
-
-    setBusy(false);
-    removeTypingIndicator();
-    closeChatUiIfLoaded();
-
-    editingUserMessageIndex =
-      -1;
-
-    const reducedMotion =
-      window.matchMedia
-        ?.("(prefers-reduced-motion: reduce)")
-        ?.matches === true;
-
-    if (
-      !reducedMotion &&
-      els.chat
-    ) {
-      els.chat.classList.add(
-        "e8-new-chat-leave"
-      );
-
-      await new Promise(
-        (resolve) =>
-          setTimeout(
-            resolve,
-            90
-          )
-      );
+    if (newChatTransitioning) {
+      return;
     }
 
-    activeId =
-      createChat(true);
+    newChatTransitioning = true;
 
-    renderAll();
-    closeSidebar();
+    try {
+      try {
+        activeChatController
+          ?.abort(
+            "new-chat"
+          );
+      } catch {}
 
-    navigate(
-      ROUTES.chat,
-      {
-        apply: true
+      activeChatController =
+        null;
+
+      activeChatRun++;
+
+      setBusy(false);
+      removeTypingIndicator();
+      closeChatUiIfLoaded();
+
+      editingUserMessageIndex =
+        -1;
+
+      const reducedMotion =
+        window.matchMedia
+          ?.("(prefers-reduced-motion: reduce)")
+          ?.matches === true;
+
+      if (
+        !reducedMotion &&
+        els.chat
+      ) {
+        els.chat.classList.add(
+          "e8-new-chat-leave"
+        );
+
+        await new Promise(
+          (resolve) =>
+            setTimeout(
+              resolve,
+              90
+            )
+        );
       }
-    );
 
-    if (els.chat) {
-      els.chat.classList.remove(
-        "e8-new-chat-leave"
+      activeId =
+        createChat(true);
+
+      renderAll();
+      closeSidebar();
+
+      navigate(
+        ROUTES.chat,
+        {
+          apply: true
+        }
       );
 
-      if (!reducedMotion) {
-        els.chat.classList.add(
-          "e8-new-chat-enter"
+      if (els.chat) {
+        els.chat.classList.remove(
+          "e8-new-chat-leave"
         );
 
-        setTimeout(
-          () =>
-            els.chat
-              ?.classList.remove(
-                "e8-new-chat-enter"
-              ),
-          220
-        );
+        if (!reducedMotion) {
+          els.chat.classList.add(
+            "e8-new-chat-enter"
+          );
+
+          setTimeout(
+            () =>
+              els.chat
+                ?.classList.remove(
+                  "e8-new-chat-enter"
+                ),
+            220
+          );
+        }
       }
+    } finally {
+      newChatTransitioning =
+        false;
     }
   }
 
