@@ -58,6 +58,21 @@
   const GUEST_NEXT_AT =
     "fortniteAiAgent.guestNextAt.v1";
 
+  const USAGE_KEY =
+    "fortniteAiAgent.usage.v1";
+
+  const DAILY_CHAT_LIMIT =
+    Math.max(
+      1,
+      Math.min(
+        500,
+        Number(
+          CONFIG.dailyChatLimit ||
+          50
+        ) || 50
+      )
+    );
+
   const GUEST_SLOWMODE_MS =
     15_000;
 
@@ -204,7 +219,19 @@
       $("profileAvatarInput"),
 
     accountActionButton:
-      $("accountActionButton")
+      $("accountActionButton"),
+
+    usageTitle:
+      $("e8UsageTitle"),
+
+    usageSummary:
+      $("e8UsageSummary"),
+
+    usageProgress:
+      $("e8UsageProgress"),
+
+    usageReset:
+      $("e8UsageReset")
   };
 
   if (
@@ -263,6 +290,8 @@
 
   let slowmodeTimer = null;
 
+  let usageTimer = null;
+
   let accountState = {
     configured: false,
     user: null,
@@ -299,6 +328,7 @@
   maybeShowLoginGate();
   syncVisualViewport();
   syncGuestSlowmodeUI();
+  syncUsageUI();
 
   queueMicrotask(
     applyCurrentRoute
@@ -309,6 +339,7 @@
     () => {
       resetOpenRouterButton();
       syncGuestSlowmodeUI();
+      syncUsageUI();
     }
   );
 
@@ -1164,6 +1195,27 @@
       return;
     }
 
+    if (
+      usageBlocks(
+        clean
+      )
+    ) {
+      syncUsageUI();
+
+      showToast(
+        `${copyText(
+          "Usage limit reached",
+          "Limite d’utilisation atteinte",
+          "وصلت لحد الاستخدام"
+        )} • ${usageResetLabel(
+          usageSnapshot()
+        )}`,
+        true
+      );
+
+      return;
+    }
+
     const chat =
       currentChat();
 
@@ -1666,6 +1718,7 @@
       "fortnite-language-changed",
       () => {
         syncSettingsApiCard();
+        syncUsageUI();
         closeChatUiIfLoaded();
         syncChatChromeLabels();
       }
@@ -1849,6 +1902,13 @@
           GUEST_NEXT_AT
         ) {
           syncGuestSlowmodeUI();
+        }
+
+        if (
+          event.key ===
+          USAGE_KEY
+        ) {
+          syncUsageUI();
         }
       }
     );
@@ -3325,6 +3385,27 @@
     }
 
     if (
+      usageBlocks(
+        text
+      )
+    ) {
+      const snapshot =
+        usageSnapshot();
+
+      showToast(
+        `${copyText(
+          "Usage limit reached",
+          "Limite d’utilisation atteinte",
+          "وصلت لحد الاستخدام"
+        )} • ${usageResetLabel(snapshot)}`,
+        true
+      );
+
+      syncUsageUI();
+      return;
+    }
+
+    if (
       guestSlowmodeBlocks(
         text
       )
@@ -3719,6 +3800,36 @@
       skipRoute = false
     } = options;
 
+    if (
+      usageBlocks(
+        clean,
+        {
+          assetPath
+        }
+      )
+    ) {
+      const snapshot =
+        usageSnapshot();
+
+      showToast(
+        `${copyText(
+          "Usage limit reached",
+          "Limite d’utilisation atteinte",
+          "وصلت لحد الاستخدام"
+        )} • ${usageResetLabel(snapshot)}`,
+        true
+      );
+
+      syncUsageUI();
+
+      return {
+        blocked: true,
+        usage: true,
+        resetAt:
+          snapshot.resetAt
+      };
+    }
+
     // Check the guest gate before changing routes. Description is allowed to
     // flash "X sec left" inside Tools without unexpectedly jumping to Chat.
     if (
@@ -3888,6 +3999,8 @@
           runId,
           controller
         );
+
+        incrementUsage();
 
         await revealAssistantReply(
           chat,
@@ -5584,6 +5697,395 @@
     );
   }
 
+  function usageDayKey(
+    date = new Date()
+  ) {
+    return [
+      date.getFullYear(),
+      String(
+        date.getMonth() + 1
+      ).padStart(2, "0"),
+      String(
+        date.getDate()
+      ).padStart(2, "0")
+    ].join("-");
+  }
+
+  function nextUsageResetAt(
+    now = new Date()
+  ) {
+    return new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1,
+      0,
+      0,
+      0,
+      0
+    ).getTime();
+  }
+
+  function readUsageRecord() {
+    const today =
+      usageDayKey();
+
+    let parsed = null;
+
+    try {
+      parsed =
+        JSON.parse(
+          safeStorageGet(
+            USAGE_KEY
+          ) || "null"
+        );
+    } catch {}
+
+    if (
+      !parsed ||
+      parsed.day !== today
+    ) {
+      return {
+        day: today,
+        count: 0
+      };
+    }
+
+    return {
+      day: today,
+      count:
+        Math.max(
+          0,
+          Math.min(
+            DAILY_CHAT_LIMIT,
+            Number(
+              parsed.count || 0
+            ) || 0
+          )
+        )
+    };
+  }
+
+  function writeUsageRecord(
+    record
+  ) {
+    safeStorageSet(
+      USAGE_KEY,
+      JSON.stringify({
+        day:
+          record.day,
+        count:
+          record.count
+      })
+    );
+  }
+
+  function usageSnapshot() {
+    const record =
+      readUsageRecord();
+
+    const remaining =
+      Math.max(
+        0,
+        DAILY_CHAT_LIMIT -
+          record.count
+      );
+
+    return {
+      ...record,
+      limit:
+        DAILY_CHAT_LIMIT,
+      remaining,
+      exhausted:
+        remaining <= 0,
+      resetAt:
+        nextUsageResetAt()
+    };
+  }
+
+  function messageUsesAi(
+    text,
+    options = {}
+  ) {
+    if (options.assetPath) {
+      return true;
+    }
+
+    const clean =
+      String(
+        text || ""
+      ).trim();
+
+    if (!clean) {
+      return false;
+    }
+
+    const plugin =
+      parsePlugin(
+        clean
+      );
+
+    if (
+      plugin?.id ===
+        "path" ||
+      isDirectPathLookupRequest(
+        clean
+      )
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function usageBlocks(
+    text,
+    options = {}
+  ) {
+    return (
+      messageUsesAi(
+        text,
+        options
+      ) &&
+      usageSnapshot()
+        .exhausted
+    );
+  }
+
+  function formatUsageResetTime(
+    resetAt
+  ) {
+    const language =
+      window.FortniteI18n
+        ?.getLanguage?.() ||
+      "en";
+
+    const locale =
+      language === "ar"
+        ? "ar-IQ"
+        : language === "fr"
+          ? "fr-FR"
+          : "en-US";
+
+    try {
+      return new Intl.DateTimeFormat(
+        locale,
+        {
+          hour:
+            "numeric",
+          minute:
+            "2-digit"
+        }
+      ).format(
+        new Date(
+          resetAt
+        )
+      );
+    } catch {
+      return "00:00";
+    }
+  }
+
+  function usageResetLabel(
+    snapshot
+  ) {
+    const time =
+      formatUsageResetTime(
+        snapshot.resetAt
+      );
+
+    return copyText(
+      `Resets at ${time}`,
+      `Réinitialisation à ${time}`,
+      `يتجدد الساعة ${time}`
+    );
+  }
+
+  function ensureUsageBanner() {
+    let banner =
+      $("e8UsageBanner");
+
+    if (banner) {
+      return banner;
+    }
+
+    const inner =
+      els.composer
+        ?.querySelector(
+          ".composer-inner"
+        );
+
+    if (
+      !els.composer ||
+      !inner
+    ) {
+      return null;
+    }
+
+    banner =
+      document.createElement(
+        "div"
+      );
+
+    banner.id =
+      "e8UsageBanner";
+
+    banner.className =
+      "e8-usage-banner";
+
+    banner.hidden = true;
+
+    banner.setAttribute(
+      "role",
+      "status"
+    );
+
+    banner.setAttribute(
+      "aria-live",
+      "polite"
+    );
+
+    els.composer.insertBefore(
+      banner,
+      inner
+    );
+
+    return banner;
+  }
+
+  function syncUsageUI() {
+    const snapshot =
+      usageSnapshot();
+
+    const percent =
+      Math.min(
+        100,
+        Math.round(
+          (
+            snapshot.count /
+            snapshot.limit
+          ) * 100
+        )
+      );
+
+    if (els.usageTitle) {
+      els.usageTitle.textContent =
+        copyText(
+          "Usage",
+          "Utilisation",
+          "الاستخدام"
+        );
+    }
+
+    if (els.usageSummary) {
+      els.usageSummary.textContent =
+        copyText(
+          `${snapshot.count} of ${snapshot.limit} AI messages used today`,
+          `${snapshot.count} sur ${snapshot.limit} messages IA utilisés aujourd’hui`,
+          `تم استخدام ${snapshot.count} من ${snapshot.limit} رسالة ذكاء اصطناعي اليوم`
+        );
+    }
+
+    if (els.usageProgress) {
+      els.usageProgress.style.width =
+        `${percent}%`;
+
+      const track =
+        els.usageProgress
+          .parentElement;
+
+      track?.setAttribute(
+        "aria-valuemax",
+        String(
+          snapshot.limit
+        )
+      );
+
+      track?.setAttribute(
+        "aria-valuenow",
+        String(
+          snapshot.count
+        )
+      );
+    }
+
+    if (els.usageReset) {
+      els.usageReset.textContent =
+        usageResetLabel(
+          snapshot
+        );
+    }
+
+    const banner =
+      ensureUsageBanner();
+
+    if (snapshot.exhausted) {
+      document.documentElement
+        .classList.add(
+          "e8-usage-limit-active"
+        );
+
+      if (banner) {
+        banner.hidden = false;
+
+        banner.textContent =
+          `${copyText(
+            "You've reached today's E8 usage limit.",
+            "Vous avez atteint la limite E8 d’aujourd’hui.",
+            "وصلت لحد استخدام E8 لليوم."
+          )} ${usageResetLabel(snapshot)}`;
+      }
+
+      if (!usageTimer) {
+        usageTimer =
+          setInterval(
+            syncUsageUI,
+            30_000
+          );
+      }
+    } else {
+      document.documentElement
+        .classList.remove(
+          "e8-usage-limit-active"
+        );
+
+      if (banner) {
+        banner.hidden = true;
+        banner.textContent = "";
+      }
+
+      if (usageTimer) {
+        clearInterval(
+          usageTimer
+        );
+
+        usageTimer = null;
+      }
+    }
+
+    updateSendState();
+  }
+
+  function incrementUsage() {
+    const current =
+      usageSnapshot();
+
+    const next = {
+      day:
+        current.day,
+      count:
+        Math.min(
+          current.limit,
+          current.count + 1
+        )
+    };
+
+    writeUsageRecord(
+      next
+    );
+
+    syncUsageUI();
+  }
+
   function guestSlowmodeRemainingMs() {
     if (
       getPublicAuthState()
@@ -6131,8 +6633,13 @@
 
     const blocked =
       text &&
-      guestSlowmodeBlocks(
-        text
+      (
+        guestSlowmodeBlocks(
+          text
+        ) ||
+        usageBlocks(
+          text
+        )
       );
 
     els.send.textContent =
@@ -6285,6 +6792,7 @@
     renderAccountUI();
     syncThemeButtons();
     syncSettingsApiCard();
+    syncUsageUI();
 
     els.settingsOverlay.hidden =
       false;
@@ -6502,6 +7010,7 @@
     renderAccountUI();
     syncGuestUI();
     syncGuestSlowmodeUI();
+    syncUsageUI();
     syncSettingsApiCard();
 
     window.dispatchEvent(
@@ -7576,7 +8085,7 @@
 
   window.FortniteAgent =
     Object.freeze({
-      version: "1.0.10",
+      version: "1.0.11",
 
       searchDatabase,
       describePath,
