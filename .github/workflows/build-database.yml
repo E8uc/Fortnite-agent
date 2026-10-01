@@ -89,26 +89,7 @@ jobs:
 
           if [ -z "$desired" ]; then
             desired="$(
-              python - <<'PY'
-              import json
-              from pathlib import Path
-
-              source = Path(
-                  "Fortnite-Ai-Agent-GitHub-Cloudflare/database/fortnite_assets_source.json"
-              )
-
-              data = json.loads(
-                  source.read_text(encoding="utf-8")
-              )
-
-              print(
-                  str(
-                      data.get("fortniteVersion")
-                      or data.get("fortniteBuild")
-                      or ""
-                  ).strip()
-              )
-              PY
+              python -c 'import json; from pathlib import Path; data=json.loads(Path("Fortnite-Ai-Agent-GitHub-Cloudflare/database/fortnite_assets_source.json").read_text(encoding="utf-8")); print(str(data.get("fortniteVersion") or data.get("fortniteBuild") or "").strip())'
             )"
           fi
 
