@@ -59,6 +59,28 @@ jobs:
           }
           NODE
 
+      - name: Verify E8 cosmetic path regression fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          shard='Fortnite-Ai-Agent-GitHub-Cloudflare/database/index-v1/shards/all/ch.txt.gz'
+          full='Fortnite-Ai-Agent-GitHub-Cloudflare/database/index-v1/full/all.txt.gz'
+          needle='Character_MistTycoonHike'
+
+          test -s "$shard"
+          test -s "$full"
+
+          shard_matches="$(gzip -cd "$shard" | grep -Fi "$needle" || true)"
+          full_matches="$(gzip -cd "$full" | grep -Fi "$needle" || true)"
+
+          echo '--- shard matches ---'
+          printf '%s\n' "$shard_matches"
+          echo '--- full-index matches ---'
+          printf '%s\n' "$full_matches"
+
+          test -n "$full_matches"
+          test -n "$shard_matches"
+
       - name: Run NovaSparx asset diagnosis self-test
         shell: bash
         run: node Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-associations.selftest.mjs

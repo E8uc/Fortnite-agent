@@ -3410,6 +3410,570 @@
     };
   }
 
+  function normalizedSearchText(
+    value
+  ) {
+    return String(value || "")
+      .normalize("NFKD")
+      .replace(
+        /[\u0300-\u036f]/g,
+        ""
+      )
+      .toLowerCase()
+      .replace(
+        /[^a-z0-9_\u0600-\u06ff]+/g,
+        " "
+      )
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .trim();
+  }
+
+  function cosmeticLookupQueries(
+    query
+  ) {
+    const clean =
+      String(query || "")
+        .replace(
+          /\s+/g,
+          " "
+        )
+        .trim()
+        .slice(
+          0,
+          100
+        );
+
+    if (!clean) {
+      return [];
+    }
+
+    const tokens =
+      clean
+        .split(" ")
+        .filter(Boolean);
+
+    const candidates = [
+      clean
+    ];
+
+    if (tokens.length >= 4) {
+      candidates.push(
+        tokens
+          .slice(0, 3)
+          .join(" ")
+      );
+    }
+
+    if (tokens.length >= 2) {
+      candidates.push(
+        tokens
+          .slice(-2)
+          .join(" ")
+      );
+    }
+
+    if (
+      tokens.length >= 2 &&
+      tokens.at(-1)
+        ?.length >= 3
+    ) {
+      candidates.push(
+        tokens.at(-1)
+      );
+    }
+
+    return [
+      ...new Set(
+        candidates
+          .map(
+            (item) =>
+              item.trim()
+          )
+          .filter(
+            (item) =>
+              item.length >= 2
+          )
+      )
+    ].slice(0, 4);
+  }
+
+  function cosmeticAssetName(
+    value
+  ) {
+    let text =
+      String(value || "")
+        .replace(/\\/g, "/")
+        .trim();
+
+    if (!text) {
+      return "";
+    }
+
+    const quote =
+      text.match(
+        /'([^']+)'/
+      );
+
+    if (quote?.[1]) {
+      text =
+        quote[1];
+    }
+
+    text =
+      text.split("?")[0]
+        .split("#")[0];
+
+    const slash =
+      text.lastIndexOf("/");
+
+    let file =
+      slash >= 0
+        ? text.slice(
+            slash + 1
+          )
+        : text;
+
+    file =
+      file.replace(
+        /\.(uasset|umap)$/i,
+        ""
+      );
+
+    const dot =
+      file.indexOf(".");
+
+    if (dot >= 0) {
+      file =
+        file.slice(
+          0,
+          dot
+        );
+    }
+
+    return file
+      .trim()
+      .slice(
+        0,
+        160
+      );
+  }
+
+  function scoreCosmeticRow(
+    item,
+    query
+  ) {
+    const wanted =
+      normalizedSearchText(
+        query
+      );
+
+    const name =
+      normalizedSearchText(
+        item?.name
+      );
+
+    const id =
+      normalizedSearchText(
+        item?.id
+      );
+
+    const path =
+      normalizedSearchText(
+        item?.path
+      );
+
+    let score = 0;
+
+    if (
+      name === wanted ||
+      id === wanted
+    ) {
+      score += 4000;
+    } else {
+      if (
+        wanted &&
+        name.includes(
+          wanted
+        )
+      ) {
+        score += 1500;
+      }
+
+      if (
+        name.length >= 3 &&
+        wanted.includes(
+          name
+        )
+      ) {
+        score += 800;
+      }
+
+      if (
+        wanted &&
+        id.includes(
+          wanted
+        )
+      ) {
+        score += 700;
+      }
+    }
+
+    if (
+      wanted &&
+      path.includes(
+        wanted
+      )
+    ) {
+      score += 300;
+    }
+
+    if (item?.path) {
+      score += 100;
+    }
+
+    return score;
+  }
+
+  async function readPublicJsonBounded(
+    response,
+    maxBytes,
+    signal
+  ) {
+    if (signal?.aborted) {
+      throw chatAbortError(
+        signal
+      );
+    }
+
+    const declared =
+      Number(
+        response.headers.get(
+          "content-length"
+        ) || 0
+      );
+
+    if (
+      declared > 0 &&
+      declared > maxBytes
+    ) {
+      try {
+        await response.body
+          ?.cancel();
+      } catch {}
+
+      throw new Error(
+        "Cosmetic lookup response is too large."
+      );
+    }
+
+    const text =
+      await response.text();
+
+    if (signal?.aborted) {
+      throw chatAbortError(
+        signal
+      );
+    }
+
+    if (
+      new TextEncoder()
+        .encode(text)
+        .byteLength >
+      maxBytes
+    ) {
+      throw new Error(
+        "Cosmetic lookup response is too large."
+      );
+    }
+
+    return JSON.parse(text);
+  }
+
+  async function fetchCosmeticCandidates(
+    query,
+    signal
+  ) {
+    const params =
+      new URLSearchParams();
+
+    const looksLikeId =
+      /^(?:CID_|EID_|BID_|Pickaxe_|Glider_|Wrap_|MusicPack_|LSID_|Emoji_|Spray_|SparksAura_)/i
+        .test(query);
+
+    params.set(
+      looksLikeId
+        ? "id"
+        : "name",
+      String(query)
+        .slice(
+          0,
+          100
+        )
+    );
+
+    params.set(
+      "matchMethod",
+      "contains"
+    );
+
+    params.set(
+      "language",
+      "en"
+    );
+
+    const response =
+      await fetch(
+        `https://fortnite-api.com/v2/cosmetics/br/search/all?${params.toString()}`,
+        {
+          cache:
+            "force-cache",
+          signal:
+            signal ||
+            undefined
+        }
+      );
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const payload =
+      await readPublicJsonBounded(
+        response,
+        4 * 1024 * 1024,
+        signal
+      );
+
+    const rows =
+      Array.isArray(
+        payload?.data
+      )
+        ? payload.data
+        : [];
+
+    return rows
+      .filter(
+        (item) =>
+          (
+            typeof item?.path ===
+              "string" &&
+            item.path.trim()
+          ) ||
+          (
+            typeof item?.id ===
+              "string" &&
+            item.id.trim()
+          )
+      )
+      .sort(
+        (a, b) =>
+          scoreCosmeticRow(
+            b,
+            query
+          ) -
+          scoreCosmeticRow(
+            a,
+            query
+          )
+      )
+      .slice(0, 4);
+  }
+
+  async function verifyCosmeticCandidate(
+    item,
+    signal
+  ) {
+    const assetName =
+      cosmeticAssetName(
+        item?.path
+      ) ||
+      String(
+        item?.id || ""
+      )
+        .trim()
+        .slice(
+          0,
+          160
+        );
+
+    if (
+      !assetName ||
+      !/^[A-Za-z0-9_]+$/
+        .test(assetName)
+    ) {
+      return null;
+    }
+
+    const verified =
+      await searchDatabase(
+        "all",
+        assetName,
+        signal
+      );
+
+    if (signal?.aborted) {
+      throw chatAbortError(
+        signal
+      );
+    }
+
+    const expected =
+      assetName.toLowerCase();
+
+    const match =
+      (
+        Array.isArray(
+          verified?.results
+        )
+          ? verified.results
+          : []
+      )
+        .find(
+          (row) =>
+            cosmeticAssetName(
+              row?.path
+            )
+              .toLowerCase() ===
+            expected
+        );
+
+    if (!match?.path) {
+      return null;
+    }
+
+    return {
+      path:
+        String(match.path)
+          .slice(
+            0,
+            900
+          ),
+
+      match:
+        match.match ===
+          "fuzzy"
+          ? "verified"
+          : (
+              match.match ||
+              "verified"
+            ),
+
+      source:
+        "cosmetic+database",
+
+      name:
+        String(
+          item?.name || ""
+        ).slice(
+          0,
+          120
+        ),
+
+      id:
+        String(
+          item?.id || ""
+        ).slice(
+          0,
+          120
+        ),
+
+      type:
+        String(
+          item?.type
+            ?.displayValue ||
+          item?.type?.value ||
+          item?.backendType ||
+          "Cosmetic"
+        ).slice(
+          0,
+          80
+        )
+    };
+  }
+
+  async function resolveCosmeticPaths(
+    query,
+    signal
+  ) {
+    const output = [];
+    const seen =
+      new Set();
+
+    for (
+      const lookup of
+      cosmeticLookupQueries(
+        query
+      )
+    ) {
+      let candidates = [];
+
+      try {
+        candidates =
+          await fetchCosmeticCandidates(
+            lookup,
+            signal
+          );
+      } catch (error) {
+        if (
+          signal?.aborted ||
+          error?.name ===
+            "AbortError"
+        ) {
+          throw error;
+        }
+
+        continue;
+      }
+
+      for (
+        const item of
+        candidates
+      ) {
+        const verified =
+          await verifyCosmeticCandidate(
+            item,
+            signal
+          );
+
+        if (
+          !verified ||
+          seen.has(
+            verified.path
+              .toLowerCase()
+          )
+        ) {
+          continue;
+        }
+
+        seen.add(
+          verified.path
+            .toLowerCase()
+        );
+
+        output.push(
+          verified
+        );
+
+        if (
+          output.length >= 3
+        ) {
+          return output;
+        }
+      }
+
+      if (
+        output.length
+      ) {
+        break;
+      }
+    }
+
+    return output;
+  }
+
   async function buildClientContext(
     userText,
     signal = null
@@ -3445,13 +4009,88 @@
         );
       }
 
-      const rows =
+      const databaseRows =
         Array.isArray(
           result?.results
         )
           ? result.results
               .slice(0, 12)
+              .map(
+                (row) => ({
+                  path:
+                    String(
+                      row?.path ||
+                      ""
+                    ).slice(
+                      0,
+                      900
+                    ),
+
+                  match:
+                    String(
+                      row?.match ||
+                      "result"
+                    ),
+
+                  source:
+                    String(
+                      row?.source ||
+                      "database"
+                    )
+                })
+              )
           : [];
+
+      const cosmeticRows =
+        looksLikeCosmeticQuestion(
+          userText
+        )
+          ? await resolveCosmeticPaths(
+              query,
+              signal
+            )
+          : [];
+
+      if (signal?.aborted) {
+        throw chatAbortError(
+          signal
+        );
+      }
+
+      const merged = [];
+      const seen =
+        new Set();
+
+      for (
+        const row of
+        [
+          ...cosmeticRows,
+          ...databaseRows
+        ]
+      ) {
+        const key =
+          String(
+            row?.path || ""
+          )
+            .toLowerCase()
+            .trim();
+
+        if (
+          !key ||
+          seen.has(key)
+        ) {
+          continue;
+        }
+
+        seen.add(key);
+        merged.push(row);
+
+        if (
+          merged.length >= 12
+        ) {
+          break;
+        }
+      }
 
       return {
         version:
@@ -3464,31 +4103,15 @@
 
         query,
 
-        results:
-          rows.map(
-            (row) => ({
-              path:
-                String(
-                  row?.path ||
-                  ""
-                ).slice(
-                  0,
-                  900
-                ),
-
-              match:
-                String(
-                  row?.match ||
-                  "result"
-                ),
-
-              source:
-                String(
-                  row?.source ||
-                  "database"
-                )
-            })
+        intent:
+          looksLikeCosmeticQuestion(
+            userText
           )
+            ? "cosmetic-path"
+            : "asset-path",
+
+        results:
+          merged
       };
     } catch (error) {
       if (
@@ -3511,6 +4134,14 @@
           ),
 
         query,
+
+        intent:
+          looksLikeCosmeticQuestion(
+            userText
+          )
+            ? "cosmetic-path"
+            : "asset-path",
+
         results: []
       };
     }
@@ -4478,6 +5109,17 @@
     );
   }
 
+  function looksLikeCosmeticQuestion(
+    text
+  ) {
+    return /\b(skin|outfit|cosmetic|character|emote|back\s*bling|pickaxe|glider|wrap|music\s*pack|cid_|eid_|bid_)\b|\b(tenue|cosm[eé]tique|personnage|emote|émote)\b|سكن|سكين|كوزمتك|كوسمتك|شخصية|ايموت|إيموت|رقصة|باك\s*بلنغ|بيكاكس/i
+      .test(
+        String(
+          text || ""
+        )
+      );
+  }
+
   function looksLikeAssetQuestion(
     text
   ) {
@@ -4488,7 +5130,10 @@
             text || ""
           )
         ) ||
-      /\b(path|asset path|mesh|staticmesh|static mesh|skeletalmesh|texture|material|icon|uasset|fortnite files|sm_|sk_|mi_|m_)\b|مسار|باث|ميش|تكستشر|ماتيريال|ملفات اللعبة|ملفات فورتنايت/i
+      looksLikeCosmeticQuestion(
+        text
+      ) ||
+      /\b(path|asset path|mesh|staticmesh|static mesh|skeletalmesh|texture|material|icon|uasset|fortnite files|sm_|sk_|mi_|m_)\b|\b(chemin|asset|fichier|mesh|texture|mat[eé]riau)\b|مسار|باث|ميش|تكستشر|ماتيريال|ملفات اللعبة|ملفات فورتنايت/i
         .test(
           String(
             text || ""
@@ -4584,11 +5229,15 @@
           " "
         )
         .replace(
-          /\b(give|me|the|a|an|for|of|please|find|search|what|whats|what's|is|path|asset|mesh|static|skeletal|fortnite|files?|current|latest|new|describe)\b/gi,
+          /\b(give|me|the|a|an|for|of|please|pls|find|search|show|look|lookup|what|whats|what's|is|path|asset|mesh|static|skeletal|fortnite|files?|current|latest|new|describe|skin|outfit|cosmetic|character|emote|back\s*bling|pickaxe|glider|wrap|music\s*pack)\b/gi,
           " "
         )
         .replace(
-          /(انطيني|اعطيني|اريد|أريد|شنو|شسم|مسار|باث|مال|ملفات|فورتنايت|الميش|ميش)/g,
+          /\b(trouve|chercher|cherche|recherche|montre|donne|moi|le|la|les|un|une|pour|de|du|des|chemin|fichier|fortnite|tenue|cosm[eé]tique|personnage|emote|émote)\b/gi,
+          " "
+        )
+        .replace(
+          /(انطيني|اعطيني|أعطيني|اريد|أريد|شوفلي|شوفيلي|دورلي|دوريلي|طلعلي|طلعيلي|جيبلي|جيبيلي|لكيلي|شنو|شسم|مسار|باث|مال|ملفات|فورتنايت|الميش|ميش|سكن|سكين|كوزمتك|كوسمتك|شخصية|ايموت|إيموت|رقصة|باك\s*بلنغ|بيكاكس)/g,
           " "
         )
         .replace(
@@ -6653,7 +7302,7 @@
 
   window.FortniteAgent =
     Object.freeze({
-      version: "1.0.5",
+      version: "1.0.6",
 
       searchDatabase,
       describePath,
