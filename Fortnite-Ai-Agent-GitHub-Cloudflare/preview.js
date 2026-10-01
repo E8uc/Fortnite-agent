@@ -67,6 +67,18 @@
         break;
       }
 
+      if (
+        audioSessions.has(
+          oldestKey
+        )
+      ) {
+        release(
+          oldestKey
+        );
+
+        continue;
+      }
+
       const oldestUrl =
         objectUrls.get(
           oldestKey
