@@ -3039,6 +3039,24 @@
           runId,
           controller
         );
+      } else if (
+        !assetPath &&
+        isDirectPathLookupRequest(
+          clean
+        )
+      ) {
+        await runNaturalPathLookup(
+          chat,
+          clean,
+          signal,
+          runId,
+          controller
+        );
+
+        throwIfChatStale(
+          runId,
+          controller
+        );
       } else {
         const assetContext =
           assetPath
@@ -5453,6 +5471,486 @@
       : "en";
   }
 
+  function dedupePathRows(
+    rows,
+    limit = 8
+  ) {
+    const output = [];
+    const seen =
+      new Set();
+
+    for (
+      const row of
+      Array.isArray(rows)
+        ? rows
+        : []
+    ) {
+      const path =
+        String(
+          row?.path || ""
+        )
+          .trim();
+
+      if (!path) {
+        continue;
+      }
+
+      const key =
+        path.toLowerCase();
+
+      if (seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+
+      output.push({
+        ...row,
+        path
+      });
+
+      if (
+        output.length >=
+        limit
+      ) {
+        break;
+      }
+    }
+
+    return output;
+  }
+
+  function bestDatabasePathRows(
+    result
+  ) {
+    const rows =
+      dedupePathRows(
+        result?.results,
+        10
+      );
+
+    if (!rows.length) {
+      return {
+        rows: [],
+        confidence:
+          "none"
+      };
+    }
+
+    const exact =
+      rows.filter(
+        (row) =>
+          row.match ===
+          "exact"
+      );
+
+    if (exact.length) {
+      return {
+        rows:
+          exact.slice(
+            0,
+            5
+          ),
+        confidence:
+          exact.length === 1
+            ? "exact"
+            : "multiple"
+      };
+    }
+
+    const full =
+      rows.filter(
+        (row) =>
+          row.match ===
+          "full"
+      );
+
+    if (full.length) {
+      return {
+        rows:
+          full.slice(
+            0,
+            5
+          ),
+        confidence:
+          full.length === 1
+            ? "full"
+            : "multiple"
+      };
+    }
+
+    return {
+      rows:
+        rows.slice(
+          0,
+          5
+        ),
+      confidence:
+        rows.length === 1
+          ? "related"
+          : "multiple"
+    };
+  }
+
+  function pathLookupText(
+    language,
+    key
+  ) {
+    const copy = {
+      ar: {
+        verified:
+          "أكيد، هذا هو المسار المؤكد:",
+        closest:
+          "لكيت هذا كأقرب مسار مؤكد بالداتابيس:",
+        multiple:
+          "لكيت أكثر من مسار قريب. هاي أفضل النتائج المؤكدة:",
+        object:
+          "والمسار الجاهز:",
+        noResult:
+          "ما لكيت مسار مؤكد بهذا الاسم. جرّب الاسم أو الـID بشكل أدق.",
+        option:
+          "نتيجة"
+      },
+
+      fr: {
+        verified:
+          "Bien sûr. Voici le chemin vérifié :",
+        closest:
+          "Voici le chemin vérifié le plus proche :",
+        multiple:
+          "J’ai trouvé plusieurs chemins proches. Voici les meilleurs résultats vérifiés :",
+        object:
+          "Chemin prêt à utiliser :",
+        noResult:
+          "Je n’ai pas trouvé de chemin vérifié avec ce nom. Essaie un nom ou un ID plus précis.",
+        option:
+          "Résultat"
+      },
+
+      en: {
+        verified:
+          "Sure — here’s the verified path:",
+        closest:
+          "Here’s the closest verified path I found:",
+        multiple:
+          "I found several close paths. These are the best verified results:",
+        object:
+          "Ready-to-use object path:",
+        noResult:
+          "I couldn’t find a verified path with that name. Try a more exact name or ID.",
+        option:
+          "Result"
+      }
+    };
+
+    return (
+      copy[language]?.[key] ||
+      copy.en[key]
+    );
+  }
+
+  function formatSinglePathResult(
+    row,
+    language,
+    lead
+  ) {
+    const raw =
+      String(
+        row?.path || ""
+      ).trim();
+
+    if (!raw) {
+      return "";
+    }
+
+    const objectPath =
+      chatObjectPath(
+        raw
+      );
+
+    const fence =
+      String.fromCharCode(96)
+        .repeat(3);
+
+    const parts = [
+      lead,
+      "",
+      fence + "text",
+      raw,
+      fence
+    ];
+
+    if (
+      objectPath &&
+      objectPath !== raw
+    ) {
+      parts.push(
+        "",
+        pathLookupText(
+          language,
+          "object"
+        ),
+        "",
+        fence + "text",
+        objectPath,
+        fence
+      );
+    }
+
+    return parts.join(
+      "\n"
+    );
+  }
+
+  function formatMultiplePathResults(
+    rows,
+    language
+  ) {
+    const fence =
+      String.fromCharCode(96)
+        .repeat(3);
+
+    const parts = [
+      pathLookupText(
+        language,
+        "multiple"
+      )
+    ];
+
+    rows
+      .slice(0, 5)
+      .forEach(
+        (
+          row,
+          index
+        ) => {
+          const raw =
+            String(
+              row?.path || ""
+            ).trim();
+
+          if (!raw) return;
+
+          const objectPath =
+            chatObjectPath(
+              raw
+            );
+
+          parts.push(
+            "",
+            "**" +
+              pathLookupText(
+                language,
+                "option"
+              ) +
+              " " +
+              (index + 1) +
+              "**",
+            "",
+            fence + "text",
+            raw,
+            fence
+          );
+
+          if (
+            objectPath &&
+            objectPath !== raw
+          ) {
+            parts.push(
+              "",
+              pathLookupText(
+                language,
+                "object"
+              ),
+              "",
+              fence + "text",
+              objectPath,
+              fence
+            );
+          }
+        }
+      );
+
+    return parts.join(
+      "\n"
+    );
+  }
+
+  async function resolveNaturalPathLookup(
+    userText,
+    signal
+  ) {
+    const query =
+      coreSearchQuery(
+        userText
+      );
+
+    if (!query) {
+      return {
+        query: "",
+        rows: [],
+        confidence:
+          "none",
+        source:
+          "none"
+      };
+    }
+
+    const database =
+      await searchDatabase(
+        searchScope(
+          userText
+        ),
+        query,
+        signal
+      );
+
+    if (signal?.aborted) {
+      throw chatAbortError(
+        signal
+      );
+    }
+
+    const databasePick =
+      bestDatabasePathRows(
+        database
+      );
+
+    let cosmeticRows = [];
+
+    if (
+      looksLikeCosmeticQuestion(
+        userText
+      )
+    ) {
+      try {
+        cosmeticRows =
+          await resolveCosmeticPaths(
+            query,
+            signal
+          );
+      } catch (error) {
+        if (
+          signal?.aborted ||
+          error?.name ===
+            "AbortError"
+        ) {
+          throw error;
+        }
+      }
+    }
+
+    if (
+      cosmeticRows.length
+    ) {
+      const top =
+        cosmeticRows[0];
+
+      const second =
+        cosmeticRows[1];
+
+      const clearWinner =
+        !second ||
+        top.score -
+          second.score >=
+          500;
+
+      return {
+        query,
+        rows:
+          clearWinner
+            ? [top]
+            : cosmeticRows
+                .slice(0, 4),
+        confidence:
+          clearWinner
+            ? "exact"
+            : "multiple",
+        source:
+          "cosmetic+database"
+      };
+    }
+
+    return {
+      query,
+      rows:
+        databasePick.rows,
+      confidence:
+        databasePick.confidence,
+      source:
+        "database"
+    };
+  }
+
+  async function runNaturalPathLookup(
+    chat,
+    userText,
+    signal,
+    runId,
+    controller
+  ) {
+    const result =
+      await resolveNaturalPathLookup(
+        userText,
+        signal
+      );
+
+    throwIfChatStale(
+      runId,
+      controller
+    );
+
+    removeTypingIndicator();
+
+    const language =
+      pathReplyLanguage(
+        userText
+      );
+
+    let content;
+
+    if (!result.rows.length) {
+      content =
+        pathLookupText(
+          language,
+          "noResult"
+        );
+    } else if (
+      result.rows.length === 1
+    ) {
+      const lead =
+        result.confidence ===
+          "exact"
+          ? pathLookupText(
+              language,
+              "verified"
+            )
+          : pathLookupText(
+              language,
+              "closest"
+            );
+
+      content =
+        formatSinglePathResult(
+          result.rows[0],
+          language,
+          lead
+        );
+    } else {
+      content =
+        formatMultiplePathResults(
+          result.rows,
+          language
+        );
+    }
+
+    chat.messages.push({
+      role:
+        "assistant",
+      content
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Guest slow mode
   // ---------------------------------------------------------------------------
@@ -5474,7 +5972,10 @@
 
     if (
       /^\s*@SearchForPath\b/i
-        .test(value)
+        .test(value) ||
+      isDirectPathLookupRequest(
+        value
+      )
     ) {
       return true;
     }
