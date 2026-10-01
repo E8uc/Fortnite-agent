@@ -3467,14 +3467,6 @@
       );
     }
 
-    if (tokens.length >= 3) {
-      candidates.push(
-        tokens
-          .slice(-3)
-          .join(" ")
-      );
-    }
-
     if (tokens.length >= 2) {
       candidates.push(
         tokens
