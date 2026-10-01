@@ -2,7 +2,7 @@
   "use strict";
 
   const VERSION =
-    "1.0.0";
+    "1.1.0";
 
   const SCRIPT_REVISION =
     (() => {
@@ -1855,7 +1855,11 @@
 
     url.searchParams.set(
       "test",
-      mode === "mesh" ? "resolve-mesh-relay" : "resolve-texture-relay"
+      mode === "mesh"
+        ? "resolve-mesh-relay"
+        : mode === "audio"
+          ? "resolve-audio-relay"
+          : "resolve-texture-relay"
     );
 
     url.searchParams.set(
@@ -2267,6 +2271,84 @@
               return;
             }
 
+            if (
+              message.type ===
+                "audio" &&
+              options.mode ===
+                "audio"
+            ) {
+              const format =
+                String(
+                  message.format ||
+                  ""
+                )
+                  .trim()
+                  .toUpperCase();
+
+              const bytes =
+                message.bytes;
+
+              if (
+                pixelsResult ||
+                typeof message.path !==
+                  "string" ||
+                normalizeInput(
+                  message.path
+                ).toLowerCase() !==
+                  location.key
+                    .toLowerCase() ||
+                !/^[A-Z0-9_-]{2,16}$/
+                  .test(format) ||
+                !(
+                  bytes instanceof
+                  ArrayBuffer
+                ) ||
+                bytes.byteLength < 4 ||
+                bytes.byteLength >
+                  12 *
+                  1024 *
+                  1024
+              ) {
+                finish(
+                  new Error(
+                    "Invalid or mismatched Audio output"
+                  )
+                );
+
+                return;
+              }
+
+              pixelsResult = {
+                path:
+                  String(
+                    message.path
+                  ),
+                format,
+                bytes
+              };
+
+              return;
+            }
+
+            if (
+              options.mode ===
+                "audio" &&
+              (
+                message.type ===
+                  "mesh" ||
+                message.type ===
+                  "pixels"
+              )
+            ) {
+              finish(
+                new Error(
+                  "Audio request returned unrelated output"
+                )
+              );
+
+              return;
+            }
+
             if (message.type === "mesh" && options.mode === "mesh") {
               const count = message.positions?.byteLength / 12;
               if (pixelsResult || normalizeInput(message.path).toLowerCase() !== location.key.toLowerCase() ||
@@ -2375,7 +2457,10 @@
               ) {
                 finish(
                   new Error(
-                    "NovaSparx Texture worker completed without pixels."
+                    options.mode ===
+                    "audio"
+                    ? "NovaSparx Audio worker completed without audio bytes."
+                    : "NovaSparx Texture worker completed without pixels."
                   )
                 );
 
@@ -2481,6 +2566,128 @@
       controller.abort("texture-request-finished");
       options.signal?.removeEventListener("abort", onAbort);
       if (activeRequest === controller) activeRequest = null;
+    }
+  }
+
+  async function resolveAudioRequest(
+    path,
+    options = {}
+  ) {
+    throwIfAborted(
+      options.signal
+    );
+
+    const location =
+      await locate(
+        path,
+        options
+      );
+
+    const manifest =
+      await manifestForLocation(
+        location,
+        options
+      );
+
+    throwIfAborted(
+      options.signal
+    );
+
+    const result =
+      await runWorker(
+        location,
+        manifest,
+        {
+          ...options,
+          mode: "audio"
+        }
+      );
+
+    throwIfAborted(
+      options.signal
+    );
+
+    return {
+      path:
+        result.path,
+      requestedPath:
+        String(
+          path || ""
+        ),
+      format:
+        result.format,
+      bytes:
+        result.bytes,
+      toc:
+        location.toc,
+      shard:
+        location.shard,
+      source:
+        "browser-wasm"
+    };
+  }
+
+  async function resolveAudio(
+    path,
+    options = {}
+  ) {
+    throwIfAborted(
+      options.signal
+    );
+
+    activeRequest?.abort(
+      "replaced-by-new-audio"
+    );
+
+    const controller =
+      new AbortController();
+
+    activeRequest =
+      controller;
+
+    const onAbort =
+      () =>
+        controller.abort(
+          options.signal
+            ?.reason
+        );
+
+    options.signal
+      ?.addEventListener(
+        "abort",
+        onAbort,
+        {
+          once: true
+        }
+      );
+
+    try {
+      return await resolveAudioRequest(
+        path,
+        {
+          ...options,
+          signal:
+            controller.signal
+        }
+      );
+    } finally {
+      controller.abort(
+        "audio-request-finished"
+      );
+
+      options.signal
+        ?.removeEventListener(
+          "abort",
+          onAbort
+        );
+
+      if (
+        activeRequest ===
+        controller
+      ) {
+        activeRequest =
+          null;
+      }
     }
   }
 
@@ -3259,6 +3466,7 @@
       version:
         VERSION,
       resolveTexture,
+      resolveAudio,
       resolveMeshImage,
       locate,
       status,
