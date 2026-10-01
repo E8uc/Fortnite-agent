@@ -60,7 +60,7 @@
 
   window.FNAA_CONFIG = Object.freeze({
     version: "1.0.3",
-    fortniteVersion: "42.00",
+    fortniteVersion: "42.20",
     apiEndpoint: API,
     siteUrl: SITE,
     siteBasePath: BASE,
