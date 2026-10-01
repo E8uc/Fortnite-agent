@@ -58,7 +58,7 @@ const styleReady =
 
       link.href =
         new URL(
-          "e8-chat-ui.css?v=1",
+          "e8-chat-ui.css?v=2",
           import.meta.url
         ).href;
 
