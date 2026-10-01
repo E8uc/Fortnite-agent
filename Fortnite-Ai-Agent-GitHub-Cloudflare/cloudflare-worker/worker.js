@@ -8511,7 +8511,7 @@ export default {
           ok: true,
           service: "FNAA",
           version:
-            "1.0.15",
+            "1.0.16",
           fortnite:
             CURRENT_FORTNITE_VERSION,
           authProvider:
