@@ -482,6 +482,51 @@
           </div>
         </section>
 
+        <section
+          class="settings-card settings-stack-card e8-usage-settings-card"
+          aria-labelledby="e8UsageTitle"
+        >
+          <div class="settings-card-icon e8-usage-settings-icon">
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              width="22"
+              height="22"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="8"></circle>
+              <path d="M12 8v5l3 2"></path>
+            </svg>
+          </div>
+
+          <div class="settings-card-main">
+            <h2 id="e8UsageTitle">Usage</h2>
+
+            <p id="e8UsageSummary">
+              0 of 50 AI messages used today
+            </p>
+
+            <div
+              class="e8-usage-track"
+              role="progressbar"
+              aria-label="Daily AI usage"
+              aria-valuemin="0"
+              aria-valuemax="50"
+              aria-valuenow="0"
+            >
+              <span id="e8UsageProgress"></span>
+            </div>
+
+            <small id="e8UsageReset">
+              Resets at midnight
+            </small>
+          </div>
+        </section>
+
         <section class="settings-card owner-settings-card">
           <div class="settings-card-icon">@</div>
 
