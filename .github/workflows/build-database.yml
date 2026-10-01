@@ -78,6 +78,58 @@ jobs:
           python sync_fortnite_version.py
           --version "${{ steps.sync.outputs.fortnite_version }}"
 
+      - name: Check live Pages Fortnite version
+        if: github.event_name != 'pull_request'
+        id: live_version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          desired="${{ steps.sync.outputs.fortnite_version }}"
+
+          if [ -z "$desired" ]; then
+            desired="$(
+              python - <<'PY'
+              import json
+              from pathlib import Path
+
+              source = Path(
+                  "Fortnite-Ai-Agent-GitHub-Cloudflare/database/fortnite_assets_source.json"
+              )
+
+              data = json.loads(
+                  source.read_text(encoding="utf-8")
+              )
+
+              print(
+                  str(
+                      data.get("fortniteVersion")
+                      or data.get("fortniteBuild")
+                      or ""
+                  ).strip()
+              )
+              PY
+            )"
+          fi
+
+          live="$(
+            curl               --fail               --silent               --show-error               --location               --max-time 20               "https://e8uc.github.io/Fortnite-agent/config.js?e8-version-check=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"             | sed -nE 's/.*fortniteVersion:[[:space:]]*"([0-9]{1,2}\.[0-9]{1,2})".*/\1/p'             | head -n 1             || true
+          )"
+
+          pages_stale="false"
+
+          if [ -z "$live" ] || [ "$live" != "$desired" ]; then
+            pages_stale="true"
+          fi
+
+          echo "desired=$desired" >> "$GITHUB_OUTPUT"
+          echo "live=$live" >> "$GITHUB_OUTPUT"
+          echo "pages_stale=$pages_stale" >> "$GITHUB_OUTPUT"
+
+          echo "Desired Fortnite version: ${desired:-unknown}"
+          echo "Live Pages Fortnite version: ${live:-unavailable}"
+          echo "Pages stale: $pages_stale"
+
       - name: Build FNAA search indexes
         if: >-
           github.event_name == 'pull_request' ||
@@ -188,6 +240,8 @@ jobs:
           elif [ "${{ steps.sync.outputs.changed }}" = "true" ]; then
             should_deploy="true"
           elif [ "${{ steps.version_sync.outputs.changed }}" = "true" ]; then
+            should_deploy="true"
+          elif [ "${{ steps.live_version.outputs.pages_stale }}" = "true" ]; then
             should_deploy="true"
           elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.actor }}" != "github-actions[bot]" ]; then
             should_deploy="true"
