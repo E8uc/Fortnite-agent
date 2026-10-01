@@ -2113,6 +2113,12 @@
     body.className =
       "assistant-content";
 
+    if (message.streaming) {
+      body.classList.add(
+        "e8-streaming-response"
+      );
+    }
+
     renderMarkdown(
       body,
       message.content
@@ -2122,6 +2128,14 @@
       name,
       body
     );
+
+    if (message.streaming) {
+      outer.appendChild(
+        wrap
+      );
+
+      return outer;
+    }
 
     const actions =
       document.createElement(
@@ -2895,6 +2909,289 @@
     }
   }
 
+  function revealBatchSize(
+    length
+  ) {
+    if (length <= 420) return 1;
+    if (length <= 1200) return 2;
+    if (length <= 3000) return 4;
+    if (length <= 6500) return 7;
+    return 12;
+  }
+
+  function revealUnits(
+    text
+  ) {
+    return (
+      String(text || "")
+        .match(/\S+\s*/g) ||
+      [String(text || "")]
+    );
+  }
+
+  function chatNearBottom() {
+    if (!els.chat) {
+      return true;
+    }
+
+    return (
+      els.chat.scrollHeight -
+        els.chat.scrollTop -
+        els.chat.clientHeight <
+      140
+    );
+  }
+
+  function waitForRevealStep(
+    signal,
+    delay = 24
+  ) {
+    if (signal?.aborted) {
+      return Promise.reject(
+        chatAbortError(
+          signal
+        )
+      );
+    }
+
+    return new Promise(
+      (
+        resolve,
+        reject
+      ) => {
+        let settled = false;
+
+        const finish =
+          (callback) => {
+            if (settled) {
+              return;
+            }
+
+            settled = true;
+
+            signal
+              ?.removeEventListener?.(
+                "abort",
+                onAbort
+              );
+
+            callback();
+          };
+
+        const timer =
+          setTimeout(
+            () =>
+              finish(resolve),
+            delay
+          );
+
+        const onAbort =
+          () => {
+            clearTimeout(
+              timer
+            );
+
+            finish(
+              () =>
+                reject(
+                  chatAbortError(
+                    signal
+                  )
+                )
+            );
+          };
+
+        signal
+          ?.addEventListener?.(
+            "abort",
+            onAbort,
+            {
+              once: true
+            }
+          );
+      }
+    );
+  }
+
+  function updateStreamingMessage(
+    messageIndex,
+    content
+  ) {
+    const article =
+      els.messages
+        ?.querySelector(
+          `[data-message-index="${messageIndex}"]`
+        );
+
+    const body =
+      article
+        ?.querySelector(
+          ".assistant-content"
+        );
+
+    if (!body) {
+      return;
+    }
+
+    const stick =
+      chatNearBottom();
+
+    renderMarkdown(
+      body,
+      content
+    );
+
+    body.classList.add(
+      "e8-streaming-response"
+    );
+
+    if (stick) {
+      scrollToBottom();
+    }
+  }
+
+  async function revealAssistantReply(
+    chat,
+    reply,
+    signal,
+    runId,
+    controller
+  ) {
+    const fullText =
+      String(
+        reply || ""
+      ).trim() ||
+      "No response.";
+
+    removeTypingIndicator();
+
+    const message = {
+      role:
+        "assistant",
+      content: "",
+      streaming: true
+    };
+
+    chat.messages.push(
+      message
+    );
+
+    const messageIndex =
+      chat.messages.length -
+      1;
+
+    renderMessages();
+
+    const reducedMotion =
+      window.matchMedia
+        ?.("(prefers-reduced-motion: reduce)")
+        ?.matches === true;
+
+    if (reducedMotion) {
+      message.content =
+        fullText;
+
+      message.streaming =
+        false;
+
+      renderMessages();
+
+      return message;
+    }
+
+    const units =
+      revealUnits(
+        fullText
+      );
+
+    const batchSize =
+      revealBatchSize(
+        fullText.length
+      );
+
+    let cursor = 0;
+
+    try {
+      while (
+        cursor <
+        units.length
+      ) {
+        throwIfChatStale(
+          runId,
+          controller
+        );
+
+        if (signal?.aborted) {
+          throw chatAbortError(
+            signal
+          );
+        }
+
+        cursor =
+          Math.min(
+            units.length,
+            cursor +
+              batchSize
+          );
+
+        message.content =
+          units
+            .slice(
+              0,
+              cursor
+            )
+            .join("");
+
+        updateStreamingMessage(
+          messageIndex,
+          message.content
+        );
+
+        if (
+          cursor <
+          units.length
+        ) {
+          await waitForRevealStep(
+            signal
+          );
+        }
+      }
+    } catch (error) {
+      if (
+        message.content
+          .trim()
+      ) {
+        message.streaming =
+          false;
+
+        chat.updatedAt =
+          Date.now();
+
+        saveChats();
+        renderMessages();
+      } else {
+        chat.messages.splice(
+          messageIndex,
+          1
+        );
+
+        renderMessages();
+      }
+
+      throw error;
+    }
+
+    message.content =
+      fullText;
+
+    message.streaming =
+      false;
+
+    renderMessages();
+
+    return message;
+  }
+
   async function sendTextMessage(
     text,
     options = {}
@@ -3027,7 +3324,7 @@
         plugin?.id ===
         "path"
       ) {
-        runPathSearchGuide(
+        await runPathSearchGuide(
           chat,
           plugin.query ||
             clean,
@@ -3046,7 +3343,7 @@
           clean
         )
       ) {
-        runPathSearchGuide(
+        await runPathSearchGuide(
           chat,
           clean,
           signal,
@@ -3095,17 +3392,13 @@
           controller
         );
 
-        removeTypingIndicator();
-
-        chat.messages.push({
-          role: "assistant",
-          content:
-            String(
-              response.reply ||
-              ""
-            ).trim() ||
-            "No response."
-        });
+        await revealAssistantReply(
+          chat,
+          response.reply,
+          signal,
+          runId,
+          controller
+        );
       }
 
       throwIfChatStale(
@@ -3178,7 +3471,7 @@
     runId,
     controller
   ) {
-    runPathSearchGuide(
+    await runPathSearchGuide(
       chat,
       plugin?.query ||
         plugin?.command ||
@@ -4726,7 +5019,7 @@
     ].join("\n\n");
   }
 
-  function runPathSearchGuide(
+  async function runPathSearchGuide(
     chat,
     userText,
     signal,
@@ -4744,16 +5037,15 @@
       );
     }
 
-    removeTypingIndicator();
-
-    chat.messages.push({
-      role:
-        "assistant",
-      content:
-        pathSearchGuideText(
-          userText
-        )
-    });
+    await revealAssistantReply(
+      chat,
+      pathSearchGuideText(
+        userText
+      ),
+      signal,
+      runId,
+      controller
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -6805,7 +7097,7 @@
 
   window.FortniteAgent =
     Object.freeze({
-      version: "1.0.8",
+      version: "1.0.9",
 
       searchDatabase,
       describePath,
