@@ -1600,6 +1600,17 @@ html[dir="rtl"] .asset-search-meta{text-align:left}
   image-rendering:auto;
 }
 
+.novasparx-audio-player{
+  width:min(92%,620px);
+  margin:28px auto;
+  display:block;
+  accent-color:var(--accent);
+}
+
+.novasparx-audio-player[hidden]{
+  display:none!important;
+}
+
 .mesh-image-meta{
   padding:8px 10px;
   border-top:1px solid var(--line);
