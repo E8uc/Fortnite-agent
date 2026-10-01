@@ -59,6 +59,16 @@ jobs:
           }
           NODE
 
+      - name: Verify E8 cosmetic path regression fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          shard='Fortnite-Ai-Agent-GitHub-Cloudflare/database/index-v1/shards/all/ch.txt.gz'
+          expected='FortniteGame/Plugins/GameFeatures/BRCosmetics/Content/Athena/Items/Cosmetics/Characters/Character_MistTycoonHike.uasset'
+
+          test -s "$shard"
+          gzip -cd "$shard" | grep -Fqx "$expected"
+
       - name: Run NovaSparx asset diagnosis self-test
         shell: bash
         run: node Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-associations.selftest.mjs
