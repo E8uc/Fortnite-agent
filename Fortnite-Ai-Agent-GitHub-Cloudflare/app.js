@@ -4478,6 +4478,17 @@
     );
   }
 
+  function looksLikeCosmeticQuestion(
+    text
+  ) {
+    return /\b(skin|outfit|cosmetic|character|emote|back\s*bling|pickaxe|glider|wrap|music\s*pack|cid_|eid_|bid_|pickaxe_|glider_)\b|\b(tenue|cosm[eé]tique|personnage|emote|émote|pioche|planeur)\b|سكن|سكين|كوزمتك|كوسمتك|شخصية|ايموت|إيموت|رقصة|باك\s*بلنغ|بيكاكس|مظلة/i
+      .test(
+        String(
+          text || ""
+        )
+      );
+  }
+
   function looksLikeAssetQuestion(
     text
   ) {
@@ -4488,12 +4499,63 @@
             text || ""
           )
         ) ||
-      /\b(path|asset path|mesh|staticmesh|static mesh|skeletalmesh|texture|material|icon|uasset|fortnite files|sm_|sk_|mi_|m_)\b|مسار|باث|ميش|تكستشر|ماتيريال|ملفات اللعبة|ملفات فورتنايت/i
+      looksLikeCosmeticQuestion(
+        text
+      ) ||
+      /\b(path|asset path|mesh|staticmesh|static mesh|skeletalmesh|texture|material|icon|uasset|fortnite files|sm_|sk_|mi_|m_)\b|\b(chemin|asset|fichier|mesh|texture|mat[eé]riau)\b|مسار|باث|ميش|تكستشر|ماتيريال|ملفات اللعبة|ملفات فورتنايت/i
         .test(
           String(
             text || ""
           )
         )
+    );
+  }
+
+  function isDirectPathLookupRequest(
+    text
+  ) {
+    const value =
+      String(text || "")
+        .trim();
+
+    if (!value) {
+      return false;
+    }
+
+    if (
+      /^\s*@SearchForPath\b/i
+        .test(value)
+    ) {
+      return true;
+    }
+
+    if (
+      /\b(describe|description|explain|what is|what does)\b|\b(d[eé]cris|description|explique)\b|اشرح|وصف|اوصف|شنو هذا|شنو هاذا/i
+        .test(value)
+    ) {
+      return false;
+    }
+
+    const explicitPath =
+      /\b(path|asset path|uasset|file path|filesystem path)\b|\b(chemin|chemin d['’]asset|fichier)\b|مسار|باث|ملف/i
+        .test(value);
+
+    const asksToFind =
+      /\b(find|search|show|lookup|locate|get me|give me|where is)\b|\b(cherche|trouve|montre|recherche|localise|donne[- ]moi)\b|شوفلي|شوفيلي|دورلي|دوريلي|طلعلي|طلعيلي|جيبلي|جيبيلي|لكيلي|لقيلِي|ابحث|أبحث|اريد ابحث|أريد أبحث/i
+        .test(value);
+
+    return (
+      explicitPath ||
+      (
+        asksToFind &&
+        (
+          looksLikeCosmeticQuestion(
+            value
+          ) ||
+          /\b(asset|mesh|texture|material|icon|fortnite file)\b|\b(asset|mesh|texture|mat[eé]riau)\b|ميش|تكستشر|ماتيريال|ملفات فورتنايت/i
+            .test(value)
+        )
+      )
     );
   }
 
@@ -4584,11 +4646,15 @@
           " "
         )
         .replace(
-          /\b(give|me|the|a|an|for|of|please|find|search|what|whats|what's|is|path|asset|mesh|static|skeletal|fortnite|files?|current|latest|new|describe)\b/gi,
+          /\b(give|me|the|a|an|for|of|please|pls|find|search|show|lookup|locate|get|where|what|whats|what's|is|path|asset|mesh|static|skeletal|fortnite|files?|current|latest|new|describe|skin|outfit|cosmetic|character|emote|back\s*bling|pickaxe|glider|wrap|music\s*pack)\b/gi,
           " "
         )
         .replace(
-          /(انطيني|اعطيني|اريد|أريد|شنو|شسم|مسار|باث|مال|ملفات|فورتنايت|الميش|ميش)/g,
+          /\b(trouve|chercher|cherche|recherche|montre|localise|donne|moi|le|la|les|un|une|pour|de|du|des|chemin|fichier|fortnite|tenue|cosm[eé]tique|personnage|emote|émote|pioche|planeur)\b/gi,
+          " "
+        )
+        .replace(
+          /(انطيني|اعطيني|أعطيني|اريد|أريد|شوفلي|شوفيلي|دورلي|دوريلي|طلعلي|طلعيلي|جيبلي|جيبيلي|لكيلي|لقيلِي|ابحث|أبحث|شنو|شسم|مسار|باث|مال|ملفات|فورتنايت|الميش|ميش|سكن|سكين|كوزمتك|كوسمتك|شخصية|ايموت|إيموت|رقصة|باك\s*بلنغ|بيكاكس|مظلة)/g,
           " "
         )
         .replace(
