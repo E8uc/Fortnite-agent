@@ -4673,6 +4673,786 @@
     );
   }
 
+  function normalizedLookupText(
+    value
+  ) {
+    return String(value || "")
+      .normalize("NFKD")
+      .replace(
+        /[\u0300-\u036f]/g,
+        ""
+      )
+      .toLowerCase()
+      .replace(
+        /[^a-z0-9_\u0600-\u06ff]+/g,
+        " "
+      )
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .trim();
+  }
+
+  function cosmeticLookupQueries(
+    query
+  ) {
+    const clean =
+      String(query || "")
+        .replace(
+          /\s+/g,
+          " "
+        )
+        .trim()
+        .slice(
+          0,
+          100
+        );
+
+    if (!clean) {
+      return [];
+    }
+
+    const tokens =
+      clean
+        .split(" ")
+        .filter(Boolean);
+
+    const candidates = [
+      clean
+    ];
+
+    if (tokens.length >= 3) {
+      candidates.push(
+        tokens
+          .slice(0, 3)
+          .join(" ")
+      );
+
+      candidates.push(
+        tokens
+          .slice(-3)
+          .join(" ")
+      );
+    }
+
+    if (tokens.length >= 2) {
+      candidates.push(
+        tokens
+          .slice(0, 2)
+          .join(" ")
+      );
+
+      candidates.push(
+        tokens
+          .slice(-2)
+          .join(" ")
+      );
+    }
+
+    return [
+      ...new Set(
+        candidates
+          .map(
+            (item) =>
+              item.trim()
+          )
+          .filter(
+            (item) =>
+              item.length >= 2
+          )
+      )
+    ].slice(0, 5);
+  }
+
+  function cosmeticAssetName(
+    value
+  ) {
+    let text =
+      String(value || "")
+        .replace(/\\/g, "/")
+        .trim();
+
+    if (!text) {
+      return "";
+    }
+
+    const wrapped =
+      text.match(
+        /^(?:[A-Za-z0-9_]+)?['"]([^'"]+)['"]$/
+      );
+
+    if (wrapped?.[1]) {
+      text =
+        wrapped[1];
+    }
+
+    text =
+      text
+        .split("?")[0]
+        .split("#")[0];
+
+    const slash =
+      text.lastIndexOf("/");
+
+    let file =
+      slash >= 0
+        ? text.slice(
+            slash + 1
+          )
+        : text;
+
+    file =
+      file.replace(
+        /\.(uasset|uexp|ubulk|umap)$/i,
+        ""
+      );
+
+    const dot =
+      file.indexOf(".");
+
+    if (dot >= 0) {
+      file =
+        file.slice(
+          0,
+          dot
+        );
+    }
+
+    return file
+      .trim()
+      .slice(
+        0,
+        180
+      );
+  }
+
+  function lookupTokens(
+    value
+  ) {
+    return normalizedLookupText(
+      value
+    )
+      .split(" ")
+      .filter(
+        (token) =>
+          token.length >= 2
+      );
+  }
+
+  function scoreCosmeticCandidate(
+    item,
+    query
+  ) {
+    const wanted =
+      normalizedLookupText(
+        query
+      );
+
+    const name =
+      normalizedLookupText(
+        item?.name
+      );
+
+    const id =
+      normalizedLookupText(
+        item?.id
+      );
+
+    const path =
+      normalizedLookupText(
+        item?.path
+      );
+
+    const combined =
+      [name, id, path]
+        .filter(Boolean)
+        .join(" ");
+
+    const tokens =
+      lookupTokens(
+        query
+      );
+
+    let score = 0;
+
+    if (
+      wanted &&
+      name === wanted
+    ) {
+      score += 5000;
+    }
+
+    if (
+      wanted &&
+      id === wanted
+    ) {
+      score += 4500;
+    }
+
+    if (
+      wanted &&
+      name.includes(
+        wanted
+      )
+    ) {
+      score += 1800;
+    }
+
+    if (
+      wanted &&
+      path.includes(
+        wanted
+      )
+    ) {
+      score += 900;
+    }
+
+    let matchedTokens = 0;
+
+    for (
+      const token of
+      tokens
+    ) {
+      if (
+        combined.includes(
+          token
+        )
+      ) {
+        matchedTokens++;
+        score += 220;
+      }
+    }
+
+    if (
+      tokens.length >= 2 &&
+      matchedTokens ===
+        tokens.length
+    ) {
+      score += 2200;
+    }
+
+    if (item?.path) {
+      score += 100;
+    }
+
+    return score;
+  }
+
+  async function fetchPublicJsonBounded(
+    url,
+    signal,
+    maxBytes =
+      8 * 1024 * 1024
+  ) {
+    const controller =
+      new AbortController();
+
+    const abortFromExternal =
+      () => {
+        try {
+          controller.abort(
+            signal?.reason ||
+            "chat-search-cancelled"
+          );
+        } catch {}
+      };
+
+    if (signal?.aborted) {
+      abortFromExternal();
+    } else {
+      signal
+        ?.addEventListener?.(
+          "abort",
+          abortFromExternal,
+          {
+            once: true
+          }
+        );
+    }
+
+    const timer =
+      setTimeout(
+        () => {
+          try {
+            controller.abort(
+              "cosmetic-search-timeout"
+            );
+          } catch {}
+        },
+        14_000
+      );
+
+    try {
+      const response =
+        await fetch(
+          url,
+          {
+            cache:
+              "force-cache",
+            signal:
+              controller.signal
+          }
+        );
+
+      if (!response.ok) {
+        throw new Error(
+          `Cosmetic search returned ${response.status}.`
+        );
+      }
+
+      const declared =
+        Number(
+          response.headers.get(
+            "content-length"
+          ) || 0
+        );
+
+      if (
+        declared > 0 &&
+        declared > maxBytes
+      ) {
+        try {
+          await response.body
+            ?.cancel();
+        } catch {}
+
+        throw new Error(
+          "Cosmetic search response is too large."
+        );
+      }
+
+      const text =
+        await response.text();
+
+      if (
+        new TextEncoder()
+          .encode(text)
+          .byteLength >
+        maxBytes
+      ) {
+        throw new Error(
+          "Cosmetic search response is too large."
+        );
+      }
+
+      return JSON.parse(text);
+    } finally {
+      clearTimeout(timer);
+
+      signal
+        ?.removeEventListener?.(
+          "abort",
+          abortFromExternal
+        );
+    }
+  }
+
+  async function fetchCosmeticCandidates(
+    query,
+    signal
+  ) {
+    const looksLikeId =
+      /^(?:CID_|EID_|BID_|Pickaxe_|Glider_|Wrap_|MusicPack_|LSID_|Emoji_|Spray_|SparksAura_)/i
+        .test(
+          String(query || "")
+        );
+
+    const params =
+      new URLSearchParams();
+
+    params.set(
+      looksLikeId
+        ? "id"
+        : "name",
+      String(query || "")
+        .slice(
+          0,
+          100
+        )
+    );
+
+    params.set(
+      "matchMethod",
+      "contains"
+    );
+
+    params.set(
+      "language",
+      "en"
+    );
+
+    const payload =
+      await fetchPublicJsonBounded(
+        `https://fortnite-api.com/v2/cosmetics/br/search/all?${params.toString()}`,
+        signal
+      );
+
+    const rows =
+      Array.isArray(
+        payload?.data
+      )
+        ? payload.data
+        : [];
+
+    return rows
+      .filter(
+        (item) =>
+          typeof item?.path ===
+            "string" &&
+          item.path.trim()
+      )
+      .sort(
+        (a, b) =>
+          scoreCosmeticCandidate(
+            b,
+            query
+          ) -
+          scoreCosmeticCandidate(
+            a,
+            query
+          )
+      )
+      .slice(0, 12);
+  }
+
+  async function verifyCosmeticCandidate(
+    item,
+    query,
+    signal
+  ) {
+    const assetName =
+      cosmeticAssetName(
+        item?.path
+      );
+
+    if (!assetName) {
+      return null;
+    }
+
+    const result =
+      await searchDatabase(
+        "all",
+        assetName,
+        signal
+      );
+
+    const expected =
+      assetName.toLowerCase();
+
+    const verified =
+      (
+        Array.isArray(
+          result?.results
+        )
+          ? result.results
+          : []
+      )
+        .find(
+          (row) =>
+            cosmeticAssetName(
+              row?.path
+            )
+              .toLowerCase() ===
+            expected
+        );
+
+    if (!verified?.path) {
+      return null;
+    }
+
+    return {
+      path:
+        String(
+          verified.path
+        ).slice(
+          0,
+          1000
+        ),
+
+      match:
+        verified.match ||
+        "verified",
+
+      source:
+        "cosmetic+database",
+
+      name:
+        String(
+          item?.name || ""
+        ).slice(
+          0,
+          120
+        ),
+
+      id:
+        String(
+          item?.id || ""
+        ).slice(
+          0,
+          120
+        ),
+
+      type:
+        String(
+          item?.type
+            ?.displayValue ||
+          item?.type?.value ||
+          item?.backendType ||
+          "Cosmetic"
+        ).slice(
+          0,
+          80
+        ),
+
+      score:
+        scoreCosmeticCandidate(
+          item,
+          query
+        )
+    };
+  }
+
+  async function resolveCosmeticPaths(
+    query,
+    signal
+  ) {
+    const output = [];
+    const seen =
+      new Set();
+
+    for (
+      const lookup of
+      cosmeticLookupQueries(
+        query
+      )
+    ) {
+      let candidates = [];
+
+      try {
+        candidates =
+          await fetchCosmeticCandidates(
+            lookup,
+            signal
+          );
+      } catch (error) {
+        if (
+          signal?.aborted ||
+          error?.name ===
+            "AbortError"
+        ) {
+          throw error;
+        }
+
+        continue;
+      }
+
+      for (
+        const item of
+        candidates
+      ) {
+        const verified =
+          await verifyCosmeticCandidate(
+            item,
+            query,
+            signal
+          );
+
+        if (!verified) {
+          continue;
+        }
+
+        const key =
+          verified.path
+            .toLowerCase();
+
+        if (seen.has(key)) {
+          continue;
+        }
+
+        seen.add(key);
+        output.push(
+          verified
+        );
+
+        if (
+          output.length >= 4
+        ) {
+          break;
+        }
+      }
+
+      if (
+        output.length >= 1
+      ) {
+        break;
+      }
+    }
+
+    return output
+      .sort(
+        (a, b) =>
+          b.score -
+          a.score
+      )
+      .slice(0, 4);
+  }
+
+  function chatObjectPath(
+    raw
+  ) {
+    const nova =
+      window.NovaSparx
+        ?.objectPath?.(
+          raw
+        );
+
+    if (nova) {
+      return nova;
+    }
+
+    let path =
+      String(raw || "")
+        .trim();
+
+    const wrapped =
+      path.match(
+        /^(?:[A-Za-z0-9_]+)?['"]([^'"]+)['"]$/
+      );
+
+    if (wrapped?.[1]) {
+      path =
+        wrapped[1];
+    }
+
+    path =
+      path.replace(
+        /\\/g,
+        "/"
+      );
+
+    path =
+      path.replace(
+        /^\.?\//,
+        ""
+      );
+
+    path =
+      path.replace(
+        /\.(uasset|uexp|ubulk)$/i,
+        ""
+      );
+
+    const objectDot =
+      path.lastIndexOf(".");
+
+    if (
+      objectDot >
+      path.lastIndexOf("/")
+    ) {
+      path =
+        path.slice(
+          0,
+          objectDot
+        );
+    }
+
+    if (
+      /^FortniteGame\/Content\//i
+        .test(path)
+    ) {
+      path =
+        "/Game/" +
+        path.slice(
+          "FortniteGame/Content/"
+            .length
+        );
+    } else if (
+      /^Engine\/Content\//i
+        .test(path)
+    ) {
+      path =
+        "/Engine/" +
+        path.slice(
+          "Engine/Content/"
+            .length
+        );
+    } else {
+      const plugin =
+        path.match(
+          /^(?:FortniteGame\/)?Plugins\/(?:GameFeatures\/)?([^/]+)\/Content\/(.+)$/i
+        );
+
+      if (plugin) {
+        path =
+          `/${plugin[1]}/${plugin[2]}`;
+      } else {
+        const mount =
+          path.match(
+            /^([^/]+)\/Content\/(.+)$/i
+          );
+
+        if (
+          mount &&
+          mount[1]
+            .toLowerCase() !==
+            "fortnitegame"
+        ) {
+          path =
+            `/${mount[1]}/${mount[2]}`;
+        } else if (
+          !path.startsWith("/")
+        ) {
+          path =
+            "/" + path;
+        }
+      }
+    }
+
+    const name =
+      path.slice(
+        path.lastIndexOf("/") +
+        1
+      );
+
+    return name
+      ? `${path}.${name}`
+      : path;
+  }
+
+  function pathReplyLanguage(
+    text
+  ) {
+    const value =
+      String(text || "");
+
+    if (
+      /[\u0600-\u06ff]/
+        .test(value)
+    ) {
+      return "ar";
+    }
+
+    if (
+      /\b(cherche|trouve|chemin|tenue|cosm[eé]tique|personnage|montre|recherche)\b/i
+        .test(value)
+    ) {
+      return "fr";
+    }
+
+    const selected =
+      window.FortniteI18n
+        ?.getLanguage?.();
+
+    return [
+      "en",
+      "fr",
+      "ar"
+    ].includes(selected)
+      ? selected
+      : "en";
+  }
+
   // ---------------------------------------------------------------------------
   // Guest slow mode
   // ---------------------------------------------------------------------------
