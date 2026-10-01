@@ -3459,6 +3459,14 @@
       clean
     ];
 
+    if (tokens.length >= 4) {
+      candidates.push(
+        tokens
+          .slice(0, 3)
+          .join(" ")
+      );
+    }
+
     if (tokens.length >= 3) {
       candidates.push(
         tokens
