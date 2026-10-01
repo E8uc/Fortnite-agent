@@ -274,6 +274,23 @@ a:focus-visible{
   overflow-wrap:anywhere;
 }
 
+.assistant-content.e8-streaming-response::after{
+  content:"";
+  display:inline-block;
+  width:1.5px;
+  height:.95em;
+  margin-inline-start:3px;
+  border-radius:2px;
+  background:currentColor;
+  vertical-align:-.08em;
+  animation:e8-response-caret .82s steps(1,end) infinite;
+}
+
+@keyframes e8-response-caret{
+  0%,48%{opacity:1}
+  49%,100%{opacity:.16}
+}
+
 .e8-thinking{
   display:inline-block;
   margin:0!important;
@@ -309,6 +326,11 @@ a:focus-visible{
   .e8-thinking{
     animation:none;
     background-position:50% 0;
+  }
+
+  .assistant-content.e8-streaming-response::after{
+    animation:none;
+    opacity:.55;
   }
 }
 

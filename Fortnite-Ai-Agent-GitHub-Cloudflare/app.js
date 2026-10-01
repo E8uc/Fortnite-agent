@@ -2113,6 +2113,12 @@
     body.className =
       "assistant-content";
 
+    if (message.streaming) {
+      body.classList.add(
+        "e8-streaming-response"
+      );
+    }
+
     renderMarkdown(
       body,
       message.content
@@ -2122,6 +2128,14 @@
       name,
       body
     );
+
+    if (message.streaming) {
+      outer.appendChild(
+        wrap
+      );
+
+      return outer;
+    }
 
     const actions =
       document.createElement(
@@ -2895,6 +2909,289 @@
     }
   }
 
+  function revealBatchSize(
+    length
+  ) {
+    if (length <= 420) return 1;
+    if (length <= 1200) return 2;
+    if (length <= 3000) return 4;
+    if (length <= 6500) return 7;
+    return 12;
+  }
+
+  function revealUnits(
+    text
+  ) {
+    return (
+      String(text || "")
+        .match(/\S+\s*/g) ||
+      [String(text || "")]
+    );
+  }
+
+  function chatNearBottom() {
+    if (!els.chat) {
+      return true;
+    }
+
+    return (
+      els.chat.scrollHeight -
+        els.chat.scrollTop -
+        els.chat.clientHeight <
+      140
+    );
+  }
+
+  function waitForRevealStep(
+    signal,
+    delay = 24
+  ) {
+    if (signal?.aborted) {
+      return Promise.reject(
+        chatAbortError(
+          signal
+        )
+      );
+    }
+
+    return new Promise(
+      (
+        resolve,
+        reject
+      ) => {
+        let settled = false;
+
+        const finish =
+          (callback) => {
+            if (settled) {
+              return;
+            }
+
+            settled = true;
+
+            signal
+              ?.removeEventListener?.(
+                "abort",
+                onAbort
+              );
+
+            callback();
+          };
+
+        const timer =
+          setTimeout(
+            () =>
+              finish(resolve),
+            delay
+          );
+
+        const onAbort =
+          () => {
+            clearTimeout(
+              timer
+            );
+
+            finish(
+              () =>
+                reject(
+                  chatAbortError(
+                    signal
+                  )
+                )
+            );
+          };
+
+        signal
+          ?.addEventListener?.(
+            "abort",
+            onAbort,
+            {
+              once: true
+            }
+          );
+      }
+    );
+  }
+
+  function updateStreamingMessage(
+    messageIndex,
+    content
+  ) {
+    const article =
+      els.messages
+        ?.querySelector(
+          `[data-message-index="${messageIndex}"]`
+        );
+
+    const body =
+      article
+        ?.querySelector(
+          ".assistant-content"
+        );
+
+    if (!body) {
+      return;
+    }
+
+    const stick =
+      chatNearBottom();
+
+    renderMarkdown(
+      body,
+      content
+    );
+
+    body.classList.add(
+      "e8-streaming-response"
+    );
+
+    if (stick) {
+      scrollToBottom();
+    }
+  }
+
+  async function revealAssistantReply(
+    chat,
+    reply,
+    signal,
+    runId,
+    controller
+  ) {
+    const fullText =
+      String(
+        reply || ""
+      ).trim() ||
+      "No response.";
+
+    removeTypingIndicator();
+
+    const message = {
+      role:
+        "assistant",
+      content: "",
+      streaming: true
+    };
+
+    chat.messages.push(
+      message
+    );
+
+    const messageIndex =
+      chat.messages.length -
+      1;
+
+    renderMessages();
+
+    const reducedMotion =
+      window.matchMedia
+        ?.("(prefers-reduced-motion: reduce)")
+        ?.matches === true;
+
+    if (reducedMotion) {
+      message.content =
+        fullText;
+
+      message.streaming =
+        false;
+
+      renderMessages();
+
+      return message;
+    }
+
+    const units =
+      revealUnits(
+        fullText
+      );
+
+    const batchSize =
+      revealBatchSize(
+        fullText.length
+      );
+
+    let cursor = 0;
+
+    try {
+      while (
+        cursor <
+        units.length
+      ) {
+        throwIfChatStale(
+          runId,
+          controller
+        );
+
+        if (signal?.aborted) {
+          throw chatAbortError(
+            signal
+          );
+        }
+
+        cursor =
+          Math.min(
+            units.length,
+            cursor +
+              batchSize
+          );
+
+        message.content =
+          units
+            .slice(
+              0,
+              cursor
+            )
+            .join("");
+
+        updateStreamingMessage(
+          messageIndex,
+          message.content
+        );
+
+        if (
+          cursor <
+          units.length
+        ) {
+          await waitForRevealStep(
+            signal
+          );
+        }
+      }
+    } catch (error) {
+      if (
+        message.content
+          .trim()
+      ) {
+        message.streaming =
+          false;
+
+        chat.updatedAt =
+          Date.now();
+
+        saveChats();
+        renderMessages();
+      } else {
+        chat.messages.splice(
+          messageIndex,
+          1
+        );
+
+        renderMessages();
+      }
+
+      throw error;
+    }
+
+    message.content =
+      fullText;
+
+    message.streaming =
+      false;
+
+    renderMessages();
+
+    return message;
+  }
+
   async function sendTextMessage(
     text,
     options = {}
@@ -3027,9 +3324,10 @@
         plugin?.id ===
         "path"
       ) {
-        await runLocalPathCommand(
+        await runPathSearchGuide(
           chat,
-          plugin,
+          plugin.query ||
+            clean,
           signal,
           runId,
           controller
@@ -3045,7 +3343,7 @@
           clean
         )
       ) {
-        await runNaturalPathLookup(
+        await runPathSearchGuide(
           chat,
           clean,
           signal,
@@ -3094,17 +3392,13 @@
           controller
         );
 
-        removeTypingIndicator();
-
-        chat.messages.push({
-          role: "assistant",
-          content:
-            String(
-              response.reply ||
-              ""
-            ).trim() ||
-            "No response."
-        });
+        await revealAssistantReply(
+          chat,
+          response.reply,
+          signal,
+          runId,
+          controller
+        );
       }
 
       throwIfChatStale(
@@ -3170,59 +3464,6 @@
     }
   }
 
-  async function runLocalPathCommand(
-    chat,
-    plugin,
-    signal,
-    runId,
-    controller
-  ) {
-    if (!plugin.query) {
-      throwIfChatStale(
-        runId,
-        controller
-      );
-      chat.messages.push({
-        role: "assistant",
-        content:
-          `Type what u want to search after \`${plugin.command}\`.`
-      });
-
-      return;
-    }
-
-    const result =
-      await searchDatabase(
-        "all",
-        plugin.query,
-        signal
-      );
-
-    throwIfChatStale(
-      runId,
-      controller
-    );
-
-    const reply =
-      formatDatabaseResult(
-        plugin,
-        result
-      );
-
-    const message = {
-      role: "assistant",
-      content: reply.content
-    };
-
-    if (reply.attachment) {
-      message.attachment =
-        reply.attachment;
-    }
-
-    chat.messages.push(
-      message
-    );
-  }
 
   async function requestChat(
     chat,
@@ -3432,6 +3673,14 @@
     userText,
     signal = null
   ) {
+    if (
+      isDirectPathLookupRequest(
+        userText
+      )
+    ) {
+      return null;
+    }
+
     if (
       !looksLikeAssetQuestion(
         userText
@@ -4691,789 +4940,7 @@
     );
   }
 
-  function normalizedLookupText(
-    value
-  ) {
-    return String(value || "")
-      .normalize("NFKD")
-      .replace(
-        /[\u0300-\u036f]/g,
-        ""
-      )
-      .toLowerCase()
-      .replace(
-        /[^a-z0-9_\u0600-\u06ff]+/g,
-        " "
-      )
-      .replace(
-        /\s+/g,
-        " "
-      )
-      .trim();
-  }
-
-  function cosmeticLookupQueries(
-    query
-  ) {
-    const clean =
-      String(query || "")
-        .replace(
-          /\s+/g,
-          " "
-        )
-        .trim()
-        .slice(
-          0,
-          100
-        );
-
-    if (!clean) {
-      return [];
-    }
-
-    const tokens =
-      clean
-        .split(" ")
-        .filter(Boolean);
-
-    const candidates = [
-      clean
-    ];
-
-    if (tokens.length >= 3) {
-      candidates.push(
-        tokens
-          .slice(0, 3)
-          .join(" ")
-      );
-
-      candidates.push(
-        tokens
-          .slice(-3)
-          .join(" ")
-      );
-    }
-
-    if (tokens.length >= 2) {
-      candidates.push(
-        tokens
-          .slice(0, 2)
-          .join(" ")
-      );
-
-      candidates.push(
-        tokens
-          .slice(-2)
-          .join(" ")
-      );
-    }
-
-    return [
-      ...new Set(
-        candidates
-          .map(
-            (item) =>
-              item.trim()
-          )
-          .filter(
-            (item) =>
-              item.length >= 2
-          )
-      )
-    ].slice(0, 5);
-  }
-
-  function cosmeticAssetName(
-    value
-  ) {
-    let text =
-      String(value || "")
-        .replace(/\\/g, "/")
-        .trim();
-
-    if (!text) {
-      return "";
-    }
-
-    const wrapped =
-      text.match(
-        /^(?:[A-Za-z0-9_]+)?['"]([^'"]+)['"]$/
-      );
-
-    if (wrapped?.[1]) {
-      text =
-        wrapped[1];
-    }
-
-    text =
-      text
-        .split("?")[0]
-        .split("#")[0];
-
-    const slash =
-      text.lastIndexOf("/");
-
-    let file =
-      slash >= 0
-        ? text.slice(
-            slash + 1
-          )
-        : text;
-
-    file =
-      file.replace(
-        /\.(uasset|uexp|ubulk|umap)$/i,
-        ""
-      );
-
-    const dot =
-      file.indexOf(".");
-
-    if (dot >= 0) {
-      file =
-        file.slice(
-          0,
-          dot
-        );
-    }
-
-    return file
-      .trim()
-      .slice(
-        0,
-        180
-      );
-  }
-
-  function lookupTokens(
-    value
-  ) {
-    return normalizedLookupText(
-      value
-    )
-      .split(" ")
-      .filter(
-        (token) =>
-          token.length >= 2
-      );
-  }
-
-  function scoreCosmeticCandidate(
-    item,
-    query
-  ) {
-    const wanted =
-      normalizedLookupText(
-        query
-      );
-
-    const name =
-      normalizedLookupText(
-        item?.name
-      );
-
-    const id =
-      normalizedLookupText(
-        item?.id
-      );
-
-    const path =
-      normalizedLookupText(
-        item?.path
-      );
-
-    const combined =
-      [name, id, path]
-        .filter(Boolean)
-        .join(" ");
-
-    const tokens =
-      lookupTokens(
-        query
-      );
-
-    let score = 0;
-
-    if (
-      wanted &&
-      name === wanted
-    ) {
-      score += 5000;
-    }
-
-    if (
-      wanted &&
-      id === wanted
-    ) {
-      score += 4500;
-    }
-
-    if (
-      wanted &&
-      name.includes(
-        wanted
-      )
-    ) {
-      score += 1800;
-    }
-
-    if (
-      wanted &&
-      path.includes(
-        wanted
-      )
-    ) {
-      score += 900;
-    }
-
-    let matchedTokens = 0;
-
-    for (
-      const token of
-      tokens
-    ) {
-      if (
-        combined.includes(
-          token
-        )
-      ) {
-        matchedTokens++;
-        score += 220;
-      }
-    }
-
-    if (
-      tokens.length >= 2 &&
-      matchedTokens ===
-        tokens.length
-    ) {
-      score += 2200;
-    }
-
-    if (item?.path) {
-      score += 100;
-    }
-
-    return score;
-  }
-
-  async function fetchPublicJsonBounded(
-    url,
-    signal,
-    maxBytes =
-      8 * 1024 * 1024
-  ) {
-    const controller =
-      new AbortController();
-
-    const abortFromExternal =
-      () => {
-        try {
-          controller.abort(
-            signal?.reason ||
-            "chat-search-cancelled"
-          );
-        } catch {}
-      };
-
-    if (signal?.aborted) {
-      abortFromExternal();
-    } else {
-      signal
-        ?.addEventListener?.(
-          "abort",
-          abortFromExternal,
-          {
-            once: true
-          }
-        );
-    }
-
-    const timer =
-      setTimeout(
-        () => {
-          try {
-            controller.abort(
-              "cosmetic-search-timeout"
-            );
-          } catch {}
-        },
-        14_000
-      );
-
-    try {
-      const response =
-        await fetch(
-          url,
-          {
-            cache:
-              "force-cache",
-            signal:
-              controller.signal
-          }
-        );
-
-      if (!response.ok) {
-        throw new Error(
-          `Cosmetic search returned ${response.status}.`
-        );
-      }
-
-      const declared =
-        Number(
-          response.headers.get(
-            "content-length"
-          ) || 0
-        );
-
-      if (
-        declared > 0 &&
-        declared > maxBytes
-      ) {
-        try {
-          await response.body
-            ?.cancel();
-        } catch {}
-
-        throw new Error(
-          "Cosmetic search response is too large."
-        );
-      }
-
-      const text =
-        await response.text();
-
-      if (
-        new TextEncoder()
-          .encode(text)
-          .byteLength >
-        maxBytes
-      ) {
-        throw new Error(
-          "Cosmetic search response is too large."
-        );
-      }
-
-      return JSON.parse(text);
-    } finally {
-      clearTimeout(timer);
-
-      signal
-        ?.removeEventListener?.(
-          "abort",
-          abortFromExternal
-        );
-    }
-  }
-
-  async function fetchCosmeticCandidates(
-    query,
-    signal
-  ) {
-    const looksLikeId =
-      /^(?:CID_|EID_|BID_|Pickaxe_|Glider_|Wrap_|MusicPack_|LSID_|Emoji_|Spray_|SparksAura_)/i
-        .test(
-          String(query || "")
-        );
-
-    const params =
-      new URLSearchParams();
-
-    params.set(
-      looksLikeId
-        ? "id"
-        : "name",
-      String(query || "")
-        .slice(
-          0,
-          100
-        )
-    );
-
-    params.set(
-      "matchMethod",
-      "contains"
-    );
-
-    params.set(
-      "language",
-      "en"
-    );
-
-    const payload =
-      await fetchPublicJsonBounded(
-        `https://fortnite-api.com/v2/cosmetics/br/search/all?${params.toString()}`,
-        signal
-      );
-
-    const rows =
-      Array.isArray(
-        payload?.data
-      )
-        ? payload.data
-        : [];
-
-    return rows
-      .filter(
-        (item) =>
-          (
-            typeof item?.id ===
-              "string" &&
-            item.id.trim()
-          ) ||
-          (
-            typeof item?.path ===
-              "string" &&
-            item.path.trim()
-          )
-      )
-      .sort(
-        (a, b) =>
-          scoreCosmeticCandidate(
-            b,
-            query
-          ) -
-          scoreCosmeticCandidate(
-            a,
-            query
-          )
-      )
-      .slice(0, 12);
-  }
-
-  function cosmeticCandidateAssetName(
-    item
-  ) {
-    const fromPath =
-      cosmeticAssetName(
-        item?.path
-      );
-
-    if (fromPath) {
-      return fromPath;
-    }
-
-    const id =
-      String(
-        item?.id || ""
-      )
-        .trim()
-        .slice(
-          0,
-          180
-        );
-
-    return /^[A-Za-z0-9_]+$/
-      .test(id)
-        ? id
-        : "";
-  }
-
-  async function verifyCosmeticCandidate(
-    item,
-    query,
-    signal
-  ) {
-    const assetName =
-      cosmeticCandidateAssetName(
-        item
-      );
-
-    if (!assetName) {
-      return null;
-    }
-
-    const result =
-      await searchDatabase(
-        "all",
-        assetName,
-        signal
-      );
-
-    const expected =
-      assetName.toLowerCase();
-
-    const verified =
-      (
-        Array.isArray(
-          result?.results
-        )
-          ? result.results
-          : []
-      )
-        .find(
-          (row) =>
-            cosmeticAssetName(
-              row?.path
-            )
-              .toLowerCase() ===
-            expected
-        );
-
-    if (!verified?.path) {
-      return null;
-    }
-
-    return {
-      path:
-        String(
-          verified.path
-        ).slice(
-          0,
-          1000
-        ),
-
-      match:
-        verified.match ||
-        "verified",
-
-      source:
-        "cosmetic+database",
-
-      name:
-        String(
-          item?.name || ""
-        ).slice(
-          0,
-          120
-        ),
-
-      id:
-        String(
-          item?.id || ""
-        ).slice(
-          0,
-          120
-        ),
-
-      type:
-        String(
-          item?.type
-            ?.displayValue ||
-          item?.type?.value ||
-          item?.backendType ||
-          "Cosmetic"
-        ).slice(
-          0,
-          80
-        ),
-
-      score:
-        scoreCosmeticCandidate(
-          item,
-          query
-        )
-    };
-  }
-
-  async function resolveCosmeticPaths(
-    query,
-    signal
-  ) {
-    const output = [];
-    const seen =
-      new Set();
-
-    for (
-      const lookup of
-      cosmeticLookupQueries(
-        query
-      )
-    ) {
-      let candidates = [];
-
-      try {
-        candidates =
-          await fetchCosmeticCandidates(
-            lookup,
-            signal
-          );
-      } catch (error) {
-        if (
-          signal?.aborted ||
-          error?.name ===
-            "AbortError"
-        ) {
-          throw error;
-        }
-
-        continue;
-      }
-
-      for (
-        const item of
-        candidates
-      ) {
-        const verified =
-          await verifyCosmeticCandidate(
-            item,
-            query,
-            signal
-          );
-
-        if (!verified) {
-          continue;
-        }
-
-        const key =
-          verified.path
-            .toLowerCase();
-
-        if (seen.has(key)) {
-          continue;
-        }
-
-        seen.add(key);
-        output.push(
-          verified
-        );
-
-        if (
-          output.length >= 4
-        ) {
-          break;
-        }
-      }
-
-      if (
-        output.length >= 1
-      ) {
-        break;
-      }
-    }
-
-    return output
-      .sort(
-        (a, b) =>
-          b.score -
-          a.score
-      )
-      .slice(0, 4);
-  }
-
-  function chatObjectPath(
-    raw
-  ) {
-    const nova =
-      window.NovaSparx
-        ?.objectPath?.(
-          raw
-        );
-
-    if (nova) {
-      return nova;
-    }
-
-    let path =
-      String(raw || "")
-        .trim();
-
-    const wrapped =
-      path.match(
-        /^(?:[A-Za-z0-9_]+)?['"]([^'"]+)['"]$/
-      );
-
-    if (wrapped?.[1]) {
-      path =
-        wrapped[1];
-    }
-
-    path =
-      path.replace(
-        /\\/g,
-        "/"
-      );
-
-    path =
-      path.replace(
-        /^\.?\//,
-        ""
-      );
-
-    path =
-      path.replace(
-        /\.(uasset|uexp|ubulk)$/i,
-        ""
-      );
-
-    const objectDot =
-      path.lastIndexOf(".");
-
-    if (
-      objectDot >
-      path.lastIndexOf("/")
-    ) {
-      path =
-        path.slice(
-          0,
-          objectDot
-        );
-    }
-
-    if (
-      /^FortniteGame\/Content\//i
-        .test(path)
-    ) {
-      path =
-        "/Game/" +
-        path.slice(
-          "FortniteGame/Content/"
-            .length
-        );
-    } else if (
-      /^Engine\/Content\//i
-        .test(path)
-    ) {
-      path =
-        "/Engine/" +
-        path.slice(
-          "Engine/Content/"
-            .length
-        );
-    } else {
-      const plugin =
-        path.match(
-          /^(?:FortniteGame\/)?Plugins\/(?:GameFeatures\/)?([^/]+)\/Content\/(.+)$/i
-        );
-
-      if (plugin) {
-        path =
-          `/${plugin[1]}/${plugin[2]}`;
-      } else {
-        const mount =
-          path.match(
-            /^([^/]+)\/Content\/(.+)$/i
-          );
-
-        if (
-          mount &&
-          mount[1]
-            .toLowerCase() !==
-            "fortnitegame"
-        ) {
-          path =
-            `/${mount[1]}/${mount[2]}`;
-        } else if (
-          !path.startsWith("/")
-        ) {
-          path =
-            "/" + path;
-        }
-      }
-    }
-
-    const name =
-      path.slice(
-        path.lastIndexOf("/") +
-        1
-      );
-
-    return name
-      ? `${path}.${name}`
-      : path;
-  }
-
-  function pathReplyLanguage(
+  function pathGuideLanguage(
     text
   ) {
     const value =
@@ -5506,406 +4973,45 @@
       : "en";
   }
 
-  function dedupePathRows(
-    rows,
-    limit = 8
+  function pathSearchGuideText(
+    userText
   ) {
-    const output = [];
-    const seen =
-      new Set();
+    const language =
+      pathGuideLanguage(
+        userText
+      );
 
-    for (
-      const row of
-      Array.isArray(rows)
-        ? rows
-        : []
-    ) {
-      const path =
-        String(
-          row?.path || ""
-        )
-          .trim();
-
-      if (!path) {
-        continue;
-      }
-
-      const key =
-        path.toLowerCase();
-
-      if (seen.has(key)) {
-        continue;
-      }
-
-      seen.add(key);
-
-      output.push({
-        ...row,
-        path
-      });
-
-      if (
-        output.length >=
-        limit
-      ) {
-        break;
-      }
+    if (language === "ar") {
+      return [
+        "أكيد. افتح القائمة وروح إلى **More Fortnite Tools** وبعدها **Search**.",
+        "اكتب اسم الـasset أو الـID أو جزء من المسار، وE8 Search راح يعرضلك النتائج المؤكدة من الداتابيس."
+      ].join("\n\n");
     }
 
-    return output;
+    if (language === "fr") {
+      return [
+        "Bien sûr. Ouvre le menu, puis **More Fortnite Tools** → **Search**.",
+        "Entre le nom de l’asset, son ID ou une partie du chemin pour afficher les résultats vérifiés de la base E8."
+      ].join("\n\n");
+    }
+
+    return [
+      "Sure. Open the menu, then go to **More Fortnite Tools** → **Search**.",
+      "Enter the asset name, ID, or part of the path to see verified results from the E8 database."
+    ].join("\n\n");
   }
 
-  function bestDatabasePathRows(
-    result
-  ) {
-    const rows =
-      dedupePathRows(
-        result?.results,
-        10
-      );
-
-    if (!rows.length) {
-      return {
-        rows: [],
-        confidence:
-          "none"
-      };
-    }
-
-    const exact =
-      rows.filter(
-        (row) =>
-          row.match ===
-          "exact"
-      );
-
-    if (exact.length) {
-      return {
-        rows:
-          exact.slice(
-            0,
-            5
-          ),
-        confidence:
-          exact.length === 1
-            ? "exact"
-            : "multiple"
-      };
-    }
-
-    const full =
-      rows.filter(
-        (row) =>
-          row.match ===
-          "full"
-      );
-
-    if (full.length) {
-      return {
-        rows:
-          full.slice(
-            0,
-            5
-          ),
-        confidence:
-          full.length === 1
-            ? "full"
-            : "multiple"
-      };
-    }
-
-    return {
-      rows:
-        rows.slice(
-          0,
-          5
-        ),
-      confidence:
-        rows.length === 1
-          ? "related"
-          : "multiple"
-    };
-  }
-
-  function pathLookupText(
-    language,
-    key
-  ) {
-    const copy = {
-      ar: {
-        verified:
-          "أكيد، هذا هو المسار المؤكد:",
-        closest:
-          "لكيت هذا كأقرب مسار مؤكد بالداتابيس:",
-        multiple:
-          "لكيت أكثر من مسار قريب. هاي أفضل النتائج المؤكدة:",
-        object:
-          "والمسار الجاهز:",
-        noResult:
-          "ما لكيت مسار مؤكد بهذا الاسم. جرّب الاسم أو الـID بشكل أدق.",
-        option:
-          "نتيجة"
-      },
-
-      fr: {
-        verified:
-          "Bien sûr. Voici le chemin vérifié :",
-        closest:
-          "Voici le chemin vérifié le plus proche :",
-        multiple:
-          "J’ai trouvé plusieurs chemins proches. Voici les meilleurs résultats vérifiés :",
-        object:
-          "Chemin prêt à utiliser :",
-        noResult:
-          "Je n’ai pas trouvé de chemin vérifié avec ce nom. Essaie un nom ou un ID plus précis.",
-        option:
-          "Résultat"
-      },
-
-      en: {
-        verified:
-          "Sure — here’s the verified path:",
-        closest:
-          "Here’s the closest verified path I found:",
-        multiple:
-          "I found several close paths. These are the best verified results:",
-        object:
-          "Ready-to-use object path:",
-        noResult:
-          "I couldn’t find a verified path with that name. Try a more exact name or ID.",
-        option:
-          "Result"
-      }
-    };
-
-    return (
-      copy[language]?.[key] ||
-      copy.en[key]
-    );
-  }
-
-  function formatSinglePathResult(
-    row,
-    language,
-    lead
-  ) {
-    const raw =
-      String(
-        row?.path || ""
-      ).trim();
-
-    if (!raw) {
-      return "";
-    }
-
-    const objectPath =
-      chatObjectPath(
-        raw
-      );
-
-    const fence =
-      String.fromCharCode(96)
-        .repeat(3);
-
-    const parts = [
-      lead,
-      "",
-      fence + "text",
-      raw,
-      fence
-    ];
-
-    if (
-      objectPath &&
-      objectPath !== raw
-    ) {
-      parts.push(
-        "",
-        pathLookupText(
-          language,
-          "object"
-        ),
-        "",
-        fence + "text",
-        objectPath,
-        fence
-      );
-    }
-
-    return parts.join(
-      "\n"
-    );
-  }
-
-  function formatMultiplePathResults(
-    rows,
-    language
-  ) {
-    const fence =
-      String.fromCharCode(96)
-        .repeat(3);
-
-    const parts = [
-      pathLookupText(
-        language,
-        "multiple"
-      )
-    ];
-
-    rows
-      .slice(0, 5)
-      .forEach(
-        (
-          row,
-          index
-        ) => {
-          const raw =
-            String(
-              row?.path || ""
-            ).trim();
-
-          if (!raw) return;
-
-          const objectPath =
-            chatObjectPath(
-              raw
-            );
-
-          parts.push(
-            "",
-            "**" +
-              pathLookupText(
-                language,
-                "option"
-              ) +
-              " " +
-              (index + 1) +
-              "**",
-            "",
-            fence + "text",
-            raw,
-            fence
-          );
-
-          if (
-            objectPath &&
-            objectPath !== raw
-          ) {
-            parts.push(
-              "",
-              pathLookupText(
-                language,
-                "object"
-              ),
-              "",
-              fence + "text",
-              objectPath,
-              fence
-            );
-          }
-        }
-      );
-
-    return parts.join(
-      "\n"
-    );
-  }
-
-  async function resolveNaturalPathLookup(
+  async function runPathSearchGuide(
+    chat,
     userText,
-    signal
+    signal,
+    runId,
+    controller
   ) {
-    const query =
-      coreSearchQuery(
-        userText
-      );
-
-    if (!query) {
-      return {
-        query: "",
-        rows: [],
-        confidence:
-          "none",
-        source:
-          "none"
-      };
-    }
-
-    const cosmeticRequest =
-      looksLikeCosmeticQuestion(
-        userText
-      );
-
-    if (cosmeticRequest) {
-      let cosmeticRows = [];
-
-      try {
-        cosmeticRows =
-          await resolveCosmeticPaths(
-            query,
-            signal
-          );
-      } catch (error) {
-        if (
-          signal?.aborted ||
-          error?.name ===
-            "AbortError"
-        ) {
-          throw error;
-        }
-      }
-
-      if (
-        cosmeticRows.length
-      ) {
-        const top =
-          cosmeticRows[0];
-
-        const second =
-          cosmeticRows[1];
-
-        const clearWinner =
-          !second ||
-          top.score -
-            second.score >=
-            500;
-
-        return {
-          query,
-          rows:
-            clearWinner
-              ? [top]
-              : cosmeticRows
-                  .slice(0, 4),
-          confidence:
-            clearWinner
-              ? "exact"
-              : "multiple",
-          source:
-            "cosmetic+database"
-        };
-      }
-
-      // Never fall back to an unrelated generic asset for an explicit
-      // cosmetic request. No verified cosmetic is safer than a false path.
-      return {
-        query,
-        rows: [],
-        confidence:
-          "none",
-        source:
-          "cosmetic"
-      };
-    }
-
-    const database =
-      await searchDatabase(
-        searchScope(
-          userText
-        ),
-        query,
-        signal
-      );
+    throwIfChatStale(
+      runId,
+      controller
+    );
 
     if (signal?.aborted) {
       throw chatAbortError(
@@ -5913,89 +5019,15 @@
       );
     }
 
-    const databasePick =
-      bestDatabasePathRows(
-        database
-      );
-
-    return {
-      query,
-      rows:
-        databasePick.rows,
-      confidence:
-        databasePick.confidence,
-      source:
-        "database"
-    };
-  }
-
-  async function runNaturalPathLookup(
-    chat,
-    userText,
-    signal,
-    runId,
-    controller
-  ) {
-    const result =
-      await resolveNaturalPathLookup(
-        userText,
-        signal
-      );
-
-    throwIfChatStale(
+    await revealAssistantReply(
+      chat,
+      pathSearchGuideText(
+        userText
+      ),
+      signal,
       runId,
       controller
     );
-
-    removeTypingIndicator();
-
-    const language =
-      pathReplyLanguage(
-        userText
-      );
-
-    let content;
-
-    if (!result.rows.length) {
-      content =
-        pathLookupText(
-          language,
-          "noResult"
-        );
-    } else if (
-      result.rows.length === 1
-    ) {
-      const lead =
-        result.confidence ===
-          "exact"
-          ? pathLookupText(
-              language,
-              "verified"
-            )
-          : pathLookupText(
-              language,
-              "closest"
-            );
-
-      content =
-        formatSinglePathResult(
-          result.rows[0],
-          language,
-          lead
-        );
-    } else {
-      content =
-        formatMultiplePathResults(
-          result.rows,
-          language
-        );
-    }
-
-    chat.messages.push({
-      role:
-        "assistant",
-      content
-    });
   }
 
   // ---------------------------------------------------------------------------
@@ -8047,7 +7079,7 @@
 
   window.FortniteAgent =
     Object.freeze({
-      version: "1.0.7",
+      version: "1.0.9",
 
       searchDatabase,
       describePath,
