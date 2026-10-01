@@ -237,6 +237,30 @@ assert.equal(
   "A SoundWave must stay audio even when it references a texture"
 );
 
+assert.equal(
+  result.capabilities.canListen,
+  true,
+  "Verified audio must expose Listen"
+);
+
+assert.equal(
+  result.capabilities.previewMode,
+  "audio",
+  "Verified audio must use the audio preview mode"
+);
+
+assert.equal(
+  result.capabilities.canViewImage,
+  false,
+  "Audio must never advertise View Image"
+);
+
+assert.equal(
+  result.capabilities.canView3D,
+  false,
+  "Audio must never advertise View 3D"
+);
+
 payload = [
   {
     Name:
