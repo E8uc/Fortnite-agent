@@ -185,6 +185,7 @@ jobs:
           test -s "$target/mappings/current.usmap.sha256"
 
           grep -q 'resolve-texture-relay' "$target/worker.js"
+          grep -q 'resolve-audio-relay' "$target/worker.js"
 
       - name: Setup Node 24 for Layer 8 browser proof
         uses: actions/setup-node@v4
