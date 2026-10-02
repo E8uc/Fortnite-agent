@@ -948,6 +948,172 @@ try {
         audioProbes
       )
     );
+
+    assert.equal(
+      audioProbes.length,
+      2,
+      "Expected the Train and CuddleFish SoundWave probes."
+    );
+
+    for (const probe of audioProbes) {
+      assert.equal(
+        probe.ok,
+        true,
+        probe.path +
+          " must extract through the browser SoundWave runtime."
+      );
+
+      assert.equal(
+        String(
+          probe.format ||
+          ""
+        ).toUpperCase(),
+        "RADA",
+        probe.path +
+          " changed from the current Fortnite RADA reference."
+      );
+
+      assert.ok(
+        probe.bytes >
+          0,
+        probe.path +
+          " produced no audio bytes."
+      );
+    }
+
+    const cueProbes =
+      await page.evaluate(
+        async paths => {
+          const output = [];
+
+          for (
+            const target of
+            paths
+          ) {
+            const host =
+              document.createElement(
+                "div"
+              );
+
+            document.body.append(
+              host
+            );
+
+            try {
+              const rendered =
+                await globalThis
+                  .FortnitePreview
+                  .render(
+                    host,
+                    target,
+                    null,
+                    {
+                      assetKind:
+                        "audio"
+                    }
+                  );
+
+              output.push({
+                path:
+                  target,
+                state:
+                  rendered?.state ||
+                  "",
+                format:
+                  rendered?.format ||
+                  "",
+                playable:
+                  rendered?.playable ===
+                  true,
+                audioPath:
+                  rendered?.audioPath ||
+                  "",
+                status:
+                  host.querySelector(
+                    ".mesh-image-status"
+                  )?.textContent ||
+                  "",
+                meta:
+                  host.querySelector(
+                    ".mesh-image-meta"
+                  )?.textContent ||
+                  ""
+              });
+            } catch (error) {
+              output.push({
+                path:
+                  target,
+                state:
+                  "error",
+                message:
+                  error?.message ||
+                  String(error)
+              });
+            } finally {
+              host.remove();
+            }
+          }
+
+          return output;
+        },
+        [
+          "FortniteGame/Plugins/GameFeatures/Train/Content/Sound/MS/MSS_Train_Exterior_Bells.uasset",
+          "FortniteGame/Plugins/GameFeatures/PrimalGameplay/Content/Sounds/CuddleFish/CuddleFish_Drop_Cue.uasset"
+        ]
+      );
+
+    console.log(
+      "FNAA_LINKED_AUDIO_PROBES",
+      JSON.stringify(
+        cueProbes
+      )
+    );
+
+    assert.equal(
+      cueProbes.length,
+      2
+    );
+
+    for (const probe of cueProbes) {
+      assert.notEqual(
+        probe.state,
+        "error",
+        probe.path +
+          " failed to resolve its linked SoundWave: " +
+          (
+            probe.message ||
+            probe.status ||
+            ""
+          )
+      );
+
+      assert.equal(
+        String(
+          probe.format ||
+          ""
+        ).toUpperCase(),
+        "RADA",
+        probe.path +
+          " did not reach the expected RADA SoundWave."
+      );
+
+      assert.ok(
+        probe.audioPath &&
+        probe.audioPath
+          .toLowerCase() !==
+          probe.path
+            .toLowerCase(),
+        probe.path +
+          " did not expose a resolved SoundWave path."
+      );
+
+      assert.match(
+        probe.meta,
+        /resolved audio path/i,
+        probe.path +
+          " did not identify the linked SoundWave resolution in the UI."
+      );
+    }
   }
 
   const result =
