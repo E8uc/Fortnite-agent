@@ -116,7 +116,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: E8uc/NovaSparx
-          ref: b728247b510c8ad3b578a176472b91884a26d4e2
+          ref: 382e0b442fc76601e8b4de931ca90b05d9f32ad8
           path: .novasparx-src
           fetch-depth: 1
 
