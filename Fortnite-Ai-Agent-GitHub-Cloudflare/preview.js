@@ -3349,6 +3349,192 @@
     return "";
   }
 
+  function waitForAudioReady(
+    audio,
+    signal,
+    timeoutMs = 8_000
+  ) {
+    return new Promise(
+      (resolve, reject) => {
+        if (!audio) {
+          reject(
+            new Error(
+              "Audio player is unavailable."
+            )
+          );
+          return;
+        }
+
+        if (
+          audio.readyState >=
+          HTMLMediaElement.HAVE_METADATA
+        ) {
+          resolve();
+          return;
+        }
+
+        let settled =
+          false;
+
+        const cleanup =
+          () => {
+            clearTimeout(
+              timer
+            );
+
+            audio.removeEventListener(
+              "loadedmetadata",
+              onReady
+            );
+
+            audio.removeEventListener(
+              "canplay",
+              onReady
+            );
+
+            audio.removeEventListener(
+              "error",
+              onError
+            );
+
+            signal
+              ?.removeEventListener?.(
+                "abort",
+                onAbort
+              );
+          };
+
+        const finish =
+          callback => {
+            if (settled) {
+              return;
+            }
+
+            settled =
+              true;
+
+            cleanup();
+            callback();
+          };
+
+        const onReady =
+          () =>
+            finish(resolve);
+
+        const onError =
+          () =>
+            finish(
+              () => {
+                const code =
+                  Number(
+                    audio.error?.code ||
+                    0
+                  );
+
+                const error =
+                  new Error(
+                    "Browser rejected the decoded audio" +
+                    (
+                      code
+                        ? ` (media error ${code})`
+                        : ""
+                    ) +
+                    "."
+                  );
+
+                error.code =
+                  "NOVASPARX_AUDIO_MEDIA_DECODE_FAILED";
+
+                error.mediaErrorCode =
+                  code;
+
+                reject(error);
+              }
+            );
+
+        const onAbort =
+          () =>
+            finish(
+              () =>
+                reject(
+                  abortError(
+                    signal
+                  )
+                )
+            );
+
+        const timer =
+          setTimeout(
+            () =>
+              finish(
+                () => {
+                  const error =
+                    new Error(
+                      "Browser did not accept the decoded audio in time."
+                    );
+
+                  error.code =
+                    "NOVASPARX_AUDIO_MEDIA_TIMEOUT";
+
+                  reject(error);
+                }
+              ),
+            Math.max(
+              1_000,
+              Number(timeoutMs) ||
+              8_000
+            )
+          );
+
+        audio.addEventListener(
+          "loadedmetadata",
+          onReady,
+          {
+            once:
+              true
+          }
+        );
+
+        audio.addEventListener(
+          "canplay",
+          onReady,
+          {
+            once:
+              true
+          }
+        );
+
+        audio.addEventListener(
+          "error",
+          onError,
+          {
+            once:
+              true
+          }
+        );
+
+        signal
+          ?.addEventListener?.(
+            "abort",
+            onAbort,
+            {
+              once:
+                true
+            }
+          );
+
+        try {
+          audio.load();
+        } catch (error) {
+          finish(
+            () =>
+              reject(error)
+          );
+        }
+      }
+    );
+  }
+
   function audioSizeLabel(
     bytes
   ) {
@@ -3778,8 +3964,47 @@
         );
 
         try {
-          ui.audio.load();
-        } catch {}
+          await waitForAudioReady(
+            ui.audio,
+            signal
+          );
+        } catch (mediaError) {
+          release(
+            clean
+          );
+
+          ui.audio.hidden =
+            true;
+
+          setStatus(
+            ui.status,
+            mediaError?.message ||
+              "Browser rejected the decoded audio.",
+            "error"
+          );
+
+          setMeta(
+            ui.meta,
+            `Browser CUE4Parse SoundWave • ${result.format} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • resolved audio path" : ""}`,
+            "partial"
+          );
+
+          const failure =
+            new Error(
+              mediaError?.message ||
+              "Browser rejected the decoded audio.",
+              {
+                cause:
+                  mediaError
+              }
+            );
+
+          failure.code =
+            mediaError?.code ||
+            "NOVASPARX_AUDIO_MEDIA_DECODE_FAILED";
+
+          throw failure;
+        }
 
         setMeta(
           ui.meta,
