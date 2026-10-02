@@ -405,7 +405,14 @@ for (const kind of ["staticmesh", "skeletalmesh", "blueprint", "texture", "audio
   assert.equal(caps.previewMode, isTexture ? "image" : "none", `previewMode: ${kind}`);
   assert.equal(caps.canExportUEFN, false, kind);
   assert.equal(caps.canListen, false, kind);
-  assert.deepEqual(caps.downloadFormats, ["json"]);
+  assert.deepEqual(
+    caps.downloadFormats,
+    kind === "texture"
+      ? ["json", "png"]
+      : kind === "audio"
+        ? ["json", "wav"]
+        : ["json"]
+  );
   assert.ok(!caps.tags.some(tag => ["VISUAL", "IMAGE", "LOGIC"].includes(tag)));
 }
 assert.deepEqual(associations.capabilityProfile("blueprint").tags, ["BLUEPRINT"]);

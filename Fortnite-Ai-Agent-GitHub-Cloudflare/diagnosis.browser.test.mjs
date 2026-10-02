@@ -137,6 +137,42 @@ try {
     return route.fulfill({status:200,contentType:'application/json',body:'{}'});
   });
   await page.goto(`http://127.0.0.1:${server.address().port}/Fortnite-agent/index.html`);
+  const downloadFormatProof =
+    await page.evaluate(
+      () => ({
+        texture:
+          window.NovaSparxAssociations
+            .capabilityProfile(
+              "texture"
+            )
+            .downloadFormats,
+        audio:
+          window.NovaSparxAssociations
+            .capabilityProfile(
+              "audio"
+            )
+            .downloadFormats
+      })
+    );
+
+  assert.deepEqual(
+    downloadFormatProof.texture,
+    ["json", "png"]
+  );
+
+  assert.deepEqual(
+    downloadFormatProof.audio,
+    ["json", "wav"]
+  );
+
+  console.log(
+    "FNAA_DOWNLOAD_FORMATS_PROVEN",
+    JSON.stringify(
+      downloadFormatProof
+    )
+  );
+
+
   const cases = [
     ...fixtures.map(x => ({path:x.physicalPath, expected:x.rootTypes[0]})),
     {path:"StaticMesh'/Game/Audio/SW_NotActuallySound.SW_NotActuallySound'",expected:'StaticMesh'},

@@ -703,8 +703,10 @@
           family === "mesh"
             ? ["nsmesh", "json"]
             : family === "texture"
-              ? ["png", "json"]
-              : ["json"],
+              ? ["json", "png"]
+              : family === "audio"
+                ? ["json", "wav"]
+                : ["json"],
         tags:
           [
             family === "other"
@@ -1711,6 +1713,81 @@
       return;
     }
 
+    if (format === "wav") {
+      const direct =
+        classification?.capabilities?.directSoundWave === true;
+
+      let candidates =
+        direct
+          ? [toFilePath(path) || path]
+          : await resolveSoundWavePaths(
+              path,
+              { signal }
+            );
+
+      throwIfActionAborted(signal);
+
+      if (!candidates.length) {
+        candidates =
+          await resolveAudioCandidatePaths(
+            path,
+            { signal }
+          );
+      }
+
+      let lastError = null;
+
+      for (const candidate of candidates) {
+        throwIfActionAborted(signal);
+
+        try {
+          const result =
+            await window
+              .NovaSparxTextureRuntime
+              ?.resolveAudio?.(
+                candidate,
+                { signal }
+              );
+
+          throwIfActionAborted(signal);
+
+          if (
+            String(result?.format || "").toUpperCase() !== "WAV" ||
+            !(result?.bytes instanceof ArrayBuffer) ||
+            result.bytes.byteLength < 44
+          ) {
+            throw new Error(
+              "NovaSparx did not return a playable WAV."
+            );
+          }
+
+          saveBlob(
+            new Blob(
+              [result.bytes],
+              { type: "audio/wav" }
+            ),
+            safeAssetFilename(
+              result.path || candidate || path,
+              "wav"
+            )
+          );
+
+          return;
+        } catch (error) {
+          if (actionAborted(error, signal)) {
+            throw error;
+          }
+
+          lastError = error;
+        }
+      }
+
+      throw new Error(
+        lastError?.message ||
+        "No playable SoundWave could be downloaded as WAV."
+      );
+    }
+
     if (format === "png") {
       const texturePath =
         await downloadableTexturePath(
@@ -1824,9 +1901,41 @@
       }
 
       if (!response) {
-        throw new Error(
-          "No verified texture image was available to download."
+        const decoded =
+          await window
+            .NovaSparxTextureRuntime
+            ?.resolveTexture?.(
+              texturePath,
+              {
+                signal
+              }
+            );
+
+        throwIfActionAborted(
+          signal
         );
+
+        if (
+          !(decoded?.blob instanceof Blob) ||
+          decoded.blob.size <= 0 ||
+          decoded.blob.size >
+            MAX_DOWNLOAD_IMAGE_BYTES
+        ) {
+          throw new Error(
+            "No verified texture image was available to download."
+          );
+        }
+
+        saveBlob(
+          decoded.blob,
+          safeAssetFilename(
+            decoded.path ||
+            texturePath,
+            "png"
+          )
+        );
+
+        return;
       }
 
       const blob =
@@ -2845,6 +2954,7 @@
             [
               "json",
               "png",
+              "wav",
               "nsmesh",
               "glb",
               "obj"
@@ -2964,7 +3074,9 @@
         json:
           "JSON",
         png:
-          "PNG",
+          "Image",
+        wav:
+          "WAV",
         nsmesh:
           "NovaSparx Mesh"
       };
@@ -2972,10 +3084,7 @@
       panel.innerHTML = `
         <div class="json-panel asset-download-panel">
           <div class="json-panel-head">
-            <span>DOWNLOAD</span>
-            <span class="tool-note">
-              Choose a format
-            </span>
+            <span>Download &gt;</span>
           </div>
 
           <div class="asset-download-options">
