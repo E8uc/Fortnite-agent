@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: e8uc-fnaa-rada-decoder
+    runtime: docker
+    dockerfilePath: ./rada-decoder-service/Dockerfile
+    dockerContext: ./rada-decoder-service
+    healthCheckPath: /healthz
+    envVars:
+      - key: RADA_MAX_CONCURRENCY
+        value: "2"
+      - key: MAX_RADA_BYTES
+        value: "12582912"
+      - key: MAX_WAV_BYTES
+        value: "67108864"
+      - key: RADA_DECODE_TIMEOUT_SECONDS
+        value: "25"
