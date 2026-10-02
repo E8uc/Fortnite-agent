@@ -1782,8 +1782,37 @@
         }
       }
 
+      const lastMessage =
+        String(
+          lastError?.message ||
+          ""
+        );
+
+      if (
+        /MetaSoundSource is a procedural template/i
+          .test(lastMessage)
+      ) {
+        throw new Error(
+          "WAV unavailable: this MetaSound is a reusable template and receives its Sounds input from another asset at runtime."
+        );
+      }
+
       throw new Error(
-        lastError?.message ||
+        lastMessage
+          .split(/\r?\n/)
+          .map(
+            line =>
+              line.trim()
+          )
+          .find(
+            line =>
+              /^Error:\s*/i
+                .test(line)
+          )
+          ?.replace(
+            /^Error:\s*/i,
+            ""
+          ) ||
         "No playable SoundWave could be downloaded as WAV."
       );
     }
