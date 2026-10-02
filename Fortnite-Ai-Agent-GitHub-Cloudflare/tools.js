@@ -5767,11 +5767,16 @@
           ) &&
           candidate
         ) {
-          output.push(
-            objectPath(
+          const filePath =
+            toFilePath(
               candidate
-            )
-          );
+            );
+
+          if (filePath) {
+            output.push(
+              filePath
+            );
+          }
         }
       }
     );
@@ -6058,21 +6063,46 @@
       [];
 
     const addRaw =
-      (value) => {
+      (
+        value,
+        preserveExactPath =
+          false
+      ) => {
         const clean =
           String(value || "")
             .trim();
 
-        if (
-          clean &&
-          !rawCandidates.includes(
-            clean
-          )
-        ) {
-          rawCandidates.push(
-            clean
-          );
+        if (!clean) {
+          return;
         }
+
+        const key =
+          clean.toLowerCase();
+
+        const existing =
+          rawCandidates.find(
+            item =>
+              item.key ===
+              key
+          );
+
+        if (existing) {
+          existing.preserveExactPath =
+            existing.preserveExactPath ||
+            preserveExactPath;
+
+          return;
+        }
+
+        rawCandidates.push({
+          key,
+          value:
+            clean,
+          preserveExactPath:
+            Boolean(
+              preserveExactPath
+            )
+        });
       };
 
     try {
@@ -6086,7 +6116,10 @@
         const candidate of
         exportCandidates
       ) {
-        addRaw(candidate);
+        addRaw(
+          candidate,
+          true
+        );
       }
     } catch (error) {
       if (
@@ -6168,7 +6201,10 @@
               const candidate of
               nested
             ) {
-              addRaw(candidate);
+              addRaw(
+                candidate,
+                true
+              );
             }
           } catch (nestedError) {
             if (
@@ -6203,11 +6239,20 @@
         signal
       );
 
-      const canonical =
-        await canonicalAudioPath(
-          candidate,
-          signal
+      const filePath =
+        toFilePath(
+          candidate.value
         );
+
+      const canonical =
+        candidate
+          .preserveExactPath &&
+        filePath
+          ? filePath
+          : await canonicalAudioPath(
+              candidate.value,
+              signal
+            );
 
       if (
         canonical &&
@@ -6218,22 +6263,15 @@
         output.push(
           canonical
         );
-      } else {
-        const filePath =
-          toFilePath(
-            candidate
-          );
-
-        if (
-          filePath &&
-          !output.includes(
-            filePath
-          )
-        ) {
-          output.push(
-            filePath
-          );
-        }
+      } else if (
+        filePath &&
+        !output.includes(
+          filePath
+        )
+      ) {
+        output.push(
+          filePath
+        );
       }
 
       if (
@@ -8317,7 +8355,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.7.2",
+      version: "1.7.3",
       open,
       close,
       formatAssetPath,

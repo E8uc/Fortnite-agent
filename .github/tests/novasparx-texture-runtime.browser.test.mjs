@@ -1159,6 +1159,286 @@ try {
     }
   }
 
+
+  const mediaProbe =
+    await page.evaluate(
+      async target => {
+        const host =
+          document.createElement(
+            "div"
+          );
+
+        document.body.append(
+          host
+        );
+
+        try {
+          const rendered =
+            await globalThis
+              .FortnitePreview
+              .render(
+                host,
+                target,
+                null,
+                {
+                  assetKind:
+                    "audio"
+                }
+              );
+
+          const audio =
+            host.querySelector(
+              "audio"
+            );
+
+          if (
+            !audio ||
+            audio.hidden ||
+            !audio.src
+          ) {
+            return {
+              state:
+                rendered?.state ||
+                "error",
+              format:
+                rendered?.format ||
+                "",
+              audioPath:
+                rendered?.audioPath ||
+                "",
+              mediaState:
+                "missing",
+              status:
+                host.querySelector(
+                  ".mesh-image-status"
+                )?.textContent ||
+                "",
+              meta:
+                host.querySelector(
+                  ".mesh-image-meta"
+                )?.textContent ||
+                ""
+            };
+          }
+
+          const media =
+            audio.readyState >= 1
+              ? {
+                  state:
+                    "already-ready",
+                  readyState:
+                    audio.readyState,
+                  networkState:
+                    audio.networkState,
+                  errorCode:
+                    audio.error?.code ||
+                    0,
+                  duration:
+                    Number.isFinite(
+                      audio.duration
+                    )
+                      ? audio.duration
+                      : 0
+                }
+              : await new Promise(
+              resolve => {
+                let settled =
+                  false;
+
+                const finish =
+                  state => {
+                    if (settled) {
+                      return;
+                    }
+
+                    settled =
+                      true;
+
+                    clearTimeout(
+                      timer
+                    );
+
+                    resolve({
+                      state,
+                      readyState:
+                        audio.readyState,
+                      networkState:
+                        audio.networkState,
+                      errorCode:
+                        audio.error?.code ||
+                        0,
+                      duration:
+                        Number.isFinite(
+                          audio.duration
+                        )
+                          ? audio.duration
+                          : 0
+                    });
+                  };
+
+                audio.addEventListener(
+                  "loadedmetadata",
+                  () =>
+                    finish(
+                      "loadedmetadata"
+                    ),
+                  {
+                    once:
+                      true
+                  }
+                );
+
+                audio.addEventListener(
+                  "canplay",
+                  () =>
+                    finish(
+                      "canplay"
+                    ),
+                  {
+                    once:
+                      true
+                  }
+                );
+
+                audio.addEventListener(
+                  "error",
+                  () =>
+                    finish(
+                      "error"
+                    ),
+                  {
+                    once:
+                      true
+                  }
+                );
+
+                const timer =
+                  setTimeout(
+                    () =>
+                      finish(
+                        "timeout"
+                      ),
+                    8_000
+                  );
+
+                try {
+                  audio.load();
+                } catch {
+                  finish(
+                    "load-throw"
+                  );
+                }
+              }
+            );
+
+          return {
+            state:
+              rendered?.state ||
+              "",
+            format:
+              rendered?.format ||
+              "",
+            audioPath:
+              rendered?.audioPath ||
+              "",
+            mediaState:
+              media.state,
+            readyState:
+              media.readyState,
+            networkState:
+              media.networkState,
+            errorCode:
+              media.errorCode,
+            duration:
+              media.duration,
+            status:
+              host.querySelector(
+                ".mesh-image-status"
+              )?.textContent ||
+              "",
+            meta:
+              host.querySelector(
+                ".mesh-image-meta"
+              )?.textContent ||
+              ""
+          };
+        } catch (error) {
+          return {
+            state:
+              "error",
+            mediaState:
+              "exception",
+            message:
+              error?.message ||
+              String(error)
+          };
+        } finally {
+          globalThis
+            .FortnitePreview
+            ?.release?.(
+              target
+            );
+
+          host.remove();
+        }
+      },
+      "FortniteGame/Plugins/GameFeatures/Train/Content/Sound/Cues/Cue_Train_Bells.uasset"
+    );
+
+  console.log(
+    "FNAA_AUDIO_MEDIA_DECODE_PROBE",
+    JSON.stringify(
+      mediaProbe
+    )
+  );
+
+  assert.equal(
+    mediaProbe.state,
+    "ready",
+    "Train SoundCue did not resolve to a playable SoundWave: " +
+      (
+        mediaProbe.message ||
+        mediaProbe.status ||
+        ""
+      )
+  );
+
+  assert.equal(
+    String(
+      mediaProbe.format ||
+      ""
+    ).toUpperCase(),
+    "WAV",
+    "Train SoundCue did not render browser-safe WAV."
+  );
+
+  assert.ok(
+    [
+      "already-ready",
+      "loadedmetadata",
+      "canplay"
+    ].includes(
+      mediaProbe.mediaState
+    ),
+    "Browser media decoder rejected the generated WAV: " +
+      JSON.stringify(
+        mediaProbe
+      )
+  );
+
+  assert.equal(
+    mediaProbe.errorCode,
+    0,
+    "Browser media element reported a decode error."
+  );
+
+  assert.ok(
+    mediaProbe.readyState >=
+      1,
+    "Browser media element did not parse WAV metadata."
+  );
+
+
   const result =
     await page.evaluate(
       async target => {
