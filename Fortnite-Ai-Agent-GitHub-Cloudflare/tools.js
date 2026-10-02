@@ -6034,6 +6034,17 @@
       return null;
     }
 
+    // ObjectPath/AssetPathName values from SoundCue and MetaSound exports
+    // already identify the exact mounted package. Preserve that path instead
+    // of replacing it with a same-named asset from another mount.
+    if (
+      /^(?:FortniteGame|Engine)\//i
+        .test(filePath) &&
+      filePath.includes("/")
+    ) {
+      return filePath;
+    }
+
     const exact =
       await resolveLocalAssetExact(
         assetTitle(
@@ -8317,7 +8328,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.7.2",
+      version: "1.7.3",
       open,
       close,
       formatAssetPath,
