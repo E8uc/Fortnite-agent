@@ -3535,6 +3535,67 @@
     );
   }
 
+  function readableAudioFailure(
+    error
+  ) {
+    const text =
+      String(
+        error?.message ||
+        error ||
+        ""
+      )
+        .trim();
+
+    if (
+      /MetaSoundSource is a procedural template/i
+        .test(text)
+    ) {
+      return {
+        code:
+          "NOVASPARX_AUDIO_TEMPLATE",
+        message:
+          "This MetaSound is a reusable template. Its Sounds input is supplied by another asset at runtime, so this file has no single SoundWave or WAV to play."
+      };
+    }
+
+    const lines =
+      text
+        .split(/\r?\n/)
+        .map(
+          line =>
+            line.trim()
+        )
+        .filter(Boolean);
+
+    const explicit =
+      lines.find(
+        line =>
+          /^Error:\s*/i
+            .test(line)
+      );
+
+    const first =
+      explicit ||
+      lines.find(
+        line =>
+          !/^at\s+/i
+            .test(line) &&
+          !/wasm-function|dotnet\.runtime|dotnet\.native/i
+            .test(line)
+      ) ||
+      "Audio could not be decoded.";
+
+    return {
+      code:
+        "NOVASPARX_AUDIO_FAILED",
+      message:
+        first.replace(
+          /^Error:\s*/i,
+          ""
+        )
+    };
+  }
+
   function audioSizeLabel(
     bytes
   ) {
@@ -3836,22 +3897,25 @@
               candidateError ||
               directError;
 
+            const readable =
+              readableAudioFailure(
+                cause
+              );
+
             const failure =
               new Error(
-                "No playable SoundWave could be resolved for this audio asset." +
-                (
-                  cause?.message
-                    ? " " +
-                      cause.message
-                    : ""
-                ),
+                readable.code ===
+                  "NOVASPARX_AUDIO_TEMPLATE"
+                  ? readable.message
+                  : "No playable SoundWave could be resolved for this audio asset. " +
+                    readable.message,
                 {
                   cause
                 }
               );
 
             failure.code =
-              "NOVASPARX_AUDIO_FAILED";
+              readable.code;
 
             throw failure;
           }
@@ -5352,6 +5416,45 @@
             "aborted",
           kind:
             "cancelled"
+        };
+      }
+
+      if (
+        error?.code ===
+          "NOVASPARX_AUDIO_TEMPLATE"
+      ) {
+        if (ui.audio) {
+          ui.audio.hidden =
+            true;
+
+          ui.audio.removeAttribute(
+            "src"
+          );
+        }
+
+        setStatus(
+          ui.status,
+          error.message,
+          "partial"
+        );
+
+        setMeta(
+          ui.meta,
+          "MetaSound template • runtime WaveAsset input required",
+          "partial"
+        );
+
+        return {
+          state:
+            "partial",
+          kind:
+            "audio",
+          playable:
+            false,
+          template:
+            true,
+          error:
+            error.message
         };
       }
 
