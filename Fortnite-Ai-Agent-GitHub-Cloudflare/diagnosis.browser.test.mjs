@@ -56,6 +56,81 @@ try {
           })
         });
       }
+
+      if (
+        candidate ===
+        'FortniteGame/Plugins/GameFeatures/Train/Content/Sound/Cues/Cue_Train_Bells.uasset'
+      ) {
+        return route.fulfill({
+          status:200,
+          contentType:'application/json',
+          body:JSON.stringify({
+            jsonOutput:[
+              {
+                Type:'SoundCue',
+                Name:'Cue_Train_Bells',
+                Properties:{
+                  FirstNode:{
+                    ObjectName:"SoundNodeWavePlayer'Cue_Train_Bells:SoundNodeWavePlayer_0'",
+                    ObjectPath:'/Train/Sound/Cues/Cue_Train_Bells.3'
+                  }
+                }
+              },
+              {
+                Type:'SoundNodeWavePlayer',
+                Name:'SoundNodeWavePlayer_0',
+                Properties:{
+                  SoundWaveAssetPtr:{
+                    AssetPathName:'/Train/Sound/MS/MSS_Train_Exterior_Bells.MSS_Train_Exterior_Bells',
+                    SubPathString:''
+                  }
+                },
+                SoundWave:{
+                  ObjectName:"MetaSoundSource'MSS_Train_Exterior_Bells'",
+                  ObjectPath:'/Train/Sound/MS/MSS_Train_Exterior_Bells.0'
+                }
+              }
+            ]
+          })
+        });
+      }
+
+      if (
+        candidate ===
+        'FortniteGame/Plugins/GameFeatures/Train/Content/Sound/MS/MSS_Train_Exterior_Bells.uasset'
+      ) {
+        return route.fulfill({
+          status:200,
+          contentType:'application/json',
+          body:JSON.stringify({
+            jsonOutput:[{
+              Type:'MetaSoundSource',
+              Name:'MSS_Train_Exterior_Bells',
+              Properties:{
+                RootMetasoundDocument:{
+                  RootGraph:{
+                    Interface:{
+                      Inputs:[{
+                        Name:'Variations',
+                        TypeName:'WaveAsset:Array',
+                        Defaults:[{
+                          Literal:{
+                            Type:'EMetasoundFrontendLiteralType::UObjectArray',
+                            AsUObject:[{
+                              ObjectName:"SoundWave'Train_Proto_Bells_Close'",
+                              ObjectPath:'/Train/Sound/Waves/Locomotion/S28/Train_Proto_Bells_Close.0'
+                            }]
+                          }
+                        }]
+                      }]
+                    }
+                  }
+                }
+              }
+            }]
+          })
+        });
+      }
       const fixture = fixtures.find(x => x.path === candidate || x.physicalPath === candidate);
       return route.fulfill({status:200,contentType:'application/json',body:fixture ? fs.readFileSync(path.join(root,'diagnosis-fixtures',fixture.file),'utf8') : '{}'});
     }
@@ -87,6 +162,22 @@ try {
               }
             ],
             source:'diagnosis canonical audio fixture'
+          };
+        }
+
+        if (
+          String(query || '').toLowerCase() ===
+          'train_proto_bells_close'
+        ) {
+          return {
+            results:[
+              {
+                path:'FortniteGame/Plugins/GameFeatures/Train/Content/Sound/Waves/Locomotion/S28/Train_Proto_Bells_Close.uasset',
+                match:'exact',
+                source:'diagnosis train metasound fixture'
+              }
+            ],
+            source:'diagnosis train metasound fixture'
           };
         }
 
@@ -439,6 +530,31 @@ try {
     'FNAA_REFERENCE_ONLY_AUDIO_CANONICALIZATION_PROVEN',
     JSON.stringify(
       referenceOnlyAudioProof
+    )
+  );
+
+  const trainMetaSoundProof =
+    await page.evaluate(
+      async () =>
+        await window.FortniteTools
+          .resolveAudioCandidatePaths(
+            'FortniteGame/Plugins/GameFeatures/Train/Content/Sound/Cues/Cue_Train_Bells.uasset'
+          )
+    );
+
+  assert.ok(
+    trainMetaSoundProof.includes(
+      'FortniteGame/Plugins/GameFeatures/Train/Content/Sound/Waves/Locomotion/S28/Train_Proto_Bells_Close.uasset'
+    ),
+    JSON.stringify(
+      trainMetaSoundProof
+    )
+  );
+
+  console.log(
+    'FNAA_TRAIN_METASOUND_WAVE_RESOLUTION_PROVEN',
+    JSON.stringify(
+      trainMetaSoundProof
     )
   );
 
