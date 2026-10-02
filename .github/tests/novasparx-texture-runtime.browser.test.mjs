@@ -1222,7 +1222,25 @@ try {
           }
 
           const media =
-            await new Promise(
+            audio.readyState >= 1
+              ? {
+                  state:
+                    "already-ready",
+                  readyState:
+                    audio.readyState,
+                  networkState:
+                    audio.networkState,
+                  errorCode:
+                    audio.error?.code ||
+                    0,
+                  duration:
+                    Number.isFinite(
+                      audio.duration
+                    )
+                      ? audio.duration
+                      : 0
+                }
+              : await new Promise(
               resolve => {
                 let settled =
                   false;
@@ -1396,6 +1414,7 @@ try {
 
   assert.ok(
     [
+      "already-ready",
       "loadedmetadata",
       "canplay"
     ].includes(
