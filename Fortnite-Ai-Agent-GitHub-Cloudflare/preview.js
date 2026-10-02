@@ -3553,6 +3553,14 @@
             candidates =
               await window
                 .FortniteTools
+                ?.resolveAudioCandidatePaths?.(
+                  clean,
+                  {
+                    signal
+                  }
+                ) ||
+              await window
+                .FortniteTools
                 ?.resolveSoundWavePaths?.(
                   clean,
                   {
@@ -3574,6 +3582,12 @@
           let candidateError =
             null;
 
+          const seenCandidates =
+            new Set([
+              String(clean)
+                .toLowerCase()
+            ]);
+
           for (
             const candidate of
             candidates
@@ -3582,9 +3596,25 @@
               signal
             );
 
-            if (!candidate) {
+            const candidateKey =
+              String(
+                candidate || ""
+              )
+                .trim()
+                .toLowerCase();
+
+            if (
+              !candidateKey ||
+              seenCandidates.has(
+                candidateKey
+              )
+            ) {
               continue;
             }
+
+            seenCandidates.add(
+              candidateKey
+            );
 
             try {
               result =
@@ -3751,7 +3781,7 @@
 
         setMeta(
           ui.meta,
-          `Browser CUE4Parse SoundWave • ${result.format} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • linked SoundWave" : ""}`,
+          `Browser CUE4Parse SoundWave • ${result.format} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • resolved audio path" : ""}`,
           "high"
         );
 
