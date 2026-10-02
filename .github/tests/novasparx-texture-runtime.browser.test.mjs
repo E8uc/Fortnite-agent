@@ -1029,6 +1029,14 @@ try {
             );
 
             try {
+              const candidates =
+                await globalThis
+                  .FortniteTools
+                  ?.resolveAudioCandidatePaths?.(
+                    target
+                  ) ||
+                [];
+
               const rendered =
                 await globalThis
                   .FortnitePreview
@@ -1045,6 +1053,7 @@ try {
               output.push({
                 path:
                   target,
+                candidates,
                 state:
                   rendered?.state ||
                   "",
@@ -1087,7 +1096,8 @@ try {
         },
         [
           "FortniteGame/Plugins/GameFeatures/Train/Content/Sound/MS/MSS_Train_Exterior_Bells.uasset",
-          "FortniteGame/Plugins/GameFeatures/PrimalGameplay/Content/Sounds/CuddleFish/CuddleFish_Drop_Cue.uasset"
+          "FortniteGame/Plugins/GameFeatures/PrimalGameplay/Content/Sounds/CuddleFish/CuddleFish_Drop_Cue.uasset",
+          "FortniteGame/Plugins/FortMetasound/Content/Items/MSS_Item_Drop.uasset"
         ]
       );
 
@@ -1100,7 +1110,7 @@ try {
 
     assert.equal(
       cueProbes.length,
-      2
+      3
     );
 
     for (const probe of cueProbes) {
