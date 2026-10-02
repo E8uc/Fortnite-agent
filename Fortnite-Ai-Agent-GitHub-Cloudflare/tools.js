@@ -5781,6 +5781,185 @@
     ];
   }
 
+  function audioContainerPaths(
+    data
+  ) {
+    const output = [];
+
+    walk(
+      data,
+      (node) => {
+        const type =
+          String(
+            node?.Type ||
+            node?.ExportType ||
+            node?.ObjectName ||
+            ""
+          );
+
+        const candidate =
+          node?.ObjectPath ||
+          node?.AssetPathName ||
+          node?.Path ||
+          "";
+
+        if (
+          candidate &&
+          /(MetaSoundSource|MetaUSoundSource|SoundCue)/i
+            .test(type)
+        ) {
+          output.push(
+            objectPath(
+              candidate
+            )
+          );
+        }
+      }
+    );
+
+    return [
+      ...new Set(output)
+    ];
+  }
+
+  async function collectExportAudioPaths(
+    path,
+    options = {}
+  ) {
+    const signal =
+      options.signal ||
+      null;
+
+    const maxDepth = 2;
+    const maxExports = 8;
+    const queue = [
+      {
+        path,
+        depth: 0
+      }
+    ];
+    const visited =
+      new Set();
+    const waves = [];
+    let exportsRead = 0;
+
+    while (
+      queue.length &&
+      exportsRead <
+        maxExports
+    ) {
+      throwIfActionAborted(
+        signal
+      );
+
+      const current =
+        queue.shift();
+
+      const key =
+        String(
+          toFilePath(
+            current.path
+          ) ||
+          current.path ||
+          ""
+        )
+          .trim()
+          .toLowerCase();
+
+      if (
+        !key ||
+        visited.has(key)
+      ) {
+        continue;
+      }
+
+      visited.add(key);
+
+      let data;
+
+      try {
+        data =
+          await exportJson(
+            current.path,
+            options
+          );
+
+        exportsRead++;
+      } catch (error) {
+        if (
+          actionAborted(
+            error,
+            signal
+          )
+        ) {
+          throw error;
+        }
+
+        continue;
+      }
+
+      for (
+        const candidate of
+        soundWaves(data)
+      ) {
+        if (
+          candidate &&
+          !waves.includes(
+            candidate
+          )
+        ) {
+          waves.push(
+            candidate
+          );
+        }
+      }
+
+      if (
+        current.depth >=
+        maxDepth
+      ) {
+        continue;
+      }
+
+      for (
+        const container of
+        audioContainerPaths(
+          data
+        )
+      ) {
+        const containerKey =
+          String(
+            toFilePath(
+              container
+            ) ||
+            container
+          )
+            .trim()
+            .toLowerCase();
+
+        if (
+          containerKey &&
+          !visited.has(
+            containerKey
+          )
+        ) {
+          queue.push({
+            path:
+              container,
+            depth:
+              current.depth +
+              1
+          });
+        }
+      }
+    }
+
+    return waves.slice(
+      0,
+      32
+    );
+  }
+
   function referenceRows(
     payload
   ) {
@@ -5892,15 +6071,15 @@
       };
 
     try {
-      const data =
-        await exportJson(
+      const exportCandidates =
+        await collectExportAudioPaths(
           path,
           options
         );
 
       for (
         const candidate of
-        soundWaves(data)
+        exportCandidates
       ) {
         addRaw(candidate);
       }
@@ -5952,10 +6131,51 @@
         const entry of
         references
       ) {
-        addRaw(
+        const referencePath =
           entry.reference?.path ||
-          entry.reference?.Path
+          entry.reference?.Path ||
+          "";
+
+        addRaw(
+          referencePath
         );
+
+        if (
+          /MetaSoundSource|MetaUSoundSource|SoundCue/i
+            .test(
+              String(
+                entry.reference?.kind ||
+                entry.reference?.Kind ||
+                ""
+              ) +
+              " " +
+              referencePath
+            )
+        ) {
+          try {
+            const nested =
+              await collectExportAudioPaths(
+                referencePath,
+                options
+              );
+
+            for (
+              const candidate of
+              nested
+            ) {
+              addRaw(candidate);
+            }
+          } catch (nestedError) {
+            if (
+              actionAborted(
+                nestedError,
+                signal
+              )
+            ) {
+              throw nestedError;
+            }
+          }
+        }
       }
     } catch (error) {
       if (
@@ -8092,7 +8312,7 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.7.1",
+      version: "1.7.2",
       open,
       close,
       formatAssetPath,
