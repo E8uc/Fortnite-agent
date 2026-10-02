@@ -32,6 +32,12 @@ const NOVASPARX_EDGE_MAX_METADATA_BYTES =
 const NOVASPARX_EDGE_MAX_MANIFEST_BYTES =
   64 * 1024 * 1024;
 
+const NOVASPARX_EDGE_MAX_RADA_BYTES =
+  12 * 1024 * 1024;
+
+const NOVASPARX_EDGE_MAX_WAV_BYTES =
+  64 * 1024 * 1024;
+
 const NOVASPARX_EDGE_ALLOWED_RANGE_HOSTS = [
   "egdownload.fastly-edge.com",
   "download.epicgames.com",
@@ -1341,6 +1347,299 @@ function novaEdgeCorsHeaders(
   return headers;
 }
 
+function novaRadaDecoderUrl(
+  env
+) {
+  const raw =
+    String(
+      env.NOVASPARX_RADA_DECODER_URL ||
+      ""
+    ).trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const url =
+      new URL(raw);
+
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password
+    ) {
+      return null;
+    }
+
+    if (
+      !url.pathname ||
+      url.pathname === "/"
+    ) {
+      url.pathname =
+        "/decode";
+    }
+
+    url.hash = "";
+
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+async function handleNovaEdgeRadaDecode(
+  request,
+  env
+) {
+  if (
+    !isAllowedNovaEdgeOrigin(
+      request,
+      env
+    )
+  ) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "Origin not allowed."
+      },
+      403
+    );
+  }
+
+  const endpoint =
+    novaRadaDecoderUrl(
+      env
+    );
+
+  if (!endpoint) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "unconfigured",
+        error:
+          "RADA decoder service is not configured."
+      },
+      503
+    );
+  }
+
+  let bytes;
+
+  try {
+    bytes =
+      await readResponseBytesBounded(
+        new Response(
+          request.body,
+          {
+            headers: {
+              "content-length":
+                request.headers.get(
+                  "content-length"
+                ) || ""
+            }
+          }
+        ),
+        NOVASPARX_EDGE_MAX_RADA_BYTES,
+        "RADA payload"
+      );
+  } catch (error) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "invalid",
+        error:
+          String(
+            error?.message ||
+            "RADA payload exceeded the byte limit."
+          )
+      },
+      413
+    );
+  }
+
+  if (
+    !bytes ||
+    bytes.byteLength < 16
+  ) {
+    return json(
+      request,
+      env,
+      {
+        state:
+          "invalid",
+        error:
+          "RADA payload is empty or invalid."
+      },
+      400
+    );
+  }
+
+  const headers = {
+    "Content-Type":
+      "application/octet-stream",
+    Accept:
+      "audio/wav"
+  };
+
+  const token =
+    String(
+      env.NOVASPARX_RADA_DECODER_TOKEN ||
+      ""
+    ).trim();
+
+  if (token) {
+    headers[
+      "X-NovaSparx-Token"
+    ] = token;
+  }
+
+  let upstream;
+
+  try {
+    upstream =
+      await fetchWithTimeout(
+        endpoint.toString(),
+        {
+          method:
+            "POST",
+          headers,
+          body:
+            bytes,
+          redirect:
+            "error",
+          signal:
+            request.signal
+        },
+        30_000
+      );
+  } catch (error) {
+    if (
+      request.signal
+        ?.aborted
+    ) {
+      throw error;
+    }
+
+    return json(
+      request,
+      env,
+      {
+        state:
+          "offline",
+        error:
+          "RADA decoder service is unavailable."
+      },
+      502
+    );
+  }
+
+  if (!upstream.ok) {
+    try {
+      await upstream.body
+        ?.cancel();
+    } catch {}
+
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "RADA decoder returned HTTP " +
+          upstream.status +
+          "."
+      },
+      upstream.status === 422
+        ? 422
+        : 502
+    );
+  }
+
+  const declared =
+    Number(
+      upstream.headers.get(
+        "content-length"
+      ) || 0
+    );
+
+  if (
+    !Number.isSafeInteger(
+      declared
+    ) ||
+    declared <= 44 ||
+    declared >
+      NOVASPARX_EDGE_MAX_WAV_BYTES
+  ) {
+    try {
+      await upstream.body
+        ?.cancel();
+    } catch {}
+
+    return json(
+      request,
+      env,
+      {
+        state:
+          "error",
+        error:
+          "RADA decoder returned an invalid WAV size."
+      },
+      502
+    );
+  }
+
+  const responseHeaders =
+    new Headers(
+      baseCorsHeaders(
+        request,
+        env,
+        "audio/wav"
+      )
+    );
+
+  responseHeaders.set(
+    "Cache-Control",
+    "no-store"
+  );
+
+  responseHeaders.set(
+    "Content-Length",
+    String(
+      declared
+    )
+  );
+
+  responseHeaders.set(
+    "X-FNAA-Nova-Source",
+    "rada-decoder"
+  );
+
+  responseHeaders.set(
+    "X-NovaSparx-Audio-Format",
+    "WAV"
+  );
+
+  return new Response(
+    upstream.body,
+    {
+      status:
+        200,
+      headers:
+        responseHeaders
+    }
+  );
+}
+
 async function handleNovaEdgeStatus(
   request,
   env
@@ -1388,6 +1687,19 @@ async function handleNovaEdgeStatus(
       },
       rangeRelay:
         "/nova-edge/range"
+,
+      radaDecode: {
+        configured:
+          Boolean(
+            novaRadaDecoderUrl(
+              env
+            )
+          ),
+        route:
+          "/nova-edge/rada",
+        maxInputBytes:
+          NOVASPARX_EDGE_MAX_RADA_BYTES
+      }
     },
     200,
     {
@@ -8941,6 +9253,25 @@ export default {
         request,
         env,
         url
+      );
+    }
+
+    if (
+      request.method ===
+        "POST" &&
+      url.pathname ===
+        "/nova-edge/rada"
+    ) {
+      if (!allowByAssetLimit(request)) {
+        return assetRateLimitResponse(
+          request,
+          env
+        );
+      }
+
+      return handleNovaEdgeRadaDecode(
+        request,
+        env
       );
     }
 
