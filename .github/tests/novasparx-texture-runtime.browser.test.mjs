@@ -1029,6 +1029,14 @@ try {
             );
 
             try {
+              const candidates =
+                await globalThis
+                  .FortniteTools
+                  ?.resolveAudioCandidatePaths?.(
+                    target
+                  ) ||
+                [];
+
               const rendered =
                 await globalThis
                   .FortnitePreview
@@ -1045,6 +1053,7 @@ try {
               output.push({
                 path:
                   target,
+                candidates,
                 state:
                   rendered?.state ||
                   "",
@@ -1053,6 +1062,9 @@ try {
                   "",
                 playable:
                   rendered?.playable ===
+                  true,
+                template:
+                  rendered?.template ===
                   true,
                 audioPath:
                   rendered?.audioPath ||
@@ -1087,7 +1099,8 @@ try {
         },
         [
           "FortniteGame/Plugins/GameFeatures/Train/Content/Sound/MS/MSS_Train_Exterior_Bells.uasset",
-          "FortniteGame/Plugins/GameFeatures/PrimalGameplay/Content/Sounds/CuddleFish/CuddleFish_Drop_Cue.uasset"
+          "FortniteGame/Plugins/GameFeatures/PrimalGameplay/Content/Sounds/CuddleFish/CuddleFish_Drop_Cue.uasset",
+          "FortniteGame/Plugins/FortMetasound/Content/Items/MSS_Item_Drop.uasset"
         ]
       );
 
@@ -1100,10 +1113,59 @@ try {
 
     assert.equal(
       cueProbes.length,
-      2
+      3
     );
 
     for (const probe of cueProbes) {
+      if (
+        /\/MSS_Item_Drop\.uasset$/i
+          .test(probe.path)
+      ) {
+        assert.deepEqual(
+          probe.candidates,
+          [probe.path],
+          "MSS_Item_Drop unexpectedly exposed a fixed SoundWave candidate."
+        );
+
+        assert.equal(
+          probe.state,
+          "partial",
+          "Procedural MSS_Item_Drop should be reported as a template, not a decode error."
+        );
+
+        assert.equal(
+          probe.template,
+          true,
+          "MSS_Item_Drop was not identified as a procedural MetaSound template."
+        );
+
+        assert.equal(
+          probe.playable,
+          false,
+          "MSS_Item_Drop must not pretend to expose one fixed playable WAV."
+        );
+
+        assert.match(
+          probe.status,
+          /reusable template/i,
+          "MSS_Item_Drop did not explain its runtime Sounds input."
+        );
+
+        assert.match(
+          probe.meta,
+          /MetaSound template/i,
+          "MSS_Item_Drop did not show the template metadata state."
+        );
+
+        assert.doesNotMatch(
+          probe.status,
+          /BrowserAudioOutput|wasm-function|dotnet\.runtime/i,
+          "Procedural MetaSound state leaked an internal stack trace."
+        );
+
+        continue;
+      }
+
       assert.notEqual(
         probe.state,
         "error",

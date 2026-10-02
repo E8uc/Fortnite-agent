@@ -2,7 +2,7 @@
   "use strict";
 
   const VERSION =
-    "1.1.4";
+    "1.1.5";
 
   const SCRIPT_REVISION =
     (() => {
