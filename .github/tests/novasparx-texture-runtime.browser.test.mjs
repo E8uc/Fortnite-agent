@@ -913,7 +913,22 @@ try {
                     ?.length ||
                   0,
                 toc:
-                  result.toc
+                  result.toc,
+                magic:
+                  result.bytes
+                    ? Array.from(
+                        new Uint8Array(
+                          result.bytes,
+                          0,
+                          Math.min(
+                            12,
+                            result.bytes.byteLength ||
+                            result.bytes.length ||
+                            0
+                          )
+                        )
+                      )
+                    : []
               });
             } catch (error) {
               output.push({
@@ -968,16 +983,30 @@ try {
           probe.format ||
           ""
         ).toUpperCase(),
-        "RADA",
+        "WAV",
         probe.path +
-          " changed from the current Fortnite RADA reference."
+          " did not decode RADA to WAV inside browser WASM."
       );
 
       assert.ok(
         probe.bytes >
-          0,
+          44,
         probe.path +
-          " produced no audio bytes."
+          " produced no decoded WAV bytes."
+      );
+
+      assert.deepEqual(
+        probe.magic.slice(0, 4),
+        [82, 73, 70, 70],
+        probe.path +
+          " did not begin with RIFF."
+      );
+
+      assert.deepEqual(
+        probe.magic.slice(8, 12),
+        [87, 65, 86, 69],
+        probe.path +
+          " did not contain WAVE magic."
       );
     }
 
@@ -1092,9 +1121,23 @@ try {
           probe.format ||
           ""
         ).toUpperCase(),
-        "RADA",
+        "WAV",
         probe.path +
-          " did not reach the expected RADA SoundWave."
+          " did not decode its resolved RADA SoundWave to WAV."
+      );
+
+      assert.equal(
+        probe.state,
+        "ready",
+        probe.path +
+          " did not reach playable ready state."
+      );
+
+      assert.equal(
+        probe.playable,
+        true,
+        probe.path +
+          " resolved audio is not browser-playable."
       );
 
       assert.ok(
