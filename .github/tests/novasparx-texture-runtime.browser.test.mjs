@@ -875,6 +875,81 @@ try {
     }
   }
 
+  if (
+    BROWSER_ENGINE ===
+      "chromium" &&
+    !MOBILE_PROFILE
+  ) {
+    const audioProbes =
+      await page.evaluate(
+        async paths => {
+          const output = [];
+
+          for (
+            const target of
+            paths
+          ) {
+            try {
+              const result =
+                await globalThis
+                  .NovaSparxTextureRuntime
+                  .resolveAudio(
+                    target
+                  );
+
+              output.push({
+                path:
+                  target,
+                ok:
+                  true,
+                resolvedPath:
+                  result.path,
+                format:
+                  result.format,
+                bytes:
+                  result.bytes
+                    ?.byteLength ||
+                  result.bytes
+                    ?.length ||
+                  0,
+                toc:
+                  result.toc
+              });
+            } catch (error) {
+              output.push({
+                path:
+                  target,
+                ok:
+                  false,
+                name:
+                  error?.name ||
+                  "",
+                code:
+                  error?.code ||
+                  "",
+                message:
+                  error?.message ||
+                  String(error)
+              });
+            }
+          }
+
+          return output;
+        },
+        [
+          "FortniteGame/Plugins/GameFeatures/Train/Content/Sound/Waves/Locomotion/S28/Train_Proto_Bells_Close.uasset",
+          "FortniteGame/Plugins/GameFeatures/PrimalGameplay/Content/Sounds/CuddleFish/Cuddle_Fish_Land_01.uasset"
+        ]
+      );
+
+    console.log(
+      "FNAA_DIRECT_AUDIO_PROBES",
+      JSON.stringify(
+        audioProbes
+      )
+    );
+  }
+
   const result =
     await page.evaluate(
       async target => {
