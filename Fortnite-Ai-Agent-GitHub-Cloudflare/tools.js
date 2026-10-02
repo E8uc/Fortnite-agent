@@ -5371,6 +5371,52 @@
     )?.path || null;
   }
 
+  async function resolveLocalAssetExact(
+    id,
+    signal = null
+  ) {
+    const clean =
+      String(id || "")
+        .trim();
+
+    if (!clean) {
+      return null;
+    }
+
+    throwIfActionAborted(
+      signal
+    );
+
+    const data =
+      await window.FortniteAgent
+        ?.searchDatabase?.(
+          "all",
+          clean,
+          signal
+        );
+
+    throwIfActionAborted(
+      signal
+    );
+
+    const rows =
+      Array.isArray(data?.results)
+        ? data.results
+        : [];
+
+    const target =
+      clean.toLowerCase();
+
+    return rows.find(
+      (item) =>
+        assetTitle(
+          item?.path
+        )
+          .toLowerCase() ===
+        target
+    )?.path || null;
+  }
+
   async function exportJson(
     path,
     options = {}
@@ -5735,25 +5781,328 @@
     ];
   }
 
+  function referenceRows(
+    payload
+  ) {
+    const rows =
+      payload?.references ||
+      payload?.References ||
+      [];
+
+    return Array.isArray(rows)
+      ? rows
+      : [];
+  }
+
+  function audioReferenceScore(
+    reference
+  ) {
+    const kind =
+      String(
+        reference?.kind ||
+        reference?.Kind ||
+        ""
+      );
+
+    const path =
+      String(
+        reference?.path ||
+        reference?.Path ||
+        ""
+      );
+
+    const text =
+      `${kind} ${assetTitle(path)} ${path}`;
+
+    if (
+      /soundwave/i.test(
+        text
+      )
+    ) {
+      return 100;
+    }
+
+    if (
+      /(?:^|[_\s])(sw|usw)[_\s]/i
+        .test(text)
+    ) {
+      return 80;
+    }
+
+    if (
+      /audio|sound|music|dialog|voice|sfx|foley|amb/i
+        .test(text)
+    ) {
+      return 60;
+    }
+
+    return 10;
+  }
+
+  async function canonicalAudioPath(
+    raw,
+    signal
+  ) {
+    const filePath =
+      toFilePath(raw);
+
+    if (!filePath) {
+      return null;
+    }
+
+    const exact =
+      await resolveLocalAssetExact(
+        assetTitle(
+          filePath
+        ),
+        signal
+      );
+
+    return exact ||
+      filePath;
+  }
+
   async function resolveSoundWavePaths(
     path,
     options = {}
   ) {
-    const data =
-      await exportJson(
-        path,
-        options
+    const signal =
+      options.signal ||
+      null;
+
+    const rawCandidates =
+      [];
+
+    const addRaw =
+      (value) => {
+        const clean =
+          String(value || "")
+            .trim();
+
+        if (
+          clean &&
+          !rawCandidates.includes(
+            clean
+          )
+        ) {
+          rawCandidates.push(
+            clean
+          );
+        }
+      };
+
+    try {
+      const data =
+        await exportJson(
+          path,
+          options
+        );
+
+      for (
+        const candidate of
+        soundWaves(data)
+      ) {
+        addRaw(candidate);
+      }
+    } catch (error) {
+      if (
+        actionAborted(
+          error,
+          signal
+        )
+      ) {
+        throw error;
+      }
+    }
+
+    try {
+      const evidence =
+        await apiJson(
+          "/nova/references",
+          path,
+          {
+            signal
+          }
+        );
+
+      const references =
+        referenceRows(
+          evidence
+        )
+          .map(
+            (reference) => ({
+              reference,
+              score:
+                audioReferenceScore(
+                  reference
+                )
+            })
+          )
+          .sort(
+            (a, b) =>
+              b.score -
+              a.score
+          )
+          .slice(
+            0,
+            32
+          );
+
+      for (
+        const entry of
+        references
+      ) {
+        addRaw(
+          entry.reference?.path ||
+          entry.reference?.Path
+        );
+      }
+    } catch (error) {
+      if (
+        actionAborted(
+          error,
+          signal
+        )
+      ) {
+        throw error;
+      }
+    }
+
+    const output = [];
+
+    for (
+      const candidate of
+      rawCandidates
+    ) {
+      throwIfActionAborted(
+        signal
       );
 
-    return [
-      ...new Set(
-        soundWaves(data)
-          .map(toFilePath)
-          .filter(Boolean)
-      )
-    ].slice(
+      const canonical =
+        await canonicalAudioPath(
+          candidate,
+          signal
+        );
+
+      if (
+        canonical &&
+        !output.includes(
+          canonical
+        )
+      ) {
+        output.push(
+          canonical
+        );
+      } else {
+        const filePath =
+          toFilePath(
+            candidate
+          );
+
+        if (
+          filePath &&
+          !output.includes(
+            filePath
+          )
+        ) {
+          output.push(
+            filePath
+          );
+        }
+      }
+
+      if (
+        output.length >= 32
+      ) {
+        break;
+      }
+    }
+
+    return output.slice(
       0,
-      24
+      32
+    );
+  }
+
+  async function resolveAudioCandidatePaths(
+    path,
+    options = {}
+  ) {
+    const signal =
+      options.signal ||
+      null;
+
+    const output = [];
+
+    const add =
+      (value) => {
+        const clean =
+          String(value || "")
+            .trim();
+
+        if (
+          clean &&
+          !output.includes(
+            clean
+          )
+        ) {
+          output.push(
+            clean
+          );
+        }
+      };
+
+    let canonicalDirect =
+      null;
+
+    try {
+      canonicalDirect =
+        await canonicalAudioPath(
+          path,
+          signal
+        );
+
+      add(
+        canonicalDirect
+      );
+    } catch (error) {
+      if (
+        actionAborted(
+          error,
+          signal
+        )
+      ) {
+        throw error;
+      }
+    }
+
+    if (!canonicalDirect) {
+      add(
+        toFilePath(
+          path
+        )
+      );
+    }
+
+    for (
+      const candidate of
+      await resolveSoundWavePaths(
+        path,
+        options
+      )
+    ) {
+      add(candidate);
+
+      if (
+        output.length >= 32
+      ) {
+        break;
+      }
+    }
+
+    return output.slice(
+      0,
+      32
     );
   }
 
@@ -7743,13 +8092,14 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.7.0",
+      version: "1.7.1",
       open,
       close,
       formatAssetPath,
       isClassCompatibleAsset,
       toFilePath,
       findKnownImage,
-      resolveSoundWavePaths
+      resolveSoundWavePaths,
+      resolveAudioCandidatePaths
     });
 })();

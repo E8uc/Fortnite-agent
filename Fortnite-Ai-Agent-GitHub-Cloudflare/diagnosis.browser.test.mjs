@@ -72,7 +72,97 @@ try {
     {path:'/Game/S_Ambiguous.S_Ambiguous',expected:'Unknown'}
   ];
   await page.evaluate(rows => {
-    window.FortniteAgent = { searchDatabase: async () => ({results:rows,source:'diagnosis fixtures'}), isSignedIn: () => true };
+    const canonicalSoundWave =
+      'FortniteGame/Plugins/GameFeatures/TestAudio/Content/Audio/SW_RefOnly.uasset';
+
+    window.FortniteAgent = {
+      searchDatabase: async (_scope, query) => {
+        if (String(query || '').toLowerCase() === 'sw_refonly') {
+          return {
+            results:[
+              {
+                path:canonicalSoundWave,
+                match:'exact',
+                source:'diagnosis canonical audio fixture'
+              }
+            ],
+            source:'diagnosis canonical audio fixture'
+          };
+        }
+
+        return {
+          results:rows,
+          source:'diagnosis fixtures'
+        };
+      },
+
+      apiFetch: async (url) => {
+        const value =
+          String(url || '');
+
+        if (value.startsWith('/nova/references?')) {
+          const parsed =
+            new URL(
+              value,
+              location.origin
+            );
+
+          const requested =
+            parsed.searchParams.get('path') ||
+            '';
+
+          if (
+            requested.includes(
+              'SC_RefOnly'
+            )
+          ) {
+            return new Response(
+              JSON.stringify({
+                state:'ready',
+                references:[
+                  {
+                    kind:'property:Wave',
+                    path:'/OldAudioMount/Audio/SW_RefOnly.SW_RefOnly'
+                  }
+                ]
+              }),
+              {
+                status:200,
+                headers:{
+                  'content-type':'application/json'
+                }
+              }
+            );
+          }
+
+          return new Response(
+            JSON.stringify({
+              state:'ready',
+              references:[]
+            }),
+            {
+              status:200,
+              headers:{
+                'content-type':'application/json'
+              }
+            }
+          );
+        }
+
+        return new Response(
+          '{}',
+          {
+            status:404,
+            headers:{
+              'content-type':'application/json'
+            }
+          }
+        );
+      },
+
+      isSignedIn: () => true
+    };
+
     // Parser presence must not by itself enable per-asset 3D or export buttons.
     window.NovaSparxLocalParser = {status:()=>({registered:true})};
     window.NovaSparxExporter = {supports:()=>true};
@@ -320,6 +410,36 @@ try {
   console.log(
     'FNAA_LINKED_SOUNDWAVE_RESOLUTION_PROVEN',
     JSON.stringify(linkedAudioProof)
+  );
+
+  const referenceOnlyAudioProof =
+    await page.evaluate(
+      async () =>
+        await window.FortniteTools
+          .resolveAudioCandidatePaths(
+            "SoundCue'/Game/Audio/SC_RefOnly.SC_RefOnly'"
+          )
+    );
+
+  assert.ok(
+    referenceOnlyAudioProof.includes(
+      'FortniteGame/Plugins/GameFeatures/TestAudio/Content/Audio/SW_RefOnly.uasset'
+    ),
+    JSON.stringify(referenceOnlyAudioProof)
+  );
+
+  assert.ok(
+    !referenceOnlyAudioProof.includes(
+      'FortniteGame/Plugins/GameFeatures/OldAudioMount/Content/Audio/SW_RefOnly.uasset'
+    ),
+    JSON.stringify(referenceOnlyAudioProof)
+  );
+
+  console.log(
+    'FNAA_REFERENCE_ONLY_AUDIO_CANONICALIZATION_PROVEN',
+    JSON.stringify(
+      referenceOnlyAudioProof
+    )
   );
 
   const generated = await page.evaluate(() => ({
