@@ -5993,22 +5993,22 @@
         output.push(
           canonical
         );
-      }
+      } else {
+        const filePath =
+          toFilePath(
+            candidate
+          );
 
-      const filePath =
-        toFilePath(
-          candidate
-        );
-
-      if (
-        filePath &&
-        !output.includes(
-          filePath
-        )
-      ) {
-        output.push(
-          filePath
-        );
+        if (
+          filePath &&
+          !output.includes(
+            filePath
+          )
+        ) {
+          output.push(
+            filePath
+          );
+        }
       }
 
       if (
@@ -6052,12 +6052,18 @@
         }
       };
 
+    let canonicalDirect =
+      null;
+
     try {
-      add(
+      canonicalDirect =
         await canonicalAudioPath(
           path,
           signal
-        )
+        );
+
+      add(
+        canonicalDirect
       );
     } catch (error) {
       if (
@@ -6070,11 +6076,13 @@
       }
     }
 
-    add(
-      toFilePath(
-        path
-      )
-    );
+    if (!canonicalDirect) {
+      add(
+        toFilePath(
+          path
+        )
+      );
+    }
 
     for (
       const candidate of
