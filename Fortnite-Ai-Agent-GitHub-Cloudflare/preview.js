@@ -3693,7 +3693,7 @@
 
           setMeta(
             ui.meta,
-            `Browser CUE4Parse SoundWave • ${result.format || "Unknown"} • ${audioSizeLabel(result.bytes)}`,
+            `Browser CUE4Parse SoundWave • ${result.format || "Unknown"} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • resolved audio path" : ""}`,
             "partial"
           );
 
@@ -3705,7 +3705,8 @@
             format:
               result.format,
             playable:
-              false
+              false,
+            audioPath
           };
         }
 
@@ -3724,7 +3725,7 @@
 
           setMeta(
             ui.meta,
-            `Browser CUE4Parse SoundWave • ${result.format} • ${audioSizeLabel(result.bytes)}`,
+            `Browser CUE4Parse SoundWave • ${result.format} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • resolved audio path" : ""}`,
             "partial"
           );
 
@@ -3736,7 +3737,8 @@
             format:
               result.format,
             playable:
-              false
+              false,
+            audioPath
           };
         }
 
