@@ -123,9 +123,14 @@ class Handler(BaseHTTPRequestHandler):
                 env = os.environ.copy()
                 env.setdefault("WINEDEBUG", "-all")
 
+                # Wine exposes the Linux root as Z:\\, while radadec is a
+                # Windows executable and expects Windows-style paths.
+                source_for_wine = "Z:" + source.replace("/", "\\\\")
+                output_for_wine = "Z:" + output.replace("/", "\\\\")
+
                 try:
                     result = subprocess.run(
-                        [WINE, DECODER_EXE, "-i", source, "-o", output],
+                        [WINE, DECODER_EXE, "-i", source_for_wine, "-o", output_for_wine],
                         stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT,
                         timeout=DECODE_TIMEOUT_SECONDS,
