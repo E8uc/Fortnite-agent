@@ -5767,11 +5767,16 @@
           ) &&
           candidate
         ) {
-          output.push(
-            objectPath(
+          const filePath =
+            toFilePath(
               candidate
-            )
-          );
+            );
+
+          if (filePath) {
+            output.push(
+              filePath
+            );
+          }
         }
       }
     );
