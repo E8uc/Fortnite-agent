@@ -36,7 +36,26 @@ try {
     const url = new URL(route.request().url());
     if (url.hostname === '127.0.0.1') return route.continue();
     if (url.hostname === 'export-service-new.dillyapis.com') {
-      const candidate = url.searchParams.get('Path');
+      const candidate = url.searchParams.get('path') || url.searchParams.get('Path');
+      if (candidate === 'FortniteGame/Content/Audio/SC_NotDirect.uasset') {
+        return route.fulfill({
+          status:200,
+          contentType:'application/json',
+          body:JSON.stringify({
+            jsonOutput:[{
+              Type:'SoundCue',
+              Name:'SC_NotDirect',
+              Properties:{
+                Wave:{
+                  Type:'SoundWave',
+                  ObjectName:'SoundWave SW_Linked',
+                  ObjectPath:'/Game/Audio/SW_Linked.SW_Linked'
+                }
+              }
+            }]
+          })
+        });
+      }
       const fixture = fixtures.find(x => x.path === candidate || x.physicalPath === candidate);
       return route.fulfill({status:200,contentType:'application/json',body:fixture ? fs.readFileSync(path.join(root,'diagnosis-fixtures',fixture.file),'utf8') : '{}'});
     }
@@ -48,7 +67,7 @@ try {
     {path:"StaticMesh'/Game/Audio/SW_NotActuallySound.SW_NotActuallySound'",expected:'StaticMesh'},
     {path:"Texture2D'/Game/Test/T_Layer8_Probe.T_Layer8_Probe'",expected:'Texture2D'},
     {path:'/Game/Audio/SW_ListenProof.SW_ListenProof',expected:'SoundWave',listen:true},
-    {path:"SoundCue'/Game/Audio/SC_NotDirect.SC_NotDirect'",expected:'SoundCue',listen:false},
+    {path:"SoundCue'/Game/Audio/SC_NotDirect.SC_NotDirect'",expected:'SoundCue',listen:true},
     {path:'/CRD_AnimatedMesh/Device_AnimatedMesh.Device_AnimatedMesh_C',expected:'Blueprint'},
     {path:'/Game/S_Ambiguous.S_Ambiguous',expected:'Unknown'}
   ];
@@ -282,6 +301,27 @@ try {
       audioClickProof
     )
   );
+  const linkedAudioProof =
+    await page.evaluate(
+      async () =>
+        await window.FortniteTools
+          .resolveSoundWavePaths(
+            "SoundCue'/Game/Audio/SC_NotDirect.SC_NotDirect'"
+          )
+    );
+
+  assert.deepEqual(
+    linkedAudioProof,
+    [
+      'FortniteGame/Content/Audio/SW_Linked.uasset'
+    ]
+  );
+
+  console.log(
+    'FNAA_LINKED_SOUNDWAVE_RESOLUTION_PROVEN',
+    JSON.stringify(linkedAudioProof)
+  );
+
   const generated = await page.evaluate(() => ({
     kind:window.FNAAAssetDiagnosis.diagnosePath('/CRD_AnimatedMesh/Device_AnimatedMesh.Device_AnimatedMesh_C').kind,
     compatible:window.FortniteTools.isClassCompatibleAsset("StaticMesh'/Game/BP_Test.BP_Test'")

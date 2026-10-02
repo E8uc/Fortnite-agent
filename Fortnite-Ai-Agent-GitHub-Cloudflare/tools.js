@@ -5701,14 +5701,29 @@
     walk(
       data,
       (node) => {
+        const type =
+          String(
+            node?.Type ||
+            node?.ExportType ||
+            node?.ObjectName ||
+            ""
+          );
+
+        const candidate =
+          node?.ObjectPath ||
+          node?.AssetPathName ||
+          node?.Path ||
+          "";
+
         if (
-          String(node.ObjectName || "")
-            .includes("SoundWave") &&
-          node.ObjectPath
+          /SoundWave/i.test(
+            type
+          ) &&
+          candidate
         ) {
           output.push(
             objectPath(
-              node.ObjectPath
+              candidate
             )
           );
         }
@@ -5718,6 +5733,28 @@
     return [
       ...new Set(output)
     ];
+  }
+
+  async function resolveSoundWavePaths(
+    path,
+    options = {}
+  ) {
+    const data =
+      await exportJson(
+        path,
+        options
+      );
+
+    return [
+      ...new Set(
+        soundWaves(data)
+          .map(toFilePath)
+          .filter(Boolean)
+      )
+    ].slice(
+      0,
+      24
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -7706,12 +7743,13 @@
 
   window.FortniteTools =
     Object.freeze({
-      version: "1.6.9",
+      version: "1.7.0",
       open,
       close,
       formatAssetPath,
       isClassCompatibleAsset,
       toFilePath,
-      findKnownImage
+      findKnownImage,
+      resolveSoundWavePaths
     });
 })();

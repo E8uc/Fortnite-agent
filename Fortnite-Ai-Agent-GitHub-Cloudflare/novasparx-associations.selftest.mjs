@@ -267,8 +267,8 @@ const soundCue =
 
 assert.equal(
   soundCue.capabilities.canListen,
-  false,
-  "SoundCue must not expose direct Listen until cue resolution exists"
+  true,
+  "SoundCue must expose Listen through linked SoundWave resolution"
 );
 
 payload = [

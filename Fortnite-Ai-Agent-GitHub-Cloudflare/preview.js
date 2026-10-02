@@ -3519,6 +3519,10 @@
         );
 
         let result;
+        let audioPath =
+          clean;
+        let directError =
+          null;
 
         try {
           result =
@@ -3531,20 +3535,110 @@
                 }
               );
         } catch (error) {
-          const failure =
-            new Error(
-              error?.message ||
-              String(error),
-              {
-                cause:
-                  error
-              }
+          directError =
+            error;
+
+          throwIfAborted(
+            signal
+          );
+
+          setStatus(
+            ui.status,
+            "Resolving the linked SoundWave…"
+          );
+
+          let candidates = [];
+
+          try {
+            candidates =
+              await window
+                .FortniteTools
+                ?.resolveSoundWavePaths?.(
+                  clean,
+                  {
+                    signal
+                  }
+                ) ||
+              [];
+          } catch (resolverError) {
+            if (
+              signal?.aborted ||
+              resolverError
+                ?.name ===
+                "AbortError"
+            ) {
+              throw resolverError;
+            }
+          }
+
+          let candidateError =
+            null;
+
+          for (
+            const candidate of
+            candidates
+          ) {
+            throwIfAborted(
+              signal
             );
 
-          failure.code =
-            "NOVASPARX_AUDIO_FAILED";
+            if (!candidate) {
+              continue;
+            }
 
-          throw failure;
+            try {
+              result =
+                await window
+                  .NovaSparxTextureRuntime
+                  .resolveAudio(
+                    candidate,
+                    {
+                      signal
+                    }
+                  );
+
+              audioPath =
+                candidate;
+
+              break;
+            } catch (error) {
+              if (
+                signal?.aborted ||
+                error?.name ===
+                  "AbortError"
+              ) {
+                throw error;
+              }
+
+              candidateError =
+                error;
+            }
+          }
+
+          if (!result) {
+            const cause =
+              candidateError ||
+              directError;
+
+            const failure =
+              new Error(
+                "No playable SoundWave could be resolved for this audio asset." +
+                (
+                  cause?.message
+                    ? " " +
+                      cause.message
+                    : ""
+                ),
+                {
+                  cause
+                }
+              );
+
+            failure.code =
+              "NOVASPARX_AUDIO_FAILED";
+
+            throw failure;
+          }
         }
 
         throwIfAborted(
@@ -3657,7 +3751,7 @@
 
         setMeta(
           ui.meta,
-          `Browser CUE4Parse SoundWave • ${result.format} • ${audioSizeLabel(result.bytes)}`,
+          `Browser CUE4Parse SoundWave • ${result.format} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • linked SoundWave" : ""}`,
           "high"
         );
 
@@ -3669,7 +3763,8 @@
           format:
             result.format,
           playable:
-            true
+            true,
+          audioPath
         };
       }
 
