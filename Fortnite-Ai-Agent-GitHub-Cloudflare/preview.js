@@ -3374,6 +3374,180 @@
     ) + " KB";
   }
 
+  async function decodeRadaToWav(
+    bytes,
+    signal
+  ) {
+    throwIfAborted(
+      signal
+    );
+
+    if (!API) {
+      const error =
+        new Error(
+          "FNAA RADA decoder endpoint is unavailable."
+        );
+
+      error.code =
+        "NOVASPARX_RADA_UNCONFIGURED";
+
+      throw error;
+    }
+
+    const size =
+      Number(
+        bytes?.byteLength ||
+        0
+      );
+
+    if (
+      size < 16 ||
+      size >
+        12 * 1024 * 1024
+    ) {
+      const error =
+        new Error(
+          "RADA payload is outside the browser decode budget."
+        );
+
+      error.code =
+        "NOVASPARX_RADA_SIZE";
+
+      throw error;
+    }
+
+    const response =
+      await fetch(
+        API +
+          "/nova-edge/rada",
+        {
+          method:
+            "POST",
+          headers: {
+            "Content-Type":
+              "application/octet-stream",
+            Accept:
+              "audio/wav"
+          },
+          body:
+            bytes,
+          signal:
+            signal ||
+            undefined
+        }
+      );
+
+    throwIfAborted(
+      signal
+    );
+
+    if (!response.ok) {
+      let message =
+        "RADA decoder returned HTTP " +
+        response.status +
+        ".";
+
+      try {
+        const body =
+          await response.json();
+
+        if (
+          body?.error &&
+          typeof body.error ===
+            "string"
+        ) {
+          message =
+            body.error;
+        }
+      } catch {}
+
+      const error =
+        new Error(
+          message
+        );
+
+      error.code =
+        "NOVASPARX_RADA_DECODE_FAILED";
+
+      throw error;
+    }
+
+    const declared =
+      Number(
+        response.headers.get(
+          "content-length"
+        ) || 0
+      );
+
+    if (
+      declared > 0 &&
+      declared >
+        64 * 1024 * 1024
+    ) {
+      try {
+        await response.body
+          ?.cancel();
+      } catch {}
+
+      const error =
+        new Error(
+          "Decoded WAV exceeds the browser audio budget."
+        );
+
+      error.code =
+        "NOVASPARX_RADA_WAV_SIZE";
+
+      throw error;
+    }
+
+    const wav =
+      await response
+        .arrayBuffer();
+
+    throwIfAborted(
+      signal
+    );
+
+    if (
+      wav.byteLength <= 44 ||
+      wav.byteLength >
+        64 * 1024 * 1024
+    ) {
+      throw new Error(
+        "RADA decoder returned an invalid WAV size."
+      );
+    }
+
+    let magic = "";
+
+    try {
+      magic =
+        String.fromCharCode(
+          ...new Uint8Array(
+            wav,
+            0,
+            12
+          )
+        );
+    } catch {}
+
+    if (
+      !magic.startsWith(
+        "RIFF"
+      ) ||
+      magic.slice(
+        8,
+        12
+      ) !== "WAVE"
+    ) {
+      throw new Error(
+        "RADA decoder did not return RIFF/WAVE audio."
+      );
+    }
+
+    return wav;
+  }
+
   async function renderPreview(
     target,
     path,
@@ -3675,6 +3849,82 @@
           signal
         );
 
+        const sourceFormat =
+          String(
+            result.format ||
+            ""
+          )
+            .trim()
+            .toUpperCase();
+
+        if (
+          sourceFormat ===
+          "RADA"
+        ) {
+          setStatus(
+            ui.status,
+            "Decoding RADA audio…"
+          );
+
+          try {
+            const wavBytes =
+              await decodeRadaToWav(
+                result.bytes,
+                signal
+              );
+
+            result = {
+              ...result,
+              sourceFormat:
+                "RADA",
+              format:
+                "WAV",
+              bytes:
+                wavBytes
+            };
+          } catch (error) {
+            if (
+              signal?.aborted ||
+              error?.name ===
+                "AbortError"
+            ) {
+              throw error;
+            }
+
+            ui.audio.hidden =
+              true;
+
+            setStatus(
+              ui.status,
+              "SoundWave extracted as RADA, but the RADA decoder is unavailable.",
+              "partial"
+            );
+
+            setMeta(
+              ui.meta,
+              `Browser CUE4Parse SoundWave • RADA • ${audioSizeLabel(result.bytes)} • decode unavailable${audioPath !== clean ? " • resolved audio path" : ""}`,
+              "partial"
+            );
+
+            return {
+              state:
+                "partial",
+              kind:
+                "audio",
+              format:
+                "RADA",
+              playable:
+                false,
+              audioPath,
+              error:
+                String(
+                  error?.message ||
+                  error
+                )
+            };
+          }
+        }
+
         const mime =
           audioMimeType(
             result.format,
@@ -3693,7 +3943,7 @@
 
           setMeta(
             ui.meta,
-            `Browser CUE4Parse SoundWave • ${result.format || "Unknown"} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • resolved audio path" : ""}`,
+            `Browser CUE4Parse SoundWave • ${result.sourceFormat ? result.sourceFormat + " → " : ""}${result.format || "Unknown"} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • resolved audio path" : ""}`,
             "partial"
           );
 
@@ -3725,7 +3975,7 @@
 
           setMeta(
             ui.meta,
-            `Browser CUE4Parse SoundWave • ${result.format} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • resolved audio path" : ""}`,
+            `Browser CUE4Parse SoundWave • ${result.sourceFormat ? result.sourceFormat + " → " : ""}${result.format} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • resolved audio path" : ""}`,
             "partial"
           );
 
@@ -3783,7 +4033,7 @@
 
         setMeta(
           ui.meta,
-          `Browser CUE4Parse SoundWave • ${result.format} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • resolved audio path" : ""}`,
+          `Browser CUE4Parse SoundWave • ${result.sourceFormat ? result.sourceFormat + " → " : ""}${result.format} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • resolved audio path" : ""}`,
           "high"
         );
 
