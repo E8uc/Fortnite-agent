@@ -495,7 +495,12 @@
       canViewImage,
       previewMode: canViewImage ? "image" : canView3D ? "3d" : "none",
       canListen: false, canDownload: true, canExportUEFN: false,
-      downloadFormats: ["json"],
+      downloadFormats:
+        resolvedKind === "texture"
+          ? ["json", "png"]
+          : resolvedKind === "audio"
+            ? ["json", "wav"]
+            : ["json"],
       tags: (tagMap[resolvedKind] || tagMap.other).slice()
     };
   }
@@ -2063,7 +2068,7 @@
   window.NovaSparxAssociations =
     Object.freeze({
       version:
-        "1.9.0",
+        "1.9.1",
       family,
       diagnosePath,
       classify,
