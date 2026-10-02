@@ -1686,8 +1686,7 @@ async function handleNovaEdgeStatus(
           true
       },
       rangeRelay:
-        "/nova-edge/range"
-,
+        "/nova-edge/range",
       radaDecode: {
         configured:
           Boolean(
