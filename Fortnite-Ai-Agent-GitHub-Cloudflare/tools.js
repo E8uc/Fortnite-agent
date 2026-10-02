@@ -1901,9 +1901,41 @@
       }
 
       if (!response) {
-        throw new Error(
-          "No verified texture image was available to download."
+        const decoded =
+          await window
+            .NovaSparxTextureRuntime
+            ?.resolveTexture?.(
+              texturePath,
+              {
+                signal
+              }
+            );
+
+        throwIfActionAborted(
+          signal
         );
+
+        if (
+          !(decoded?.blob instanceof Blob) ||
+          decoded.blob.size <= 0 ||
+          decoded.blob.size >
+            MAX_DOWNLOAD_IMAGE_BYTES
+        ) {
+          throw new Error(
+            "No verified texture image was available to download."
+          );
+        }
+
+        saveBlob(
+          decoded.blob,
+          safeAssetFilename(
+            decoded.path ||
+            texturePath,
+            "png"
+          )
+        );
+
+        return;
       }
 
       const blob =
