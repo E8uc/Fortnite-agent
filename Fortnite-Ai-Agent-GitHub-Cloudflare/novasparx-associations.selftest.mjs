@@ -144,6 +144,22 @@ assert.equal(
   "Animation folder evidence should classify real project-style paths"
 );
 
+assert.equal(
+  associations.diagnosePath(
+    "FortniteGame/Plugins/GameFeatures/SaveTheWorld/Content/L10N/ru/Sounds/Fort_Human_VO/Carlos/CARLOS_CannyTwo_2018_09_Lars_010.uasset"
+  ).kind,
+  "audio",
+  "Localized Save the World Sounds folders must classify legacy VO assets as Audio even without SW_/SC_/MSS_ prefixes"
+);
+
+assert.equal(
+  associations.diagnosePath(
+    "/Game/Audio/MysteryAsset.MysteryAsset"
+  ).kind,
+  "other",
+  "The generic Audio folder must remain weak evidence and must not classify arbitrary assets as Audio"
+);
+
 payload = [
   {
     Type:
