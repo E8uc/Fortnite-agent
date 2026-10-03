@@ -35,6 +35,9 @@ const PAGE_OPTIONS =
         }
       : {};
 
+// Mesh PNGs follow the supported device quality policy.
+const EXPECTED_MESH_IMAGE_SIZE = MOBILE_PROFILE === "ios" ? 640 : MOBILE_PROFILE === "android" ? 768 : 1024;
+
 const site =
   path.resolve(
     process.argv[2] ||
@@ -1988,7 +1991,7 @@ try {
     return {width:image.naturalWidth,height:image.naturalHeight,src:image.src,meta:card.querySelector('.mesh-image-meta')?.textContent};
   });
   assert.ok(meshUi.src.startsWith('blob:'));
-  assert.equal(meshUi.width,512);assert.equal(meshUi.height,512);
+  assert.equal(meshUi.width,EXPECTED_MESH_IMAGE_SIZE);assert.equal(meshUi.height,EXPECTED_MESH_IMAGE_SIZE);
   assert.match(meshUi.meta,/44 triangles/);
   assert.match(meshUi.meta,/Mesh \+ Texture \+ Material/,'Verified Mesh View Image must finish with the existing Texture engine applied to the material');
   assert.doesNotMatch(meshUi.meta,/unsupported/i);
@@ -2167,12 +2170,12 @@ try {
 
   assert.equal(
     lazyLakeUi.width,
-    512
+    EXPECTED_MESH_IMAGE_SIZE
   );
 
   assert.equal(
     lazyLakeUi.height,
-    512
+    EXPECTED_MESH_IMAGE_SIZE
   );
 
   assert.match(
@@ -2851,12 +2854,12 @@ try {
 
     assert.equal(
       proof.width,
-      512
+      EXPECTED_MESH_IMAGE_SIZE
     );
 
     assert.equal(
       proof.height,
-      512
+      EXPECTED_MESH_IMAGE_SIZE
     );
 
     assert.match(
