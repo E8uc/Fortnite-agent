@@ -1915,7 +1915,8 @@
   }
 
   function normalizeMaxSize(
-    value
+    value,
+    limit = 1024
   ) {
     const number =
       Math.floor(
@@ -1928,7 +1929,7 @@
     return Math.max(
       128,
       Math.min(
-        1024,
+        limit,
         number
       )
     );
@@ -2106,7 +2107,8 @@
 
     const maxSize =
       normalizeMaxSize(
-        options.maxSize
+        options.maxSize,
+        options.maxSizeLimit || 1024
       );
 
     if (
@@ -3085,11 +3087,41 @@
           })
         );
 
+      const usedMaterialSlots = new Set(sections
+        .filter(section => section.indexCount > 0 && Number.isInteger(section.materialIndex) &&
+          section.materialIndex >= 0 && section.materialIndex < materialCount)
+        .map(section => section.materialIndex));
+
+      // Both consumers use these exact transferred streams and material slots.
+      const meshManifest = {
+        path: mesh.path,
+        assetType: 'StaticMesh',
+        geometry,
+        sections,
+        materials: Array.from({ length: materialCount }, (_, index) =>
+          materialValueFallback(mesh.materialMetadata[index]).material),
+        metadata: { lod: mesh.lodIndex, materialFidelity: 'geometry-first' }
+      };
+      const interactive = options.interactive === true;
+      globalThis.NovaSparxBrowserGuard?.assertManifestBudget?.(meshManifest);
+      const textureBudget = globalThis.NovaSparxBrowserGuard?.renderPolicy?.(meshManifest)?.maxTextureLoads ?? 24;
+      const decodedTextureBudget = 64 * 1024 * 1024;
+      const uniqueTextures = new Set(mesh.materialMetadata.slice(0, materialCount)
+        .filter((_, index) => usedMaterialSlots.has(index))
+        .map(metadata => baseColorParameter(metadata))
+        .map(parameter => String(parameter?.packageId || parameter?.path || '').trim().toLowerCase())
+        .filter(Boolean)).size;
+      // Share repeated maps and divide the budget fairly across distinct maps.
+      const materialSize = Math.min(
+        normalizeMaxSize(options.maxMaterialSize ?? (interactive ? 2048 : 512), 2048),
+        2 ** Math.floor(Math.log2(Math.sqrt(decodedTextureBudget /
+          (4 * Math.max(1, Math.min(uniqueTextures, textureBudget)))))));
+
       // First frame: show the verified CUE4Parse Mesh immediately.
       // Texture + Material fidelity is upgraded below using the same
       // browser Texture runtime that powers normal 2D Texture previews.
       const firstFrame =
-        await globalThis
+        interactive ? { triangleCount: geometry.indices.length / 3 } : await globalThis
           .NovaSparxRenderer
           .render(
             {
@@ -3110,9 +3142,7 @@
             },
             {
               signal:
-                request.signal,
-              size:
-                512
+                request.signal
             }
           );
 
@@ -3130,6 +3160,8 @@
             const missingMaterials = [];
             let textureMaterialCount = 0;
             let valueMaterialCount = 0;
+            let textureLoads = 0;
+            let decodedTextureBytes = 0;
 
             for (
               let index = 0;
@@ -3151,6 +3183,12 @@
                 materialValueFallback(
                   metadata
                 );
+
+              // Preserve slot indices, but decode only maps used by this LOD.
+              if (!usedMaterialSlots.has(index)) {
+                materials.push(valueFallback.material);
+                continue;
+              }
 
               const parameter =
                 baseColorParameter(
@@ -3218,7 +3256,12 @@
                     materialKey
                   );
 
+              try {
               if (!material) {
+                if (textureLoads >= textureBudget) {
+                  throw new Error('Mesh Texture budget reached');
+                }
+                textureLoads++;
                 const textureLocation =
                   /^[a-f0-9]{16}$/.test(
                     packageId
@@ -3247,13 +3290,19 @@
                       mode:
                         'texture',
                       maxSize:
-                        512
+                        materialSize,
+                      maxSizeLimit: 2048
                     }
                   );
 
                 throwIfAborted(
                   request.signal
                 );
+
+                if (decodedTextureBytes + texture.pixels.byteLength > decodedTextureBudget) {
+                  throw new Error('Mesh decoded Texture budget reached');
+                }
+                decodedTextureBytes += texture.pixels.byteLength;
 
                 material = {
                   baseColorFrame: {
@@ -3278,6 +3327,13 @@
               );
 
               textureMaterialCount++;
+              } catch (error) {
+                throwIfAborted(request.signal);
+                if (error?.name === 'AbortError') throw error;
+                materials.push(valueFallback.material);
+                missingMaterials.push(index);
+                if (valueFallback.applied) valueMaterialCount++;
+              }
             }
 
             throwIfAborted(
@@ -3285,7 +3341,8 @@
             );
 
             const rendered =
-              await globalThis
+              interactive ? { triangleCount: geometry.indices.length / 3,
+                textured: textureMaterialCount > 0 } : await globalThis
                 .NovaSparxRenderer
                 .render(
                   {
@@ -3315,9 +3372,7 @@
                   },
                   {
                     signal:
-                      request.signal,
-                    size:
-                      512
+                      request.signal
                   }
                 );
 
@@ -3325,8 +3380,20 @@
               request.signal
             );
 
+            const previewMode = textureMaterialCount > 0
+              ? (missingMaterials.length ? 'base-color-partial' : 'base-color-preview')
+              : valueMaterialCount > 0
+                ? (missingMaterials.length ? 'material-value-partial' : 'material-value-preview')
+                : 'geometry-only';
+
             return {
               ...rendered,
+              materialFidelity: previewMode,
+              manifest: {
+                ...meshManifest,
+                materials,
+                metadata: { ...meshManifest.metadata, materialFidelity: previewMode }
+              },
               path:
                 mesh.path,
               source:
@@ -3366,6 +3433,7 @@
 
       return {
         ...firstFrame,
+        manifest: meshManifest,
         path:
           mesh.path,
         source:

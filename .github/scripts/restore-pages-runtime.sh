@@ -93,3 +93,38 @@ mkdir -p "$(dirname "$target")"
 cp -a "$source_runtime" "$target"
 
 echo "Restored NovaSparx runtime from successful Pages run ${run_id}, artifact ${artifact_id}."
+
+# Keep the deployed indexes/mappings, then overlay the pinned compiled runtime.
+# The compiled bundle is pinned in this repository so deployment needs no
+# private cross-repository credential. Browser decoding stays on the device.
+pin=".github/novasparx-runtime.json"
+if [[ -f "$pin" ]]; then
+  read -r runtime_archive runtime_sha runtime_source < <(
+    python3 - "$pin" <<'PY'
+import json
+import re
+import sys
+with open(sys.argv[1], encoding="utf-8") as handle:
+    pin = json.load(handle)
+assert re.fullmatch(r"\.github/runtime/novasparx-browser-runtime-[a-f0-9]{12}\.tar\.gz", pin["archive"])
+assert re.fullmatch(r"[a-f0-9]{64}", pin["sha256"])
+assert re.fullmatch(r"[a-f0-9]{40}", pin["sourceRevision"])
+print(pin["archive"], pin["sha256"], pin["sourceRevision"])
+PY
+  )
+  printf '%s  %s\n' "$runtime_sha" "$runtime_archive" | sha256sum --check --status
+  mkdir "$tmp/new-runtime"
+  tar -xzf "$runtime_archive" -C "$tmp/new-runtime"
+  test -s "$tmp/new-runtime/worker.js"
+  test -s "$tmp/new-runtime/_framework/dotnet.js"
+  test -n "$(find "$tmp/new-runtime/_framework" -type f -name '*.wasm' -print -quit)"
+  python3 - "$tmp/new-runtime/runtime-source.json" "$runtime_source" <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as handle:
+    assert json.load(handle)["sourceRevision"] == sys.argv[2], "Runtime source revision mismatch"
+PY
+  rm -rf "$target/_framework"
+  cp -a "$tmp/new-runtime/." "$target/"
+  echo "Applied NovaSparx browser runtime from source ${runtime_source}."
+fi

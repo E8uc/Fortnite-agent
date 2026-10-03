@@ -150,6 +150,8 @@ jobs:
           FNAA_BROWSER_ENGINE=chromium \
             node .github/tests/novasparx-texture-runtime.browser.test.mjs \
             Fortnite-Ai-Agent-GitHub-Cloudflare
+          FNAA_BROWSER_ENGINE=chromium FNAA_MODEL_PROOF_CASE=all \
+            node .github/tests/novasparx-model-viewer.browser.test.mjs
 
       - name: Prove FNAA Layer 8 in WebKit
         shell: bash
@@ -158,6 +160,8 @@ jobs:
           FNAA_BROWSER_ENGINE=webkit \
             node .github/tests/novasparx-texture-runtime.browser.test.mjs \
             Fortnite-Ai-Agent-GitHub-Cloudflare
+          FNAA_BROWSER_ENGINE=webkit FNAA_MODEL_PROOF_CASE=all \
+            node .github/tests/novasparx-model-viewer.browser.test.mjs
 
       - name: Prove FNAA Layer 8 with iPhone WebKit profile
         shell: bash
@@ -167,6 +171,8 @@ jobs:
           FNAA_MOBILE_PROFILE=ios \
             node .github/tests/novasparx-texture-runtime.browser.test.mjs \
             Fortnite-Ai-Agent-GitHub-Cloudflare
+          FNAA_BROWSER_ENGINE=webkit FNAA_MOBILE_PROFILE=ios FNAA_MODEL_PROOF_CASE=all \
+            node .github/tests/novasparx-model-viewer.browser.test.mjs
 
       - name: Prove FNAA Layer 8 with Android Chromium profile
         shell: bash
@@ -176,6 +182,8 @@ jobs:
           FNAA_MOBILE_PROFILE=android \
             node .github/tests/novasparx-texture-runtime.browser.test.mjs \
             Fortnite-Ai-Agent-GitHub-Cloudflare
+          FNAA_BROWSER_ENGINE=chromium FNAA_MOBILE_PROFILE=android FNAA_MODEL_PROOF_CASE=all \
+            node .github/tests/novasparx-model-viewer.browser.test.mjs
 
       - name: Preserve FNAA Layer 8 proof
         if: always()
@@ -186,6 +194,7 @@ jobs:
             fnaa-layer8-browser-proof.json
             fnaa-mesh-proof.json
             fnaa-real-mesh.png
+            fnaa-model-proof-*/
           if-no-files-found: ignore
 
       - name: Verify local page assets
