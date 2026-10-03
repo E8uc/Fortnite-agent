@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   pages: write
   id-token: write
@@ -28,78 +29,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Checkout verified NovaSparx Layer 8 runtime
-        uses: actions/checkout@v4
-        with:
-          repository: E8uc/NovaSparx
-          ref: 65e33f17afd591da757219b09a90dcc3614142e0
-          path: .novasparx-src
-          fetch-depth: 1
-
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
-
-      - name: Install browser WASM workload
-        run: dotnet workload install wasm-tools
-
-      - name: Build browser-only Layer 8 runtime
+      - name: Restore deployed NovaSparx Layer 8 runtime
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-
-          dotnet publish \
-            .novasparx-src/tools/CUE4Parse.BrowserProbe/CUE4Parse.BrowserProbe.csproj \
-            --configuration Release
-
-          output_root=".novasparx-src/tools/CUE4Parse.BrowserProbe/bin/Release/net10.0"
-          dotnet_js="$(find "$output_root" -type f -path '*/_framework/dotnet.js' -print -quit)"
-          test -n "$dotnet_js"
-
-          framework_dir="$(dirname "$dotnet_js")"
-          bundle="$(dirname "$framework_dir")"
-          target="Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-runtime"
-
-          rm -rf "$target"
-          mkdir -p "$target/location-index" "$target/studio-location-index" "$target/package-id-index" "$target/mappings"
-
-          cp -a "$bundle"/. "$target"/
-          cp .novasparx-src/tools/CUE4Parse.BrowserProbe/worker.js "$target/worker.js"
-          cp -a .novasparx-src/web/location-index/. "$target/location-index/"
-          cp -a .novasparx-src/web/studio-location-index/. "$target/studio-location-index/"
-          cp -a .novasparx-src/web/package-id-index/. "$target/package-id-index/"
-
-          mappings_meta="$(mktemp)"
-          curl --fail --silent --show-error --location --retry 3 \
-            "https://api.fortniteapi.com/v1/mappings" \
-            -o "$mappings_meta"
-
-          mapping_url="$(python3 -c 'import json,sys; data=json.load(open(sys.argv[1], encoding="utf-8")); candidates=[(str(item.get("uploadedAt") or ""), str(item.get("url") or "")) for item in data if isinstance(item,dict) and str((item.get("meta") or {}).get("platform") or "").lower()=="windows" and str(item.get("url") or "").startswith("https://") and "usmap" in str(item.get("url") or "").lower()]; candidates.sort(reverse=True); print(candidates[0][1] if candidates else ""); sys.exit(0 if candidates else 2)' "$mappings_meta")"
-
-          test -n "$mapping_url"
-          curl --fail --silent --show-error --location --retry 3 \
-            "$mapping_url" \
-            -o "$target/mappings/current.usmap"
-
-          mapping_size="$(wc -c < "$target/mappings/current.usmap" | tr -d ' ')"
-          test "$mapping_size" -ge 32
-          test "$mapping_size" -le 33554432
-
-          python3 -c 'from pathlib import Path; import sys; head=Path(sys.argv[1]).read_bytes()[:4]; sys.exit("Outer Zstandard-compressed mappings are not browser-compatible" if head == bytes.fromhex("28b52ffd") else 0)' "$target/mappings/current.usmap"
-
-          sha256sum "$target/mappings/current.usmap" \
-            > "$target/mappings/current.usmap.sha256"
-
-
-          test -s "$target/worker.js"
-          test -s "$target/_framework/dotnet.js"
-          test -n "$(find "$target/_framework" -type f -name '*.wasm' -print -quit)"
-          test -s "$target/location-index/manifest.json"
-          test -s "$target/studio-location-index/manifest.json"
-          test -s "$target/mappings/current.usmap"
-          test -s "$target/mappings/current.usmap.sha256"
-
+          bash .github/scripts/restore-pages-runtime.sh Fortnite-Ai-Agent-GitHub-Cloudflare
           touch Fortnite-Ai-Agent-GitHub-Cloudflare/.nojekyll
 
       - name: Setup Pages
