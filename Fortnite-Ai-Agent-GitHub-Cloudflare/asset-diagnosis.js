@@ -124,11 +124,13 @@
           [/^(?:cid_|bid_|eid_|pickaxe_)/, "cosmetic"], [/^(?:da_|dt_|data_)/, "data"]
         ];
         kind = rules.find(([pattern]) => pattern.test(name))?.[1] || "other";
-        // Generic Audio/Mesh/UI directories contain many unrelated asset types.
+        // Generic Audio/Mesh/UI directories can contain unrelated asset types,
+        // so only use folder names that are strong asset-family evidence.
         if (kind === "other") {
           if (/\/skeletalmeshes?\//.test(full)) kind = "skeletalmesh";
           else if (/\/staticmeshes?\//.test(full)) kind = "staticmesh";
           else if (/\/(?:animations?|anims?|montages?)\//.test(full)) kind = "animation";
+          else if (/\/(?:sounds?|soundwaves?|voiceover|voice_?over|vo)\//.test(full)) kind = "audio";
         }
         if (kind !== "other") { source = "path-fallback"; confidence = 55; }
       }
