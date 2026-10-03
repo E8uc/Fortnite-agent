@@ -179,6 +179,7 @@ try {
     {path:"Texture2D'/Game/Test/T_Layer8_Probe.T_Layer8_Probe'",expected:'Texture2D'},
     {path:'/Game/Audio/SW_ListenProof.SW_ListenProof',expected:'SoundWave',listen:true},
     {path:"SoundCue'/Game/Audio/SC_NotDirect.SC_NotDirect'",expected:'SoundCue',listen:true},
+    {path:'FortniteGame/Plugins/GameFeatures/SaveTheWorld/Content/L10N/ru/Sounds/Fort_Human_VO/Carlos/CARLOS_CannyTwo_2018_09_Lars_010.uasset',expected:'SoundWave',listen:true},
     {path:'/CRD_AnimatedMesh/Device_AnimatedMesh.Device_AnimatedMesh_C',expected:'Blueprint'},
     {path:'/Game/S_Ambiguous.S_Ambiguous',expected:'Unknown'}
   ];
