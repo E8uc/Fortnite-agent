@@ -1168,12 +1168,27 @@
       }
     }
 
+    const modelButton = card.querySelector('[data-asset-action="model"]');
+    if (modelButton) {
+      const supported = kind === "staticmesh" &&
+        ["typed-path", "export-json", "inspection"].includes(classification.source) &&
+        typeof window.NovaSparxTextureRuntime?.resolveMeshImage === "function" &&
+        typeof window.NovaSparxRenderer?.mount === "function";
+      modelButton.hidden = !supported;
+      modelButton.disabled = !supported;
+      modelButton.dataset.closedLabel = "View 3D";
+      modelButton.dataset.openLabel = "Hide";
+      if (modelButton.dataset.fnaaOpen !== "1") modelButton.textContent = "View 3D";
+    }
+
     const exportButton =
       card.querySelector(
         '[data-asset-action="uefn"]'
       );
 
     if (exportButton) {
+      // The Mesh viewer occupies the existing UEFN action's place.
+      exportButton.hidden = kind === "staticmesh";
       const exporterSupports =
         Boolean(
           window.NovaSparxExporter
@@ -2116,6 +2131,14 @@
           <button
             class="json-view-button"
             type="button"
+            data-asset-action="model"
+            hidden
+            disabled
+          >View 3D</button>
+
+          <button
+            class="json-view-button"
+            type="button"
             data-asset-action="uefn"
             disabled
           >${escapeHtml(t("exportUEFN", "Export to UEFN"))}</button>
@@ -2182,6 +2205,10 @@
         const action =
           button.dataset.assetAction;
 
+        window.FortnitePreview?.releaseMeshPreview?.(
+          card.dataset.assetKind === "staticmesh" && ["preview", "model"].includes(action) ? path : ""
+        );
+
         window.NovaSparxBrowserGuard
           ?.abortActive?.(
             "replaced-by-new-asset-action"
@@ -2211,6 +2238,7 @@
 
         const usesGuestSlowmode =
           action === "preview" ||
+          action === "model" ||
           action === "references" ||
           action === "download" ||
           action === "uefn";
@@ -2239,11 +2267,12 @@
             ?.beginGuestToolSlowmode?.();
         }
 
-        if (action === "preview") {
+        if (action === "preview" || action === "model") {
           await previewPath(
             card,
             path,
-            panelRequest.id
+            panelRequest.id,
+            action
           );
           return;
         }
@@ -2315,6 +2344,8 @@
         t("viewPreview", "View Preview"),
         t("hidePreview", "Hide Preview")
       ],
+
+      model: ["View 3D", "Hide"],
 
       uefn: [
         t("exportUEFN", "Export to UEFN"),
@@ -2411,7 +2442,7 @@
 
       resetPanelButtons(card);
 
-      if (action === "preview") {
+      if (action === "preview" || action === "model") {
         window.FortnitePreview
           ?.release?.(
             card.dataset.assetPath ||
@@ -2426,13 +2457,14 @@
     }
 
     if (
-      current === "preview" &&
-      action !== "preview"
+      ["preview", "model"].includes(current) &&
+      action !== current
     ) {
       window.FortnitePreview
         ?.release?.(
           card.dataset.assetPath ||
-          ""
+          "",
+          { preserveMesh: card.dataset.assetKind === "staticmesh" && ["preview", "model"].includes(action) }
         );
     }
 
@@ -2466,8 +2498,7 @@
     button
   ) {
     if (
-      card.dataset.openAction ===
-        "preview"
+      ["preview", "model"].includes(card.dataset.openAction)
     ) {
       window.FortnitePreview
         ?.release?.(
@@ -2683,7 +2714,8 @@
   async function previewPath(
     card,
     path,
-    requestId
+    requestId,
+    action = "preview"
   ) {
     const panel =
       card.querySelector(
@@ -2714,6 +2746,7 @@
             path,
             null,
             {
+              mode: action === "model" ? "model" : "image",
               assetKind:
                 card.dataset
                   .assetKind ||
@@ -2724,17 +2757,12 @@
         if (
           !panelRequestIsCurrent(
             card,
-            "preview",
+            action,
             requestId
           )
         ) {
-          window.FortnitePreview
-            ?.release?.(
-              path
-            );
-
-          panel.hidden = true;
-          panel.replaceChildren();
+          // The newer panel request owns cleanup and visibility.
+          return;
         }
 
         return;
@@ -2746,7 +2774,7 @@
       if (
         !panelRequestIsCurrent(
           card,
-          "preview",
+          action,
           requestId
         )
       ) {

@@ -15,6 +15,88 @@
   const audioSessions =
     new Map();
 
+  // Image and live Mesh views share one decoded asset while its panel is open.
+  let meshPreview = null;
+
+  function releaseMeshResult(path) {
+    const entry = meshPreview;
+    if (!entry || (path && entry.path !== path)) return;
+    meshPreview = null;
+    entry.controller.abort("mesh-preview-released");
+    for (const result of [entry.result, entry.finalResult]) {
+      if (!result) continue;
+      result.manifest = null;
+      result.blob = null;
+      result.materialPromise = null;
+    }
+    entry.result = entry.finalResult = entry.promise = null;
+  }
+
+  function waitForMeshResult(promise, signal) {
+    throwIfAborted(signal);
+    if (!signal) return promise;
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        // A view switch keeps the decode alive; close, timeout and pagehide do not.
+        if (!["replaced-by-new-asset-action", "replaced-by-new-request"].includes(signal.reason)) {
+          releaseMeshResult();
+        }
+        reject(abortError(signal));
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      Promise.resolve(promise).then(resolve, reject).finally(() => {
+        signal.removeEventListener("abort", onAbort);
+      });
+    });
+  }
+
+  async function resolveSharedMesh(path, interactive, signal) {
+    if (!meshPreview || meshPreview.path !== path || meshPreview.controller.signal.aborted) {
+      if (meshPreview) release(meshPreview.path);
+      const entry = { path, controller: new AbortController(), result: null, finalResult: null, promise: null };
+      meshPreview = entry;
+      entry.promise = window.NovaSparxTextureRuntime.resolveMeshImage(path, {
+        interactive,
+        maxMaterialSize: 2048,
+        signal: entry.controller.signal
+      }).then(result => {
+        if (meshPreview !== entry || entry.controller.signal.aborted) {
+          result.manifest = result.blob = result.materialPromise = null;
+          throw abortError(entry.controller.signal);
+        }
+        entry.result = result;
+        if (result.materialPromise) {
+          result.materialPromise = result.materialPromise.then(finalResult => {
+            if (meshPreview !== entry || entry.controller.signal.aborted) {
+              finalResult.manifest = finalResult.blob = null;
+              throw abortError(entry.controller.signal);
+            }
+            entry.finalResult = finalResult;
+            return finalResult;
+          });
+          // Closing during material decode must not create an unhandled rejection.
+          result.materialPromise.catch(() => {});
+        }
+        return result;
+      }).catch(error => {
+        if (meshPreview === entry) releaseMeshResult(path);
+        throw error;
+      });
+    }
+    const entry = meshPreview;
+    const result = entry.finalResult || await waitForMeshResult(entry.promise, signal);
+    throwIfAborted(signal);
+    return entry.finalResult || result;
+  }
+
+  async function meshImageResult(result, signal) {
+    if (result.blob) return result;
+    const image = await window.NovaSparxRenderer.render(result.manifest, { signal });
+    throwIfAborted(signal);
+    result.blob = image.blob;
+    return { ...result, ...image };
+  }
+
   function objectUrlLimit() {
     const state =
       window.NovaSparxBrowserGuard
@@ -44,7 +126,7 @@
       return;
     }
 
-    release(key);
+    release(key, { preserveMesh: true });
 
     objectUrls.set(
       key,
@@ -134,12 +216,14 @@
     fallback ||
     key;
 
-  function release(path) {
+  function release(path, options = {}) {
     const key =
       String(path || "")
         .trim();
 
     if (!key) return;
+
+    if (!options.preserveMesh) releaseMeshResult(key);
 
     const session =
       viewerSessions.get(
@@ -181,7 +265,15 @@
       if (session.controls) {
         session.controls.hidden =
           true;
+        for (const button of session.controls.querySelectorAll("button")) {
+          button.onclick = null;
+        }
+        for (const input of session.controls.querySelectorAll("input")) {
+          input.oninput = null;
+        }
       }
+
+      session.controller = null;
 
       try {
         session.panel
@@ -266,12 +358,19 @@
       [
         ...viewerSessions.keys(),
         ...audioSessions.keys(),
-        ...objectUrls.keys()
+        ...objectUrls.keys(),
+        ...(meshPreview ? [meshPreview.path] : [])
       ]
     ) {
       release(
         key
       );
+    }
+  }
+
+  function releaseMeshPreview(exceptPath = "") {
+    if (meshPreview && meshPreview.path !== String(exceptPath || "").trim()) {
+      release(meshPreview.path);
     }
   }
 
@@ -677,6 +776,130 @@
     }
   }
 
+  function bindOrbitStick(stick, controller, signal) {
+    const knob = stick.querySelector("[data-novasparx-stick-knob]");
+    const keys = new Set();
+    const listeners = [];
+    const deadZone = 0.12;
+    const speed = 1.4;
+    let pointerId = null;
+    let frame = null;
+    let lastTime = 0;
+    let velocityX = 0;
+    let velocityY = 0;
+    let disposed = false;
+
+    const stopFrame = () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = null;
+      lastTime = 0;
+    };
+    const tick = now => {
+      frame = null;
+      if (disposed || (!velocityX && !velocityY)) return;
+      if (lastTime) {
+        const elapsed = Math.min(0.05, Math.max(0, (now - lastTime) / 1000));
+        controller.rotateBy?.(velocityX * speed * elapsed, -velocityY * speed * elapsed);
+      }
+      lastTime = now;
+      if (!disposed && (velocityX || velocityY)) frame = requestAnimationFrame(tick);
+    };
+    const setDisplacement = (x, y, radius) => {
+      const length = Math.hypot(x, y);
+      if (length > 1) { x /= length; y /= length; }
+      const magnitude = Math.min(1, length);
+      const scale = magnitude > deadZone ? (magnitude - deadZone) / ((1 - deadZone) * magnitude) : 0;
+      velocityX = x * scale;
+      velocityY = y * scale;
+      if (knob) knob.style.transform = `translate3d(${x * radius}px, ${y * radius}px, 0)`;
+      stick.classList.toggle("is-active", pointerId !== null || keys.size > 0);
+      if (disposed || (!velocityX && !velocityY)) {
+        stopFrame();
+      } else if (frame === null) {
+        lastTime = 0;
+        frame = requestAnimationFrame(tick);
+      }
+    };
+    const stickGeometry = () => {
+      const bounds = stick.getBoundingClientRect();
+      const radius = Math.max(1, (Math.min(bounds.width, bounds.height) - (knob?.offsetWidth || 36)) / 2 - 6);
+      return { bounds, radius };
+    };
+    const updatePointer = event => {
+      const { bounds, radius } = stickGeometry();
+      setDisplacement((event.clientX - bounds.left - bounds.width / 2) / radius,
+        (event.clientY - bounds.top - bounds.height / 2) / radius, radius);
+    };
+    const stopInput = () => {
+      const captured = pointerId;
+      pointerId = null;
+      keys.clear();
+      setDisplacement(0, 0, 0);
+      if (captured !== null) {
+        try { stick.releasePointerCapture(captured); } catch {}
+      }
+    };
+    const onPointerDown = event => {
+      if (disposed || pointerId !== null || event.isPrimary === false || (event.pointerType === "mouse" && event.button !== 0)) return;
+      event.preventDefault();
+      keys.clear();
+      pointerId = event.pointerId;
+      try { stick.focus({ preventScroll: true }); } catch { stick.focus(); }
+      try { stick.setPointerCapture(pointerId); } catch {}
+      updatePointer(event);
+    };
+    const onPointerMove = event => {
+      if (event.pointerId !== pointerId) return;
+      event.preventDefault();
+      updatePointer(event);
+    };
+    const onPointerEnd = event => {
+      if (event.pointerId === pointerId) stopInput();
+    };
+    const updateKeyboard = () => {
+      const x = Number(keys.has("ArrowRight")) - Number(keys.has("ArrowLeft"));
+      const y = Number(keys.has("ArrowDown")) - Number(keys.has("ArrowUp"));
+      setDisplacement(x, y, stickGeometry().radius);
+    };
+    const isArrow = key => ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(key);
+    const onKeyDown = event => {
+      if (!isArrow(event.key)) return;
+      event.preventDefault();
+      if (pointerId !== null || disposed) return;
+      keys.add(event.key);
+      updateKeyboard();
+    };
+    const onKeyUp = event => {
+      if (!isArrow(event.key)) return;
+      event.preventDefault();
+      keys.delete(event.key);
+      if (pointerId === null) updateKeyboard();
+    };
+    const listen = (target, name, listener) => {
+      target.addEventListener(name, listener);
+      listeners.push(() => target.removeEventListener(name, listener));
+    };
+    const cleanup = () => {
+      if (disposed) return;
+      disposed = true;
+      stopInput();
+      for (const remove of listeners) remove();
+      listeners.length = 0;
+    };
+    listen(stick, "pointerdown", onPointerDown);
+    listen(stick, "pointermove", onPointerMove);
+    listen(stick, "pointerup", onPointerEnd);
+    listen(stick, "pointercancel", onPointerEnd);
+    listen(stick, "lostpointercapture", onPointerEnd);
+    listen(stick, "keydown", onKeyDown);
+    listen(stick, "keyup", onKeyUp);
+    listen(stick, "blur", stopInput);
+    listen(window, "blur", stopInput);
+    listen(document, "visibilitychange", () => { if (document.hidden) stopInput(); });
+    if (signal) listen(signal, "abort", cleanup);
+    return cleanup;
+  }
+
   function createHostUi(
     host
   ) {
@@ -722,30 +945,28 @@
           hidden
           aria-label="3D viewer controls"
         >
-          <button
-            class="json-view-button"
-            type="button"
-            data-novasparx-reset
-          >Reset</button>
-
-          <button
-            class="json-view-button"
-            type="button"
-            data-novasparx-wireframe
-            aria-pressed="false"
-          >Wireframe</button>
-
-          <button
-            class="json-view-button"
-            type="button"
-            data-novasparx-capture
-          >Capture PNG</button>
-
-          <button
-            class="json-view-button"
-            type="button"
-            data-novasparx-fullscreen
-          >Fullscreen</button>
+          <div class="novasparx-viewer-primary">
+            <div class="novasparx-orbit-control">
+              <span class="novasparx-stick-label">Rotate</span>
+              <div class="novasparx-orbit-stick" data-novasparx-stick tabindex="0"
+                role="group" aria-roledescription="analog stick"
+                aria-label="Rotate camera around Mesh. Drag or use arrow keys."
+                title="Drag or use arrow keys to rotate">
+                <span class="novasparx-stick-knob" data-novasparx-stick-knob aria-hidden="true"></span>
+              </div>
+            </div>
+            <label class="novasparx-zoom-control">
+              <span class="novasparx-zoom-label">Zoom <output data-novasparx-zoom-output>100%</output></span>
+              <input type="range" min="35" max="700" step="1" value="100"
+                data-novasparx-zoom aria-label="Mesh zoom" aria-valuetext="100%" />
+            </label>
+          </div>
+          <div class="novasparx-viewer-secondary">
+            <button class="json-view-button" type="button" data-novasparx-reset>Reset</button>
+            <button class="json-view-button" type="button" data-novasparx-wireframe aria-pressed="false">Wireframe</button>
+            <button class="json-view-button" type="button" data-novasparx-capture>Capture PNG</button>
+            <button class="json-view-button" type="button" data-novasparx-fullscreen>Fullscreen</button>
+          </div>
         </div>
 
         <div
@@ -907,7 +1128,8 @@
   }
 
   function resetUi(
-    ui
+    ui,
+    preserveMesh = false
   ) {
     if (
       !ui?.panel ||
@@ -926,7 +1148,8 @@
 
     if (mountedPath) {
       release(
-        mountedPath
+        mountedPath,
+        { preserveMesh }
       );
     }
 
@@ -943,7 +1166,8 @@
         mountedPath
     ) {
       release(
-        previousPath
+        previousPath,
+        { preserveMesh }
       );
     }
 
@@ -1210,8 +1434,7 @@
 
     setMeta(
       ui.meta,
-      "3D model unavailable • no still-image substitution was used",
-      "partial"
+      ""
     );
 
     return {
@@ -1259,7 +1482,8 @@
       ).trim();
 
     release(
-      key
+      key,
+      { preserveMesh: options.preserveMesh === true }
     );
 
     trimViewerSessions(
@@ -1298,6 +1522,24 @@
     let controller =
       null;
 
+    const zoomInput = ui.controls?.querySelector("[data-novasparx-zoom]");
+    const zoomOutput = ui.controls?.querySelector("[data-novasparx-zoom-output]");
+    let viewActive = true;
+    let lastZoomPercent = null;
+    const syncViewControls = (view = {}) => {
+      if (!viewActive) return;
+      const zoom = Number(view.zoom);
+      if (!Number.isFinite(zoom)) return;
+      const percent = Math.round(Math.max(35, Math.min(700, zoom * 100)));
+      if (percent === lastZoomPercent) return;
+      lastZoomPercent = percent;
+      if (zoomInput) {
+        zoomInput.value = String(percent);
+        zoomInput.setAttribute("aria-valuetext", `${percent}%`);
+      }
+      if (zoomOutput) zoomOutput.textContent = `${percent}%`;
+    };
+
     try {
       controller =
         await window
@@ -1306,7 +1548,8 @@
             manifest,
             ui.viewer,
             {
-              signal
+              signal,
+              onViewChange: syncViewControls
             }
           );
 
@@ -1314,6 +1557,7 @@
         signal
       );
     } catch (error) {
+      viewActive = false;
       try {
         controller
           ?.dispose?.();
@@ -1337,7 +1581,7 @@
       panel:
         ui.panel,
       cleanup:
-        []
+        [() => { viewActive = false; }]
     };
 
     viewerSessions.set(
@@ -1355,6 +1599,18 @@
     if (ui.controls) {
       ui.controls.hidden =
         false;
+
+      syncViewControls(controller.getView?.() || { zoom: 1 });
+      if (zoomInput) {
+        zoomInput.oninput = () => {
+          const zoom = Number(zoomInput.value) / 100;
+          controller.setZoom?.(zoom);
+          syncViewControls(controller.getView?.() || { zoom });
+        };
+      }
+
+      const stick = ui.controls.querySelector("[data-novasparx-stick]");
+      if (stick) sessionRecord.cleanup.push(bindOrbitStick(stick, controller, signal));
 
       const resetButton =
         ui.controls
@@ -1384,6 +1640,7 @@
         resetButton.onclick =
           () => {
             controller.reset?.();
+            syncViewControls(controller.getView?.() || { zoom: 1 });
           };
       }
 
@@ -1649,52 +1906,9 @@
         "unknown"
       ).toLowerCase();
 
-    const typeLabel =
-      String(
-        manifest?.assetType ||
-        manifest?.metadata
-          ?.assetType ||
-        manifest?.metadata
-          ?.type ||
-        "Mesh"
-      );
-
-    const lodValue =
-      manifest?.metadata
-        ?.lod ??
-      manifest?.lod ??
-      null;
-
-    const lodText =
-      lodValue ===
-        null ||
-      lodValue ===
-        undefined ||
-      lodValue ===
-        ""
-        ? ""
-        : ` • LOD ${lodValue}`;
-
     setMeta(
       ui.meta,
-      (
-        `${sourceLabel} • Interactive WebGL • ` +
-        `${typeLabel}${lodText} • ` +
-        `${Number(
-          controller?.vertexCount ||
-          0
-        ).toLocaleString()} vertices • ` +
-        `${Number(
-          controller?.triangleCount ||
-          0
-        ).toLocaleString()} triangles • ` +
-        `${Number(
-          controller?.materialCount ||
-          0
-        ).toLocaleString()} materials • ` +
-        `material fidelity: ${fidelity}`
-      ),
-      fidelity
+      ""
     );
 
     return {
@@ -3647,6 +3861,8 @@
         ""
       ).toLowerCase();
 
+    if (meshPreview && (meshPreview.path !== clean || requestedKind !== "staticmesh")) release(meshPreview.path);
+
     const browser3dReady =
       (() => {
         try {
@@ -3695,6 +3911,8 @@
     ) {
       ui.panel.hidden = true;
 
+      if (requestedKind === "staticmesh") release(clean);
+
       if (button) {
         button.textContent =
           t(
@@ -3708,7 +3926,7 @@
       };
     }
 
-    resetUi(ui);
+    resetUi(ui, requestedKind === "staticmesh");
 
     ui.panel.dataset
       .previewAssetPath =
@@ -4090,21 +4308,44 @@
       }
 
       if (requestedKind === "staticmesh") {
-        setStatus(ui.status, "Reading and rendering this Mesh in your browser…");
+        const interactive = options.mode === "model";
+        setStatus(ui.status, interactive ? "Reading this Mesh for the interactive 3D viewer…" : "Reading and rendering this Mesh in your browser…");
         try {
-          const result =
-            await window
-              .NovaSparxTextureRuntime
-              .resolveMeshImage(
-                clean,
-                {
-                  signal
-                }
-              );
+          let result = await resolveSharedMesh(clean, interactive, signal);
 
           throwIfAborted(
             signal
           );
+
+          if (interactive) {
+            if (!result.manifest?.geometry) throw new Error("This Mesh has no interactive geometry.");
+            const mount = manifest => mountNovaManifest(clean, manifest, ui, "Browser CUE4Parse Mesh", {
+              signal,
+              sessionKey: clean,
+              preserveMesh: true
+            });
+            const first = await mount(result.manifest);
+            if (!first) throw new Error("The interactive Mesh renderer is unavailable.");
+            if (result.materialPromise) {
+              let materialResult;
+              try {
+                materialResult = await waitForMeshResult(result.materialPromise, signal);
+              } catch (error) {
+                throwIfAborted(signal);
+                if (error?.name === "AbortError") throw error;
+                setMeta(ui.meta, "");
+                setStatus(ui.status, `Mesh material unavailable: ${String(error?.message || error).slice(0, 180)}`, "error");
+                return { state: "partial", kind: "staticmesh", interactive: true };
+              }
+              throwIfAborted(signal);
+              await mount(materialResult.manifest);
+              result = materialResult;
+            }
+            return { state: "ready", kind: "staticmesh", interactive: true,
+              materialFidelity: result.materialFidelity || result.manifest?.metadata?.materialFidelity || result.previewMode };
+          }
+
+          result = await meshImageResult(result, signal);
 
           const firstUrl =
             URL.createObjectURL(
@@ -4156,8 +4397,8 @@
 
           setMeta(
             ui.meta,
-            `Browser CUE4Parse Mesh • ${result.triangleCount} triangles • Geometry ready • loading Texture + Material…`,
-            "high"
+            `Browser CUE4Parse Mesh • ${result.triangleCount} triangles • ${result.materialPromise ? "Geometry ready • loading Texture + Material…" : "material fidelity: " + (result.materialFidelity || result.manifest?.metadata?.materialFidelity || result.previewMode || "geometry-only")}`,
+            result.materialPromise || result.textured || result.materialApplied ? "high" : "partial"
           );
 
           if (
@@ -4170,17 +4411,15 @@
               kind:
                 "staticmesh",
               materialFidelity:
-                result
-                  .materialFidelity
+                result.materialFidelity || result.manifest?.metadata?.materialFidelity || result.previewMode,
+              textured: result.textured === true
             };
           }
 
           let materialResult;
 
           try {
-            materialResult =
-              await result
-                .materialPromise;
+            materialResult = await waitForMeshResult(result.materialPromise, signal);
           } catch (materialError) {
             if (
               signal?.aborted ||
@@ -4216,6 +4455,8 @@
           throwIfAborted(
             signal
           );
+
+          materialResult = await meshImageResult(materialResult, signal);
 
           const finalUrl =
             URL.createObjectURL(
@@ -4337,6 +4578,7 @@
               textureApplied
           };
         } catch (error) {
+          if (error?.name === "AbortError") throw error;
           const failure = new Error(error?.message || String(error), {cause:error});
           failure.code = "NOVASPARX_MESH_FAILED"; throw failure;
         }
@@ -5488,6 +5730,7 @@
       }
 
       if (["NOVASPARX_TEXTURE_FAILED", "NOVASPARX_MESH_FAILED"].includes(error?.code)) {
+        if (options.mode === "model") return showModelUnavailable(ui, error.message);
         ui.image.hidden = true;
         ui.image.removeAttribute("src");
         setStatus(ui.status, "View Image unavailable: " + error.message);
@@ -5570,7 +5813,7 @@
       toggle,
       render: renderPreview,
       release,
+      releaseMeshPreview,
       releaseAll
     });
 })();
-

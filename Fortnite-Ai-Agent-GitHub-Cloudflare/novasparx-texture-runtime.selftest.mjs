@@ -570,3 +570,44 @@ assert.equal(
 console.log(
   'Listen: audio worker mode, bounded bytes, path identity and cleanup passed.'
 );
+
+// The interactive consumer gets the original streams without PNG rendering.
+// A failed Texture slot must not discard the next slot or the geometry.
+const rendersBefore3d = renderCalls.length;
+const viewerRequest = runtime.resolveMeshImage('viewer.uasset', { interactive: true });
+pending.get('viewer.uasset').resolve();
+await tick();
+const viewerWorker = workers.at(-1);
+const viewerPositions = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]).buffer;
+viewerWorker.send({
+  type: 'mesh', path: 'viewer.uasset', positions: viewerPositions,
+  indices: new Uint32Array([0, 1, 2, 0, 2, 1]).buffer,
+  uv0: new Float32Array([0, 0, 1, 0, 0, 1]).buffer,
+  sections: [
+    { firstIndex: 0, numTriangles: 1, materialIndex: 0 },
+    { firstIndex: 3, numTriangles: 1, materialIndex: 1 }
+  ],
+  materialMetadata: [
+    { textureParameters: [{ name: 'BaseColor', path: '/Game/Textures/T_Broken.T_Broken' }] },
+    { vectorParameterValues: [{ name: 'BaseColor', r: 0.1, g: 0.2, b: 0.3, a: 1 }] },
+    { textureParameters: [{ name: 'BaseColor', path: '/Game/Textures/T_Unused.T_Unused' }] }
+  ]
+});
+viewerWorker.send({ type: 'done', exitCode: 0 });
+const viewerResult = await viewerRequest;
+assert.ok(viewerResult.manifest, 'Interactive Mesh must expose its renderer manifest');
+assert.equal(viewerResult.manifest.geometry.positions.buffer, viewerPositions, 'Reuse the transferred Mesh buffer');
+assert.equal(viewerResult.manifest.sections[0].indexCount, 3);
+pending.get('FortniteGame/Content/Textures/T_Broken.uasset').resolve();
+await tick();
+assert.equal(workers.at(-1).url.searchParams.get('maxSize'), '2048', 'Interactive materials should request full 2K decoding');
+workers.at(-1).send({ type: 'error', error: 'Texture unavailable' });
+const viewerMaterials = await viewerResult.materialPromise;
+assert.equal(viewerMaterials.manifest.geometry, viewerResult.manifest.geometry);
+assert.equal(viewerMaterials.manifest.materials.length, 3);
+assert.equal(viewerMaterials.missingMaterials[0], 0);
+assert.equal(viewerMaterials.manifest.materials[1].baseColor[2], 0.3);
+assert.equal(pending.has('FortniteGame/Content/Textures/T_Unused.uasset'), false, 'Unused Mesh slots must not resolve or decode textures');
+assert.equal(renderCalls.length, rendersBefore3d, 'Interactive Mesh must not render redundant PNG frames');
+assert.equal(workers.at(-1).terminated, true);
+console.log('Mesh viewer: stream reuse, per-slot fallback and no redundant still rendering passed.');

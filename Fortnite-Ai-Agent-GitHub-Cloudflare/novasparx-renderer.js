@@ -118,9 +118,9 @@
     const centerY = (minY + maxY) * 0.5;
     const centerZ = (minZ + maxZ) * 0.5;
 
-    const sizeX = maxX - minX || 1;
-    const sizeY = maxY - minY || 1;
-    const sizeZ = maxZ - minZ || 1;
+    const sizeX = maxX - minX;
+    const sizeY = maxY - minY;
+    const sizeZ = maxZ - minZ;
 
     return {
       centerX,
@@ -224,6 +224,22 @@
     ]);
   }
 
+  function perspective(aspect, zoom, near, far) {
+    const focal = zoom / Math.tan(Math.PI / 8);
+    const inverseDepth = 1 / (near - far);
+    return new Float32Array([
+      focal / aspect, 0, 0, 0,
+      0, focal, 0, 0,
+      0, 0, (far + near) * inverseDepth, -1,
+      0, 0, 2 * far * near * inverseDepth, 0
+    ]);
+  }
+
+  function orbitDistance(aspect) {
+    const halfFov = Math.min(Math.PI / 8, Math.atan(Math.tan(Math.PI / 8) * aspect));
+    return 1.12 / Math.sin(halfFov);
+  }
+
   function chooseCamera(bounds) {
     const horizontal = Math.max(bounds.sizeX, bounds.sizeY);
     const flatness = bounds.sizeZ / horizontal;
@@ -250,6 +266,64 @@
     }
 
     return shader;
+  }
+
+  function createGround(gl, height) {
+    const program = gl.createProgram();
+    let buffer = null;
+    const shaders = [];
+    try {
+      shaders.push(compileShader(gl, gl.VERTEX_SHADER, `
+        attribute vec3 aPosition;
+        uniform mat4 uGroundMVP;
+        varying vec2 vGround;
+        void main() {
+          vGround = aPosition.xy;
+          gl_Position = uGroundMVP * vec4(aPosition, 1.0);
+        }
+      `));
+      shaders.push(compileShader(gl, gl.FRAGMENT_SHADER, `
+        precision highp float;
+        varying vec2 vGround;
+        void main() {
+          vec2 cell = abs(fract(vGround * 4.0 + 0.5) - 0.5);
+          float grid = 1.0 - smoothstep(0.004, 0.016, min(cell.x, cell.y));
+          vec3 color = mix(vec3(0.10, 0.115, 0.13), vec3(0.20, 0.22, 0.25), grid);
+          color = mix(color, vec3(0.48, 0.19, 0.18), 1.0 - smoothstep(0.003, 0.007, abs(vGround.y)));
+          color = mix(color, vec3(0.19, 0.40, 0.24), 1.0 - smoothstep(0.003, 0.007, abs(vGround.x)));
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `));
+      for (const shader of shaders) gl.attachShader(program, shader);
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+      const extent = 4;
+      const vertices = [
+        -extent, -extent, height, extent, -extent, height, extent, extent, height,
+        -extent, -extent, height, extent, extent, height, -extent, extent, height
+      ];
+      buffer = createBuffer(gl, new Float32Array(vertices));
+      const position = gl.getAttribLocation(program, 'aPosition');
+      const matrix = gl.getUniformLocation(program, 'uGroundMVP');
+      return {
+        draw(viewProjection) {
+          gl.useProgram(program);
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+          gl.enableVertexAttribArray(position);
+          gl.vertexAttribPointer(position, 3, gl.FLOAT, false, 0, 0);
+          gl.uniformMatrix4fv(matrix, false, viewProjection);
+          // Draw Grid shading on the plane: WebKit line clipping can create spikes.
+          gl.drawArrays(gl.TRIANGLES, 0, 6);
+        },
+        dispose() { gl.deleteBuffer(buffer); gl.deleteProgram(program); }
+      };
+    } catch (error) {
+      if (buffer) gl.deleteBuffer(buffer);
+      gl.deleteProgram(program);
+      throw error;
+    } finally {
+      for (const shader of shaders) gl.deleteShader(shader);
+    }
   }
 
   function createProgram(gl) {
@@ -612,6 +686,114 @@
     );
   }
 
+  function decodedFrameInfo(frame) {
+    const width = Number(frame?.width), height = Number(frame?.height);
+    const pixels = frame?.pixels;
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 ||
+        width > 2048 || height > 2048 ||
+        !(pixels instanceof ArrayBuffer || ArrayBuffer.isView(pixels)) ||
+        pixels.byteLength !== width * height * 4) return null;
+    return {
+      width, height, bytes: pixels.byteLength,
+      buffer: pixels instanceof ArrayBuffer ? pixels : pixels.buffer,
+      key: `${width}:${height}:${pixels.byteOffset || 0}:${pixels.byteLength}`
+    };
+  }
+
+  function decodedMipBytes(width, height) {
+    let bytes = 0;
+    while (width > 1 || height > 1) {
+      width = Math.max(1, Math.floor(width / 2));
+      height = Math.max(1, Math.floor(height / 2));
+      bytes += width * height * 4;
+    }
+    return bytes;
+  }
+
+  function supportsDecodedMipmaps(gl, width, height) {
+    const powerOfTwo = value => (value & (value - 1)) === 0;
+    return (typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext) ||
+      (powerOfTwo(width) && powerOfTwo(height));
+  }
+
+  function createMaterialTextureLoader(gl, materials, policy, signal) {
+    const modes = new Set(policy.textureModes || ['base', 'normal', 'emissive', 'opacity', 'packed']);
+    const frames = new Map();
+    const textures = new Set();
+    const maxDecodedBytes = 64 * 1024 * 1024;
+    let baseBytes = 0, mipBytes = 0, usedDecodedBytes = 0;
+    let remainingLoads = Number(policy.maxTextureLoads) || 40;
+    let disposed = false;
+
+    const frameRecord = source => {
+      const info = decodedFrameInfo(source);
+      if (!info) return null;
+      let group = frames.get(info.buffer);
+      if (!group) frames.set(info.buffer, group = new Map());
+      let record = group.get(info.key);
+      if (!record) {
+        record = { ...info, mipBytes: supportsDecodedMipmaps(gl, info.width, info.height)
+          ? decodedMipBytes(info.width, info.height) : 0, promise: null };
+        group.set(info.key, record);
+        baseBytes += record.bytes;
+        mipBytes += record.mipBytes;
+      }
+      return record;
+    };
+
+    for (const material of materials) {
+      for (const [mode, source] of [
+        ['base', material.baseColorFrame || material.baseColorTexture],
+        ['normal', material.normalTexture], ['emissive', material.emissiveTexture],
+        ['opacity', material.opacityTexture], ['packed', material.packedTexture]
+      ]) if (modes.has(mode)) frameRecord(source);
+    }
+    // Reserve every base map first; mip levels add about one third to GPU memory.
+    const decodedMipmaps = policy.mipmaps !== false && baseBytes + mipBytes <= maxDecodedBytes;
+
+    return {
+      async load(mode, source, fallbackTexture) {
+        const fallback = result => ({ ...result, texture: fallbackTexture, loaded: false });
+        if (disposed || !source || !modes.has(mode)) return fallback();
+        const record = frameRecord(source);
+        if (record?.promise) {
+          const result = await record.promise;
+          return result.loaded ? result : fallback(result);
+        }
+        if (remainingLoads <= 0) return fallback();
+        const mipmaps = record ? decodedMipmaps && supportsDecodedMipmaps(gl, record.width, record.height)
+          : policy.mipmaps !== false;
+        const bytes = record ? record.bytes + (mipmaps ? record.mipBytes : 0) : 0;
+        if (usedDecodedBytes + bytes > maxDecodedBytes) return fallback();
+        usedDecodedBytes += bytes;
+        remainingLoads--;
+        const pending = loadTexture(gl, source, fallbackTexture, { mipmaps, signal }).then(result => {
+          if (!result.loaded) usedDecodedBytes -= bytes;
+          else if (disposed) {
+            gl.deleteTexture(result.texture);
+            return fallback(result);
+          } else textures.add(result.texture);
+          return result;
+        }, error => {
+          usedDecodedBytes -= bytes;
+          throw error;
+        });
+        if (record) record.promise = pending;
+        const result = await pending;
+        return result.loaded ? result : fallback(result);
+      },
+      dispose() {
+        if (disposed) return;
+        disposed = true;
+        for (const texture of textures) {
+          try { gl.deleteTexture(texture); } catch {}
+        }
+        textures.clear();
+        frames.clear();
+      }
+    };
+  }
+
   async function loadTexture(
     gl,
     url,
@@ -803,10 +985,11 @@
             isPowerOfTwo(height)
           );
 
+        const mipmaps = options.mipmaps !== false && repeatSafe;
         gl.texParameteri(
           gl.TEXTURE_2D,
           gl.TEXTURE_MIN_FILTER,
-          gl.LINEAR
+          mipmaps ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR
         );
 
         gl.texParameteri(
@@ -843,6 +1026,14 @@
             uploadError +
             ")."
           );
+        }
+
+        if (mipmaps) {
+          gl.generateMipmap(gl.TEXTURE_2D);
+          if (gl.getError() !== gl.NO_ERROR) {
+            // Keep the valid base map if mip allocation hits browser pressure.
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          }
         }
 
         return {
@@ -1441,6 +1632,9 @@
           {}
       );
 
+    const fallbackSlot = materials.length;
+    if (referencedSlots.length > selectedMaterialSlots.length) materials.push({});
+
     const sections =
       sourceSections.map(
         section => {
@@ -1463,7 +1657,7 @@
               localBySource.get(
                 sourceSlot
               ) ??
-              0
+              fallbackSlot
           };
         }
       );
@@ -1617,6 +1811,8 @@
     let outputCanvas =
       canvas;
 
+    let textureLoader = null;
+
     try {
 
     const isWebGL2 =
@@ -1688,53 +1884,8 @@
 
     const loadedMaterials = [];
 
-    const textureModes =
-      new Set(
-        policy.textureModes ||
-        [
-          "base",
-          "normal",
-          "emissive",
-          "opacity",
-          "packed"
-        ]
-      );
-
-    let remainingTextureLoads =
-      Number(policy.maxTextureLoads) ||
-      40;
-
-    const guardedTexture = async (
-      mode,
-      url,
-      fallbackTexture
-    ) => {
-      if (
-        !url ||
-        !textureModes.has(mode) ||
-        remainingTextureLoads <= 0
-      ) {
-        return {
-          texture:
-            fallbackTexture,
-          loaded:
-            false
-        };
-      }
-
-      remainingTextureLoads--;
-
-      return loadTexture(
-        gl,
-        url,
-        fallbackTexture,
-        {
-          mipmaps:
-            policy.mipmaps !== false,
-          signal
-        }
-      );
-    };
+    textureLoader = createMaterialTextureLoader(gl, materials, policy, signal);
+    const guardedTexture = (mode, source, fallbackTexture) => textureLoader.load(mode, source, fallbackTexture);
 
     for (const material of materials) {
       throwIfAborted(
@@ -1955,11 +2106,7 @@
     const textured = loadedMaterials.some((item) => item.maps[0].loaded);
     const normalMapped = loadedMaterials.some((item) => item.maps[1].loaded);
 
-    for (const item of loadedMaterials) {
-      for (const map of item.maps) {
-        if (map.loaded) gl.deleteTexture(map.texture);
-      }
-    }
+    textureLoader.dispose();
 
     gl.deleteTexture(white);
     gl.deleteTexture(flatNormal);
@@ -2011,6 +2158,7 @@
       materialFidelity: manifest.metadata?.materialFidelity || "unknown"
     };
     } catch (error) {
+      textureLoader?.dispose();
       // One-shot previews should never leave a failed GPU context alive.
       // This matters especially on mobile Safari, where a failed WebGL render
       // can otherwise keep a large drawing buffer until the tab is reclaimed.
@@ -2351,6 +2499,10 @@
     let program =
       null;
 
+    let ground = null;
+    let groundVisible = options.ground !== false;
+    let textureLoader = null;
+
     let white =
       null;
 
@@ -2399,29 +2551,11 @@
         )
       );
 
-    const cameraSeed =
-      chooseCamera(
-        bounds
-      );
-
-    const horizontalSeed =
-      Math.hypot(
-        cameraSeed[0],
-        cameraSeed[1]
-      ) || 1;
-
+    const flatMesh = bounds.sizeZ < Math.max(bounds.sizeX, bounds.sizeY) * 0.01;
     const state = {
-      yaw:
-        Math.atan2(
-          cameraSeed[1],
-          cameraSeed[0]
-        ),
-
-      pitch:
-        Math.atan2(
-          cameraSeed[2],
-          horizontalSeed
-        ),
+      // Face a native axis; horizontal surfaces start from above.
+      yaw: flatMesh || bounds.sizeY < bounds.sizeX ? -Math.PI / 2 : 0,
+      pitch: flatMesh ? Math.PI / 2 : 0,
 
       zoom:
         1,
@@ -2432,12 +2566,20 @@
       panY:
         0,
 
+      panZ:
+        0,
+
       wireframe:
         false
     };
 
     const defaults = {
       ...state
+    };
+
+    const getView = () => ({ zoom: state.zoom, yaw: state.yaw, pitch: state.pitch });
+    const notifyViewChange = () => {
+      if (!disposed) options.onViewChange?.(getView());
     };
 
     const compactedMaterials =
@@ -2485,6 +2627,8 @@
 
     const releaseResources =
       () => {
+        ground?.dispose();
+        ground = null;
         for (
           const [
             target,
@@ -2519,26 +2663,10 @@
           frame = 0;
         }
 
-        for (
-          const item of
-          loadedMaterials
-        ) {
-          for (
-            const map of
-            item.maps || []
-          ) {
-            if (
-              map?.loaded &&
-              map.texture
-            ) {
-              try {
-                gl.deleteTexture(
-                  map.texture
-                );
-              } catch {}
-            }
-          }
-        }
+        textureLoader?.dispose();
+        textureLoader = null;
+
+        loadedMaterials.length = 0;
 
         for (
           const texture of
@@ -2600,6 +2728,7 @@
 
     const scheduleDraw =
       () => {
+        notifyViewChange();
         if (
           disposed ||
           frame
@@ -2628,50 +2757,15 @@
         const rect =
           host.getBoundingClientRect();
 
-        const guardState =
-          guard?.status?.() ||
-          {};
-
-        const dpr =
-          Math.min(
-            Number(
-              window.devicePixelRatio ||
-              1
-            ),
-            guardState.isMobile
-              ? 1.5
-              : 2
-          );
-
-        const width =
-          Math.max(
-            240,
-            Math.min(
-              1400,
-              Math.round(
-                Math.max(
-                  1,
-                  rect.width
-                ) *
-                dpr
-              )
-            )
-          );
-
-        const height =
-          Math.max(
-            220,
-            Math.min(
-              1000,
-              Math.round(
-                Math.max(
-                  1,
-                  rect.height
-                ) *
-                dpr
-              )
-            )
-          );
+        // Keep native phone sharpness and aspect ratio within one bounded framebuffer.
+        const dpr = Math.min(3, Math.max(1, Number(window.devicePixelRatio) || 1));
+        const requestedWidth = Math.max(1, rect.width) * dpr;
+        const requestedHeight = Math.max(1, rect.height) * dpr;
+        const maxSide = Math.min(2560, gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
+        const scale = Math.min(1, maxSide / requestedWidth, maxSide / requestedHeight,
+          Math.sqrt((4 * 1024 * 1024) / (requestedWidth * requestedHeight)));
+        const width = Math.max(1, Math.floor(requestedWidth * scale));
+        const height = Math.max(1, Math.floor(requestedHeight * scale));
 
         if (
           canvas.width !==
@@ -3058,36 +3152,18 @@
         width /
         height;
 
-      const extentY =
-        1.12 /
-        state.zoom;
-
-      const extentX =
-        extentY *
-        aspect;
-
-      const projection =
-        orthographic(
-          -extentX,
-          extentX,
-          -extentY,
-          extentY,
-          0.01,
-          20
-        );
+      const distance = orbitDistance(aspect);
+      const projection = perspective(aspect, state.zoom, 0.01, distance + 20);
 
       const cosPitch =
         Math.cos(
           state.pitch
         );
 
-      const distance =
-        4.2;
-
       const target = [
         state.panX,
         state.panY,
-        0
+        state.panZ
       ];
 
       const eye = [
@@ -3116,7 +3192,8 @@
         lookAt(
           eye,
           target,
-          [0, 0, 1]
+          [-Math.sin(state.pitch) * Math.cos(state.yaw),
+            -Math.sin(state.pitch) * Math.sin(state.yaw), cosPitch]
         );
 
       const mvp =
@@ -3127,6 +3204,20 @@
             model
           )
         );
+
+      if (groundVisible && ground && eye[2] > -bounds.sizeZ / (2 * bounds.radius) - 0.002) {
+        for (const name of ['aPosition', 'aNormal', 'aUV', 'aColor', 'aTangent']) {
+          const location = gl.getAttribLocation(program, name);
+          if (location >= 0) gl.disableVertexAttribArray(location);
+        }
+        ground.draw(multiply(projection, view));
+      }
+      gl.useProgram(program);
+      setAttribute(gl, program, 'aPosition', buffers[0], 3, [0, 0, 0, 1]);
+      setAttribute(gl, program, 'aNormal', buffers[1], 3, [0, 0, 1, 1]);
+      setAttribute(gl, program, 'aUV', buffers[2], 2, [0, 0, 0, 1]);
+      setAttribute(gl, program, 'aColor', buffers[3], 4, [1, 1, 1, 1]);
+      setAttribute(gl, program, 'aTangent', buffers[4], 4, [1, 0, 0, 1]);
 
       gl.uniformMatrix4fv(
         gl.getUniformLocation(
@@ -3354,6 +3445,8 @@
         indexBuffer
       );
 
+      ground = createGround(gl, -bounds.sizeZ / (2 * bounds.radius) - 0.002);
+
       white =
         createSolidTexture(
           gl,
@@ -3372,62 +3465,8 @@
           [0, 0, 0, 255]
         );
 
-      const textureModes =
-        new Set(
-          policy.textureModes ||
-          [
-            "base",
-            "normal",
-            "emissive",
-            "opacity",
-            "packed"
-          ]
-        );
-
-      let remainingTextureLoads =
-        Number(
-          policy.maxTextureLoads
-        ) ||
-        40;
-
-      const guardedTexture =
-        async (
-          mode,
-          url,
-          fallbackTexture
-        ) => {
-          if (
-            !url ||
-            !textureModes.has(
-              mode
-            ) ||
-            remainingTextureLoads <=
-              0
-          ) {
-            return {
-              texture:
-                fallbackTexture,
-
-              loaded:
-                false
-            };
-          }
-
-          remainingTextureLoads--;
-
-          return loadTexture(
-            gl,
-            url,
-            fallbackTexture,
-            {
-              mipmaps:
-                policy.mipmaps !==
-                false,
-
-              signal
-            }
-          );
-        };
+      textureLoader = createMaterialTextureLoader(gl, materials, policy, signal);
+      const guardedTexture = (mode, source, fallbackTexture) => textureLoader.load(mode, source, fallbackTexture);
 
       for (
         const material of
@@ -3512,26 +3551,27 @@
           const denominator =
             Math.max(
               180,
-              Math.min(
-                canvas.clientWidth ||
-                  1,
-                canvas.clientHeight ||
-                  1
-              )
+              canvas.clientHeight || 1
             );
 
           const scale =
-            2.24 /
+            (2 * orbitDistance(canvas.width / canvas.height) * Math.tan(Math.PI / 8)) /
             state.zoom /
             denominator;
 
-          state.panX -=
-            deltaX *
-            scale;
-
-          state.panY +=
-            deltaY *
-            scale;
+          // Pan along camera right/up, including Z for a Z-up Mesh.
+          const sinYaw = Math.sin(state.yaw), cosYaw = Math.cos(state.yaw);
+          const sinPitch = Math.sin(state.pitch), cosPitch = Math.cos(state.pitch);
+          state.panX += (deltaX * sinYaw - deltaY * sinPitch * cosYaw) * scale;
+          state.panY += (-deltaX * cosYaw - deltaY * sinPitch * sinYaw) * scale;
+          state.panZ += deltaY * cosPitch * scale;
+          // The normalized Mesh radius is one: keep the orbit target inside it.
+          const distance = Math.hypot(state.panX, state.panY, state.panZ);
+          if (distance > 0.5) {
+            state.panX *= 0.5 / distance;
+            state.panY *= 0.5 / distance;
+            state.panZ *= 0.5 / distance;
+          }
         };
 
       const onPointerDown =
@@ -3698,8 +3738,8 @@
                 state.pitch +
                 deltaY *
                 0.008,
-                -1.45,
-                1.45
+                -Math.PI / 2,
+                Math.PI / 2
               );
           }
 
@@ -3825,6 +3865,7 @@
 
       resize();
       draw();
+      notifyViewChange();
 
       const textured =
         loadedMaterials.some(
@@ -3858,6 +3899,16 @@
 
         bounds,
 
+        groundHeight: -bounds.sizeZ / (2 * bounds.radius) - 0.002,
+
+        get groundVisible() { return groundVisible; },
+
+        setGroundVisible(visible) {
+          if (disposed) return;
+          groundVisible = visible !== false;
+          scheduleDraw();
+        },
+
         selectedMaterialSlots:
           compactedMaterials.selectedMaterialSlots,
 
@@ -3868,6 +3919,21 @@
           manifest.metadata
             ?.materialFidelity ||
           "unknown",
+
+        getView,
+
+        setZoom(factor) {
+          if (disposed || !Number.isFinite(Number(factor))) return;
+          state.zoom = clamp(Number(factor), 0.35, 7);
+          scheduleDraw();
+        },
+
+        rotateBy(yawDelta, pitchDelta) {
+          if (disposed) return;
+          if (Number.isFinite(Number(yawDelta))) state.yaw += Number(yawDelta);
+          if (Number.isFinite(Number(pitchDelta))) state.pitch = clamp(state.pitch + Number(pitchDelta), -Math.PI / 2, Math.PI / 2);
+          scheduleDraw();
+        },
 
         reset() {
           if (disposed) {
