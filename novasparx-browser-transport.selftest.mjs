@@ -1,4 +1,6 @@
 const assert = (await import("node:assert/strict")).default;
+const fs = await import("node:fs");
+const vm = await import("node:vm");
 
 globalThis.FNAA_CONFIG = {
   apiEndpoint: "https://edge.test"
@@ -293,6 +295,88 @@ assert.deepEqual(
   )
 );
 
-console.log(
-  "NovaSparx browser transport self-test passed."
-);
+const transportSource = fs.readFileSync(new URL('./novasparx-browser-transport.js', import.meta.url), 'utf8');
+
+function isolatedTransport(reply) {
+  const calls = [];
+  const context = {
+    URL, Uint8Array, Response, Headers, Number, String, Error, DOMException,
+    setTimeout() {},
+    FNAA_CONFIG: { apiEndpoint: 'https://edge.test' },
+    async fetch(input, init = {}) {
+      const url = new URL(String(input));
+      const range = new Headers(init.headers).get('range');
+      const [start, end] = range ? range.slice(6).split('-').map(Number) :
+        [Number(url.searchParams.get('start')), Number(url.searchParams.get('end'))];
+      calls.push({ start, end });
+      return reply({ start, end, index: calls.length });
+    }
+  };
+  vm.runInNewContext(transportSource, context);
+  return { transport: context.NovaSparxBrowserTransport, calls };
+}
+
+for (const options of [{ relay: false }, { direct: false }]) {
+  for (const [name, status, contentRange, body, declared] of [
+    ['wrong start', 206, 'bytes 3-6/12', [2, 3, 4, 5]],
+    ['reversed interval', 206, 'bytes 2-1/12', [2]],
+    ['short interval before EOF', 206, 'bytes 2-4/12', [2, 3, 4]],
+    ['short body', 206, 'bytes 2-5/12', [2, 3, 4]],
+    ['end outside total', 206, 'bytes 2-5/5', [2, 3, 4, 5]],
+    ['unknown total', 206, 'bytes 2-5/*', [2, 3, 4, 5]],
+    ['unsafe total', 206, 'bytes 2-5/9007199254740993', [2, 3, 4, 5]],
+    ['nonzero 200', 200, null, [2, 3, 4, 5], '4']
+  ]) {
+    const { transport } = isolatedTransport(() => new Response(new Uint8Array(body), {
+      status,
+      headers: {
+        ...(contentRange ? { 'content-range': contentRange } : {}),
+        ...(declared ? { 'content-length': declared } : {})
+      }
+    }));
+    await assert.rejects(transport.fetchRange('https://download.epicgames.com/file.bin', 2, 5, options), undefined, name);
+  }
+
+  const { transport } = isolatedTransport(() => new Response(new Uint8Array([9, 10, 11]), {
+    status: 206, headers: { 'content-range': 'bytes 9-11/12' }
+  }));
+  const final = await transport.fetchRange('https://download.epicgames.com/file.bin', 9, 50, options);
+  assert.deepEqual(Array.from(new Uint8Array(final.buffer)), [9, 10, 11]);
+
+  const whole = isolatedTransport(() => new Response(new Uint8Array([0, 1, 2, 3]), {
+    headers: { 'content-length': '4' }
+  }));
+  const complete = await whole.transport.fetchRange('https://download.epicgames.com/file.bin', 0, 7, options);
+  assert.deepEqual(Array.from(new Uint8Array(complete.buffer)), [0, 1, 2, 3]);
+
+  for (const [bodyLength, declared] of [[3, '4'], [4, null], [4, '4e0'], [4, '-4']]) {
+    const invalidWhole = isolatedTransport(() => new Response(new Uint8Array(bodyLength), {
+      headers: declared === null ? {} : { 'content-length': declared }
+    }));
+    await assert.rejects(invalidWhole.transport.fetchRange('https://download.epicgames.com/file.bin', 0, 7, options));
+  }
+}
+
+for (const problem of ['changing total', 'changing etag', 'changing last-modified']) {
+  const { transport } = isolatedTransport(({ start, end, index }) => new Response(sourceBytes.slice(start, end + 1), {
+    status: 206, headers: {
+      'content-range': `bytes ${start}-${end}/${index > 1 && problem === 'changing total' ? 13 : 12}`,
+      etag: index > 1 && problem === 'changing etag' ? '"second"' : '"first"',
+      'last-modified': index > 1 && problem === 'changing last-modified' ? 'Sat, 03 Oct 2026 12:01:00 GMT' : 'Sat, 03 Oct 2026 12:00:00 GMT'
+    }
+  }));
+  await assert.rejects(transport.fetchFile('https://download.epicgames.com/file.bin', { maxBytes: 64, relay: false }), undefined, problem);
+}
+
+const controller = new AbortController();
+let cancelled = false;
+const aborted = isolatedTransport(() => new Response(new ReadableStream({
+  pull(stream) { stream.enqueue(new Uint8Array([0])); controller.abort(); },
+  cancel() { cancelled = true; }
+}, { highWaterMark: 0 }), { status: 206, headers: { 'content-range': 'bytes 0-0/1' } }));
+await assert.rejects(aborted.transport.fetchRange('https://download.epicgames.com/file.bin', 0, 0, {
+  relay: false, signal: controller.signal
+}));
+assert.equal(cancelled, true, 'aborting a range read cancels its stream');
+
+console.log('NovaSparx browser transport self-test passed.');

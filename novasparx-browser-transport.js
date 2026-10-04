@@ -222,31 +222,9 @@
       );
     }
 
-    if (
-      !response.body ||
-      typeof response.body
-        .getReader !==
-        "function"
-    ) {
-      const buffer =
-        await response
-          .arrayBuffer();
-
-      throwIfAborted(
-        signal
-      );
-
-      if (
-        buffer.byteLength >
-        maxBytes
-      ) {
-        throw new Error(
-          label +
-          " exceeded the browser memory guard."
-        );
-      }
-
-      return buffer;
+    if (!response.body) return new Uint8Array(0).buffer;
+    if (typeof response.body.getReader !== "function") {
+      throw new Error(label + " did not expose a bounded readable stream.");
     }
 
     const reader =
@@ -255,6 +233,8 @@
 
     const chunks = [];
     let total = 0;
+    const abort = () => { reader.cancel().catch(() => {}); };
+    signal?.addEventListener("abort", abort, { once: true });
 
     try {
       while (true) {
@@ -267,6 +247,8 @@
           value
         } =
           await reader.read();
+
+        throwIfAborted(signal);
 
         if (done) {
           break;
@@ -297,7 +279,11 @@
           value
         );
       }
+    } catch (error) {
+      try { await reader.cancel(); } catch {}
+      throw error;
     } finally {
+      signal?.removeEventListener("abort", abort);
       try {
         reader.releaseLock();
       } catch {}
@@ -362,6 +348,53 @@
     };
   }
 
+  function parseContentRange(value) {
+    const match = String(value || "").match(/^bytes (\d+)-(\d+)\/(\d+)$/i);
+    const [start, end, total] = match ? match.slice(1).map(Number) : [];
+    if (
+      !Number.isSafeInteger(start) || !Number.isSafeInteger(end) ||
+      !Number.isSafeInteger(total) || start < 0 || end < start || total <= end
+    ) {
+      throw new Error("NovaSparx source returned an invalid Content-Range.");
+    }
+    return { start, end, total, length: end - start + 1 };
+  }
+
+  async function readRangeResponse(response, range, source, options) {
+    try {
+      const rawLength = response.headers.get("content-length");
+      const declared = rawLength === null ? null : Number(rawLength);
+      if (rawLength !== null && (!/^\d+$/.test(rawLength) || !Number.isSafeInteger(declared) || declared < 1)) {
+        throw new Error("NovaSparx range source returned an invalid Content-Length.");
+      }
+      let interval;
+      if (response.status === 206) {
+        interval = parseContentRange(response.headers.get("content-range"));
+        if (interval.start !== range.start || interval.end !== Math.min(range.end, interval.total - 1)) {
+          throw new Error("NovaSparx source returned an unexpected byte window.");
+        }
+      } else if (
+        response.status === 200 && range.start === 0 && declared > 0 &&
+        declared <= range.length && !response.headers.has("content-range")
+      ) {
+        interval = { start: 0, end: declared - 1, total: declared, length: declared };
+      } else {
+        throw new Error("NovaSparx range source returned HTTP " + response.status + " without a usable byte range.");
+      }
+      if (declared !== null && declared !== interval.length) {
+        throw new Error("NovaSparx source returned an incomplete byte range.");
+      }
+      const buffer = await readBounded(response, interval.length, "NovaSparx range", options.signal || null);
+      if (buffer.byteLength !== interval.length) {
+        throw new Error("NovaSparx source returned an incomplete byte range.");
+      }
+      return { ...rangeResult(response, buffer, source), total: interval.total };
+    } catch (error) {
+      try { await response.body?.cancel(); } catch {}
+      throw error;
+    }
+  }
+
   async function fetchDirectRange(
     target,
     range,
@@ -395,52 +428,7 @@
         }
       );
 
-    const declared =
-      Number(
-        response.headers.get(
-          "content-length"
-        ) || 0
-      );
-
-    const valid200 =
-      response.status ===
-        200 &&
-      range.start === 0 &&
-      declared > 0 &&
-      declared <=
-        range.length;
-
-    if (
-      response.status !==
-        206 &&
-      !valid200
-    ) {
-      try {
-        await response.body
-          ?.cancel();
-      } catch {}
-
-      throw new Error(
-        "NovaSparx direct range source returned HTTP " +
-        response.status +
-        " without a usable byte range."
-      );
-    }
-
-    const buffer =
-      await readBounded(
-        response,
-        range.length,
-        "NovaSparx direct range",
-        options.signal ||
-          null
-      );
-
-    return rangeResult(
-      response,
-      buffer,
-      "direct"
-    );
+    return readRangeResponse(response, range, "direct", options);
   }
 
   async function fetchRelayRange(
@@ -510,50 +498,7 @@
         }
       );
 
-    if (
-      ![
-        200,
-        206
-      ].includes(
-        response.status
-      )
-    ) {
-      const message =
-        await response
-          .json()
-          .then(
-            (data) =>
-              data?.error ||
-              ""
-          )
-          .catch(
-            () => ""
-          );
-
-      throw new Error(
-        message ||
-        (
-          "NovaSparx edge relay returned HTTP " +
-          response.status +
-          "."
-        )
-      );
-    }
-
-    const buffer =
-      await readBounded(
-        response,
-        range.length,
-        "NovaSparx relayed range",
-        options.signal ||
-          null
-      );
-
-    return rangeResult(
-      response,
-      buffer,
-      "edge-relay"
-    );
+    return readRangeResponse(response, range, "edge-relay", options);
   }
 
   async function fetchRange(
@@ -997,10 +942,7 @@
       options.signal
     );
 
-    const total =
-      parseTotalLength(
-        first.contentRange
-      );
+    const total = first.total;
 
     if (!total) {
       throw new Error(
@@ -1120,6 +1062,9 @@
             1;
 
           if (
+            part.total !== total ||
+            part.etag !== first.etag ||
+            part.lastModified !== first.lastModified ||
             bytes.byteLength !==
             expected
           ) {
