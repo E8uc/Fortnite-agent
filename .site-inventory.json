@@ -75,6 +75,11 @@
       "sha256": "d280b7480455894c9a861427d759a202e35debc99de6bc011b6644e832d96644"
     },
     {
+      "path": "cloudflare-worker/range-relay.selftest.mjs",
+      "bytes": 8071,
+      "sha256": "bc6998743d9edb40221ae9212f23e21cd7ca06f233ab6af89495fa340c2dfb28"
+    },
+    {
       "path": "cloudflare-worker/worker.js",
       "bytes": 156430,
       "sha256": "b8105afb342eeeb45eda930cb56b055eb759bb000c6975d1273c0c9692ede648"
@@ -14402,7 +14407,7 @@
     {
       "path": "index.html",
       "bytes": 15296,
-      "sha256": "917a08375eb54eb1ed431972dddc98d8b8e7f0ec6e7d1b41a87ff3c76d978a4c"
+      "sha256": "f85ba83a718fc97f518bb78956e464c46f50ca8f431f8a6d4c5bc83378d5d92c"
     },
     {
       "path": "novasparx-associations.js",
@@ -14466,8 +14471,8 @@
     },
     {
       "path": "novasparx-renderer.js",
-      "bytes": 87522,
-      "sha256": "0c411517454dab8c4ccf0487081fa3329572a13e456141109a257e4211cb26dc"
+      "bytes": 86734,
+      "sha256": "6b3d082579588124d9b8bfe1e6311cfb3c361b8303550153d2325288a3d18d91"
     },
     {
       "path": "novasparx-runtime/_framework/AssetRipper.TextureDecoder.99vonl6q1h.wasm",
