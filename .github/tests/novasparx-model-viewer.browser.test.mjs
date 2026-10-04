@@ -45,6 +45,7 @@ const cases = [
   { name: "br", path: "FortniteGame/Content/Environments/Apollo/Props/LazyLakeSign/Mesh/SM_LazyLakeLodge_Sign.uasset", textured: true }
 ];
 const selection = String(process.env.FNAA_MODEL_PROOF_CASE || "volcano").toLowerCase();
+if (process.env.FNAA_MODEL_PROOF_PATH) cases.push({ name: 'multi', path: process.env.FNAA_MODEL_PROOF_PATH, textured: true });
 const selectedCases = selection === "all" ? cases : cases.filter(asset => asset.name === selection);
 assert.ok(selectedCases.length, `Unknown FNAA_MODEL_PROOF_CASE ${selection}`);
 const texturePath = "FortniteGame/Plugins/GameFeatures/BRCosmetics/Content/Animation/Game/MainPlayer/Emotes/FaithPerch/FX/T_Emote_FaithPerch_SoftGlow.uasset";
@@ -54,6 +55,12 @@ let page;
 
 try {
   page = await browser.newPage(setup.PAGE_OPTIONS);
+  if (process.env.FNAA_DISABLE_MANIFEST_CACHE === '1') {
+    page.on('worker', worker => worker.evaluate(() => {
+      Object.defineProperty(globalThis, 'caches', { configurable: true, get() { throw new Error('CacheStorage unavailable in this targeted fallback proof'); } });
+    }).catch(error => proof.console.push('CACHE_SIMULATION_ERROR ' + error.message)));
+    proof.cacheStorageDisabled = true;
+  }
   page.setDefaultTimeout(30_000);
   page.on("console", message => { if (proof.console.length < 80) proof.console.push(message.text()); });
   page.on("pageerror", error => proof.console.push(`PAGE_ERROR ${error.stack || error}`));
@@ -263,11 +270,15 @@ try {
         uvCount: uv0.length / 2, sameGeometry: first.manifest.geometry === final.manifest.geometry && geometry === record.geometry,
         sections: final.manifest.sections.map(section => ({ ...section })),
         materialCount: final.manifest.materials.length,
+        runtimeStats: final.manifest.metadata.runtimeStats,
         unusedDecodedMaps: final.manifest.materials.filter((material, slot) => material.baseColorFrame && !usedSlots.has(slot)).length,
         rgbaFrames: frames.map(frame => ({ width: frame.width, height: frame.height, byteLength: frameBytes(frame) })),
+        uniqueDecodedMaps: new Set(frames.map(frame => frame.pixels)).size,
         decodedTextureBytes: Array.from(new Set(frames.map(frame => frame.pixels))).reduce((sum, pixels) => sum + pixels.byteLength, 0),
         previewMode: final.previewMode, meta: card.querySelector(".mesh-image-meta")?.textContent,
         metaHidden: card.querySelector(".mesh-image-meta")?.hidden,
+        metaLevel: card.querySelector(".mesh-image-meta")?.dataset.level,
+        materialDiagnostics: final.materialDiagnostics || [],
         imageHidden: card.querySelector(".mesh-preview-image")?.hidden,
         controlsHidden: card.querySelector(".novasparx-viewer-controls")?.hidden,
         modelLabel: card.querySelector('[data-asset-action="model"]')?.textContent
@@ -287,8 +298,17 @@ try {
       assert.ok(section.materialIndex >= 0 && section.materialIndex < contract.materialCount);
     }
     assert.equal(contract.imageHidden, true); assert.equal(contract.controlsHidden, false); assert.equal(contract.modelLabel, "Hide");
-    assert.equal(contract.metaHidden, true);
+    assert.equal(contract.metaHidden, false, 'Model must expose material fidelity while keeping geometry visible');
+    assert.match(contract.meta, /^Materials: /);
+    assert.ok(contract.meta.length <= 180, 'Material status must stay concise beside the model controls');
+    if (contract.materialDiagnostics.length || /partial|geometry-only/.test(contract.previewMode)) {
+      assert.equal(contract.metaLevel, 'partial', 'Missing/unsupported slots must expose partial status');
+      assert.ok(contract.indexCount >= 3, 'Partial materials must retain visible geometry');
+      if (contract.materialDiagnostics.length) assert.match(contract.meta, /slot \d+: /);
+    }
     if (asset.textured) assert.ok(contract.rgbaFrames.length > 0, `${asset.name}: actual browser Texture decode missing`);
+    if (asset.name === 'multi') assert.ok(contract.uniqueDecodedMaps >= Number(process.env.FNAA_EXPECT_TEXTURE_MAPS || 2),
+      'Multi-map proof needs at least two distinct decoded material maps');
     for (const frame of contract.rgbaFrames) assert.equal(frame.byteLength, frame.width * frame.height * 4);
 
     const initial = await snapshot();

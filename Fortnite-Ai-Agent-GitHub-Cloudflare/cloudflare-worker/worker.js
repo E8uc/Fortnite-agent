@@ -727,12 +727,80 @@ function validateNovaEdgeRange(
   };
 }
 
+function parseNovaEdgeByteCount(
+  value
+) {
+  if (
+    typeof value !== "string" ||
+    !/^\d+$/.test(value)
+  ) {
+    return null;
+  }
+
+  const number = Number(value);
+
+  return Number.isSafeInteger(number)
+    ? number
+    : null;
+}
+
+function parseNovaEdgeContentRange(
+  value
+) {
+  const match = String(value || "").match(
+    /^bytes (\d+)-(\d+)\/(\d+)$/i
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const start = parseNovaEdgeByteCount(match[1]);
+  const end = parseNovaEdgeByteCount(match[2]);
+  const total = parseNovaEdgeByteCount(match[3]);
+
+  if (
+    start === null ||
+    end === null ||
+    total === null ||
+    total === 0 ||
+    end < start ||
+    end >= total
+  ) {
+    return null;
+  }
+
+  return {
+    start,
+    end,
+    total,
+    length: end - start + 1
+  };
+}
+
 async function readResponseBytesBounded(
   response,
   maxBytes,
   label =
-    "Response"
+    "Response",
+  signal = null
 ) {
+  const checkAborted = () => {
+    if (signal?.aborted) {
+      const error = new Error(label + " read was cancelled.");
+      error.name = "AbortError";
+      throw error;
+    }
+  };
+
+  if (signal?.aborted) {
+    try {
+      await response.body?.cancel(signal.reason);
+    } catch {}
+  }
+
+  checkAborted();
+
   maxBytes =
     Math.max(
       1,
@@ -780,6 +848,8 @@ async function readResponseBytesBounded(
           .arrayBuffer()
       );
 
+    checkAborted();
+
     if (
       bytes.byteLength >
       maxBytes
@@ -806,13 +876,25 @@ async function readResponseBytesBounded(
   const chunks = [];
   let total = 0;
 
+  const cancelFromSignal = () => {
+    try {
+      reader.cancel(signal?.reason).catch(() => {});
+    } catch {}
+  };
+
+  signal?.addEventListener("abort", cancelFromSignal, { once: true });
+
   try {
     while (true) {
+      checkAborted();
+
       const {
         done,
         value
       } =
         await reader.read();
+
+      checkAborted();
 
       if (done) {
         break;
@@ -850,6 +932,8 @@ async function readResponseBytesBounded(
       );
     }
   } finally {
+    signal?.removeEventListener("abort", cancelFromSignal);
+
     try {
       reader.releaseLock();
     } catch {}
@@ -2080,39 +2164,18 @@ async function handleNovaEdgeRange(
     );
   }
 
-  const declared =
-    Number(
-      upstream.headers.get(
-        "content-length"
-      ) || 0
-    );
-
-  if (
-    declared > 0 &&
-    declared >
-      range.length
-  ) {
-    try {
-      await upstream.body?.cancel();
-    } catch {}
-
-    return json(
-      request,
-      env,
-      {
-        state:
-          "error",
-        error:
-          "Range source returned more data than requested."
-      },
-      502
-    );
-  }
+  const declaredHeader = upstream.headers.get("content-length");
+  const declared = parseNovaEdgeByteCount(declaredHeader);
+  const contentRange = upstream.headers.get("content-range");
+  let expectedLength;
 
   if (
     upstream.status ===
       200 &&
     (
+      range.start !== 0 ||
+      contentRange !== null ||
+      declared === null ||
       declared === 0 ||
       declared >
         range.length
@@ -2134,11 +2197,6 @@ async function handleNovaEdgeRange(
       502
     );
   }
-
-  const contentRange =
-    upstream.headers.get(
-      "content-range"
-    );
 
   if (
     upstream.status ===
@@ -2167,19 +2225,16 @@ async function handleNovaEdgeRange(
       206 &&
     contentRange
   ) {
-    const match =
-      contentRange.match(
-        /^bytes\s+(\d+)-(\d+)\/(?:\d+|\*)$/i
-      );
+    const window = parseNovaEdgeContentRange(contentRange);
 
     if (
-      !match ||
-      Number(
-        match[1]
-      ) !== range.start ||
-      Number(
-        match[2]
-      ) > range.end
+      !window ||
+      window.start !== range.start ||
+      window.end !== Math.min(range.end, window.total - 1) ||
+      (
+        declaredHeader !== null &&
+        declared !== window.length
+      )
     ) {
       try {
         await upstream.body?.cancel();
@@ -2197,6 +2252,10 @@ async function handleNovaEdgeRange(
         502
       );
     }
+
+    expectedLength = window.length;
+  } else {
+    expectedLength = declared;
   }
 
   let payload;
@@ -2205,10 +2264,15 @@ async function handleNovaEdgeRange(
     payload =
       await readResponseBytesBounded(
         upstream,
-        range.length,
-        "Range source"
+        expectedLength,
+        "Range source",
+        request.signal
       );
   } catch (error) {
+    if (request.signal?.aborted) {
+      throw error;
+    }
+
     return json(
       request,
       env,
@@ -2226,10 +2290,7 @@ async function handleNovaEdgeRange(
   }
 
   if (
-    payload.byteLength >
-      range.length ||
-    payload.byteLength >
-      NOVASPARX_EDGE_MAX_RANGE_BYTES
+    payload.byteLength !== expectedLength
   ) {
     return json(
       request,
@@ -2238,24 +2299,7 @@ async function handleNovaEdgeRange(
         state:
           "error",
         error:
-          "Range source exceeded the bounded relay window."
-      },
-      502
-    );
-  }
-
-  if (
-    payload.byteLength ===
-      0
-  ) {
-    return json(
-      request,
-      env,
-      {
-        state:
-          "error",
-        error:
-          "Range source returned an empty byte window."
+          "Range source body length did not match its byte window."
       },
       502
     );
