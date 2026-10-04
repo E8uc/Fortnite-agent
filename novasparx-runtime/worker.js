@@ -39,7 +39,7 @@ const relayAllowedHosts =
     "stormforge.dillycdn.com"
   ]);
 
-function installRangeRelayFetch(relayEndpoint) {
+function installRangeRelayFetch(relayEndpoint, assetSession = false) {
   if (!relayEndpoint) return () => {};
 
   const nativeFetch =
@@ -67,7 +67,69 @@ function installRangeRelayFetch(relayEndpoint) {
     return init?.signal || input?.signal || undefined;
   }
 
+  function throwIfAborted(signal) {
+    if (signal?.aborted) {
+      throw signal.reason ||
+        new DOMException("The operation was aborted.", "AbortError");
+    }
+  }
+
+  async function cancelResponse(response) {
+    try { await response.body?.cancel(); } catch {}
+  }
+
+  function parseContentRange(value) {
+    const match = String(value || "").match(/^bytes (\d+)-(\d+)\/(\d+)$/i);
+    const [start, end, total] = match ? match.slice(1).map(Number) : [];
+    if (
+      !Number.isSafeInteger(start) ||
+      !Number.isSafeInteger(end) ||
+      !Number.isSafeInteger(total) ||
+      start < 0 || end < start || total <= end || total > maxFileBytes
+    ) {
+      throw new Error("Relay returned an invalid Content-Range");
+    }
+    return { start, end, total, length: end - start + 1 };
+  }
+
+  async function readBytesBounded(response, maxBytes, label, signal) {
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error(label + " returned an empty body");
+    const chunks = [];
+    let total = 0;
+    const abort = () => { reader.cancel().catch(() => {}); };
+    signal?.addEventListener("abort", abort, { once: true });
+    try {
+      while (true) {
+        throwIfAborted(signal);
+        const { done, value } = await reader.read();
+        throwIfAborted(signal);
+        if (done) break;
+        if (!value?.byteLength) continue;
+        if (value.byteLength > maxBytes - total) {
+          throw new Error(label + " exceeded the browser byte budget");
+        }
+        chunks.push(value);
+        total += value.byteLength;
+      }
+    } catch (error) {
+      try { await reader.cancel(); } catch {}
+      throw error;
+    } finally {
+      signal?.removeEventListener("abort", abort);
+      reader.releaseLock();
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return bytes;
+  }
+
   async function relayRange(target, start, end, signal) {
+    throwIfAborted(signal);
     const url =
       new URL(relayUrl);
 
@@ -89,65 +151,45 @@ function installRangeRelayFetch(relayEndpoint) {
         }
       );
 
-    if (!response.ok) {
-      throw new Error(
-        "Relay returned HTTP " +
-        response.status
-      );
+    try {
+      throwIfAborted(signal);
+      const rawLength = response.headers.get("content-length");
+      const declared = rawLength === null ? null : Number(rawLength);
+      if (rawLength !== null && (!/^\d+$/.test(rawLength) || !Number.isSafeInteger(declared) || declared < 1)) {
+        throw new Error("Relay returned an invalid Content-Length");
+      }
+      let interval;
+      if (response.status === 206) {
+        interval = parseContentRange(response.headers.get("content-range"));
+        if (interval.start !== start || interval.end !== Math.min(end, interval.total - 1)) {
+          throw new Error("Relay returned an unexpected byte window");
+        }
+      } else if (
+        response.status === 200 && start === 0 && declared > 0 &&
+        declared <= end + 1 && !response.headers.has("content-range")
+      ) {
+        interval = { start: 0, end: declared - 1, total: declared, length: declared };
+      } else {
+        throw new Error("Relay returned HTTP " + response.status + " without a usable byte range");
+      }
+      if (declared !== null && declared !== interval.length) {
+        throw new Error("Relay returned an incomplete file segment");
+      }
+      const bytes = await readBytesBounded(response, interval.length, "Relay", signal);
+      if (bytes.byteLength !== interval.length) {
+        throw new Error("Relay returned an incomplete file segment");
+      }
+      return {
+        bytes,
+        interval,
+        etag: response.headers.get("etag"),
+        lastModified: response.headers.get("last-modified"),
+        contentType: response.headers.get("content-type") || "application/octet-stream"
+      };
+    } catch (error) {
+      await cancelResponse(response);
+      throw error;
     }
-
-    const bytes =
-      new Uint8Array(
-        await response.arrayBuffer()
-      );
-
-    const expected =
-      end - start + 1;
-
-    if (
-      bytes.byteLength < 1 ||
-      bytes.byteLength > expected
-    ) {
-      throw new Error(
-        "Relay returned an invalid byte window"
-      );
-    }
-
-    return {
-      bytes,
-      contentRange:
-        response.headers.get(
-          "content-range"
-        ),
-      contentType:
-        response.headers.get(
-          "content-type"
-        ) ||
-        "application/octet-stream"
-    };
-  }
-
-  function totalFromContentRange(value) {
-    const match =
-      String(value || "")
-        .match(
-          /^bytes\s+\d+-\d+\/(\d+)$/i
-        );
-
-    const total =
-      Number(match?.[1] || 0);
-
-    if (
-      !Number.isSafeInteger(total) ||
-      total < 1 ||
-      total > maxFileBytes
-    ) {
-      throw new Error(
-        "Relay did not expose a safe total file size"
-      );
-    }
-
-    return total;
   }
 
   const manifestCacheName =
@@ -173,6 +215,8 @@ function installRangeRelayFetch(relayEndpoint) {
   }
 
   async function bufferManifestRelay(input, init) {
+    const signal = requestSignal(input, init);
+    throwIfAborted(signal);
     const key =
       new Request(
         requestUrl(input),
@@ -183,6 +227,7 @@ function installRangeRelayFetch(relayEndpoint) {
 
     const cache =
       await openManifestCache();
+    throwIfAborted(signal);
 
     if (cache) {
       try {
@@ -190,6 +235,7 @@ function installRangeRelayFetch(relayEndpoint) {
           await cache.match(
             key
           );
+        throwIfAborted(signal);
 
         if (cached) {
           const declared =
@@ -211,11 +257,14 @@ function installRangeRelayFetch(relayEndpoint) {
             key
           );
         }
-      } catch {}
+      } catch (error) {
+        if (error?.name === 'AbortError') throw error;
+      }
     }
 
+    throwIfAborted(signal);
     const response =
-      await nativeFetch(
+      assetSession ? new Response(await requestAssetManifest(requestUrl(input), signal)) : await nativeFetch(
         input,
         init
       );
@@ -231,18 +280,14 @@ function installRangeRelayFetch(relayEndpoint) {
         ) || 0
       );
 
-    if (
-      declared > maxManifestBytes
-    ) {
+    if (declared > maxManifestBytes) {
+      await cancelResponse(response);
       throw new Error(
         "Manifest relay exceeded the browser byte budget"
       );
     }
 
-    const bytes =
-      new Uint8Array(
-        await response.arrayBuffer()
-      );
+    const bytes = await readBytesBounded(response, maxManifestBytes, "Manifest relay", signal);
 
     if (
       bytes.byteLength < 32 ||
@@ -305,6 +350,32 @@ function installRangeRelayFetch(relayEndpoint) {
     return buffered;
   }
 
+  let manifestRequestId = 0;
+  function requestAssetManifest(url, signal) {
+    throwIfAborted(signal);
+    return new Promise((resolve, reject) => {
+      const requestId = ++manifestRequestId;
+      const cleanup = () => {
+        globalThis.removeEventListener('message', onMessage);
+        signal?.removeEventListener('abort', onAbort);
+      };
+      const onAbort = () => { cleanup(); reject(new DOMException('Asset manifest request cancelled', 'AbortError')); };
+      const onMessage = event => {
+        const message = event.data;
+        if (message?.type !== 'manifest-bytes' || message.requestId !== requestId) return;
+        cleanup();
+        if (message.error) return reject(new Error(String(message.error)));
+        if (!(message.bytes instanceof ArrayBuffer) || message.bytes.byteLength < 32 || message.bytes.byteLength > maxManifestBytes)
+          return reject(new Error('Invalid asset manifest response'));
+        resolve(new Uint8Array(message.bytes));
+      };
+      globalThis.addEventListener('message', onMessage);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      try { postMessage({ type: 'manifest-request', requestId, url }); }
+      catch (error) { cleanup(); reject(error); }
+    });
+  }
+
   async function relayWhole(target, input, init) {
     const signal =
       requestSignal(input, init);
@@ -325,10 +396,7 @@ function installRangeRelayFetch(relayEndpoint) {
         );
     }
 
-    const total =
-      totalFromContentRange(
-        first.contentRange
-      );
+    const total = first.interval.total;
 
     if (
       first.bytes.byteLength !==
@@ -376,6 +444,9 @@ function installRangeRelayFetch(relayEndpoint) {
         end - offset + 1;
 
       if (
+        part.interval.total !== total ||
+        part.etag !== first.etag ||
+        part.lastModified !== first.lastModified ||
         part.bytes.byteLength !==
         expected
       ) {
@@ -513,8 +584,10 @@ function fail(error) {
 }
 
 try {
+  const runtimeBootStartedAt = Date.now();
   const { runMain, getConfig, setModuleImports } =
     await dotnet.withDiagnosticTracing(false).create();
+  postMessage({ type: 'runtime-ready', bootMs: Date.now() - runtimeBootStartedAt });
 
   setModuleImports("texture-view", {
     render(width, height, encoded, path) {
@@ -686,7 +759,8 @@ try {
       installRangeRelayFetch(
         workerUrl.searchParams
           .get("relay") ||
-        "./edge/range"
+        "./edge/range",
+        workerUrl.searchParams.get('assetSession') === '1'
       );
   }
 

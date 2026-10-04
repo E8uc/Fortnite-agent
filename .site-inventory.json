@@ -1,7 +1,7 @@
 {
   "schema": "fnaa.site-inventory.v1",
   "fortniteBuild": "++Fortnite+Release-42.30-CL-58557680-Windows",
-  "runtimeSourceRevision": "98f9b88afe956e5856112bb339eb5c724f3383d2",
+  "runtimeSourceRevision": "ab8c7eaad4809a1613158487019c4990ee817218",
   "dataManifestSha256": "004c91427f81e6cbbe35351d631d731d171e5c4ff33e27a27ae524c6c3c31f11",
   "files": [
     {
@@ -76,8 +76,8 @@
     },
     {
       "path": "cloudflare-worker/worker.js",
-      "bytes": 155297,
-      "sha256": "9812c3229a865836ccb916dd8782b67a1f539b4f53ae54917825f6074bca614e"
+      "bytes": 156430,
+      "sha256": "b8105afb342eeeb45eda930cb56b055eb759bb000c6975d1273c0c9692ede648"
     },
     {
       "path": "cloudflare-worker/wrangler.jsonc",
@@ -14402,7 +14402,7 @@
     {
       "path": "index.html",
       "bytes": 15296,
-      "sha256": "5011d76d6584eb5060d9c1879f66a04502ff485ad0056644d3619e6ccd586c18"
+      "sha256": "917a08375eb54eb1ed431972dddc98d8b8e7f0ec6e7d1b41a87ff3c76d978a4c"
     },
     {
       "path": "novasparx-associations.js",
@@ -14426,13 +14426,13 @@
     },
     {
       "path": "novasparx-browser-transport.js",
-      "bytes": 22076,
-      "sha256": "abd67f9ec3786e43bab396b33782837db3cc48a374b9698cd76a5a44e70da117"
+      "bytes": 23039,
+      "sha256": "f2323dfdd0078014e9beac4be53553064d82815236cb7a82efb62570e209e4a4"
     },
     {
       "path": "novasparx-browser-transport.selftest.mjs",
-      "bytes": 4920,
-      "sha256": "16d2b5facb787c44b276e5c93869beb74d113b8eb0b2dfbb6e00655ed150e57a"
+      "bytes": 9162,
+      "sha256": "e17fc407391e92d7513f236f1145c982a44eace907e6d2833ed3e75cd6e6b80d"
     },
     {
       "path": "novasparx-core.js",
@@ -14466,8 +14466,8 @@
     },
     {
       "path": "novasparx-renderer.js",
-      "bytes": 87339,
-      "sha256": "fc90b3bcccc29313e07abef8dd87ae6968a995e81469f00504bb727f456cc59d"
+      "bytes": 87522,
+      "sha256": "0c411517454dab8c4ccf0487081fa3329572a13e456141109a257e4211cb26dc"
     },
     {
       "path": "novasparx-runtime/_framework/AssetRipper.TextureDecoder.99vonl6q1h.wasm",
@@ -14500,9 +14500,9 @@
       "sha256": "07f216cdaa48ee8074543c94e64c7eea0d38b740b5092f88b7f8ba3ac126aa31"
     },
     {
-      "path": "novasparx-runtime/_framework/CUE4Parse.BrowserProbe.hyg08srtd0.wasm",
-      "bytes": 304405,
-      "sha256": "d93d584515d654a621626ee2f49daed27495da8f10e893b3d026153b90ab8816"
+      "path": "novasparx-runtime/_framework/CUE4Parse.BrowserProbe.vz5pm1ldja.wasm",
+      "bytes": 140053,
+      "sha256": "650b1f6a8f5047538b42b3bde5792ebd728b2577ce6b8c9ed45ab24339dcccec"
     },
     {
       "path": "novasparx-runtime/_framework/CommunityToolkit.HighPerformance.e1df06fcqi.wasm",
@@ -14762,17 +14762,17 @@
     {
       "path": "novasparx-runtime/_framework/dotnet.js",
       "bytes": 54598,
-      "sha256": "04a45fac6aff410ff6fe4de841491f810b6e0e8dab2a006df0303530bb41661c"
+      "sha256": "42b9abda497346a1c0391efa73e16fc59df3155091a55d7fc5f67b38d21c875e"
     },
     {
-      "path": "novasparx-runtime/_framework/dotnet.native.bbafjn5xnc.js",
-      "bytes": 253526,
-      "sha256": "f720dfdfc8ef79092864e026190f70ff400580a45f608e97057e3b74cac3e8b2"
+      "path": "novasparx-runtime/_framework/dotnet.native.4ealqmde62.js",
+      "bytes": 253542,
+      "sha256": "2416f394538296af9057c16dd948602caf1437c27374753b18a4fc08203c810d"
     },
     {
-      "path": "novasparx-runtime/_framework/dotnet.native.xv05x5wmaz.wasm",
-      "bytes": 3101952,
-      "sha256": "bd08b81576fb313230df282e656d1e6a799d6184c831075cc8abbbe4e69d766c"
+      "path": "novasparx-runtime/_framework/dotnet.native.wb2e70lgx2.wasm",
+      "bytes": 3101972,
+      "sha256": "b44589d8b1eccdffb4247b94bcbfecaaae30227d1294bf9715c865b8aa46dc99"
     },
     {
       "path": "novasparx-runtime/_framework/dotnet.runtime.v06hirbjsv.js",
@@ -17397,12 +17397,12 @@
     {
       "path": "novasparx-runtime/release.json",
       "bytes": 1176,
-      "sha256": "1cd11bd6b42296c5853d0ce49fbd80a1e388aab9a267e31416285cb424741170"
+      "sha256": "616e7ec5da29b040c53118ca725766a76385b2ff4b3c2eb54254d256e0d120a5"
     },
     {
       "path": "novasparx-runtime/runtime-source.json",
-      "bytes": 62,
-      "sha256": "3c2195561b27a25be2f7606ff7cd4371666606abbe423738d0eea438efe8a0db"
+      "bytes": 190,
+      "sha256": "d7ba888d6a88643c27afd2c6b002acad0a86cbd6d8cb9de3071fd7383535e94a"
     },
     {
       "path": "novasparx-runtime/studio-location-index/00.json.gz",
@@ -18691,18 +18691,18 @@
     },
     {
       "path": "novasparx-runtime/worker.js",
-      "bytes": 18405,
-      "sha256": "8712ac025bea57379e8fbeca7d2c2bc3def282d337e245825b85cea0c0599cdc"
+      "bytes": 22936,
+      "sha256": "1b6bb2a766d71a680dbde441ae7f85a8381a9095ef20687c540bb7f1dea69dd4"
     },
     {
       "path": "novasparx-texture-runtime.js",
-      "bytes": 69397,
-      "sha256": "ab508ba58aa7b58714b0207691980045b41857c9319cd8840c79278ede178a92"
+      "bytes": 77088,
+      "sha256": "a635bc905d61fa1844f20443a9c8f79ade6d81f765bfd5a04952f8c3d4f0d6c2"
     },
     {
       "path": "novasparx-texture-runtime.selftest.mjs",
-      "bytes": 23236,
-      "sha256": "4e946ec4a29e0e3a34e70272fb36844d71f29ad919f5c6dda9ce638ad7040ea6"
+      "bytes": 30286,
+      "sha256": "79f3f89f1035a47aa0f5a22d498c1655abc745551b5561021ce15dc7bf561113"
     },
     {
       "path": "pak-setup-v42.json",
@@ -18711,8 +18711,8 @@
     },
     {
       "path": "preview.js",
-      "bytes": 121303,
-      "sha256": "6fb817e16cf1b27e633efe38c63863be8324961566d65cc558d503e14073344f"
+      "bytes": 122913,
+      "sha256": "ee433d56d51355e84db9e8cc86d5fc7d5d860d13fd2c3c7d76edc20a48936a7c"
     },
     {
       "path": "style.css",

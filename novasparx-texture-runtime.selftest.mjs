@@ -27,6 +27,7 @@ source = source.replace('  function clearCaches() {', `
     );
   locatePackage = globalThis.testLocatePackage;
   globalThis.testManifestForLocation = manifestForLocation;
+  globalThis.testMaterialValueFallback = materialValueFallback;
   canvasBlob = async () => new Blob(['pixels']);
   sha256Hex = async () => 'test-hash';
   globalThis.testNormalize = normalizeInput;
@@ -501,7 +502,7 @@ emissiveMeshWorker.send({
   materialMetadata: [{
     textureParameters: [],
     vectorParameterValues: [{
-      name: 'Emissive',
+      name: 'EmissiveColor',
       r: 0.7,
       g: 0.25,
       b: 0.08,
@@ -709,3 +710,124 @@ assert.equal(pending.has('FortniteGame/Content/Textures/T_Unused.uasset'), false
 assert.equal(renderCalls.length, rendersBefore3d, 'Interactive Mesh must not render redundant PNG frames');
 assert.equal(workers.at(-1).terminated, true);
 console.log('Mesh viewer: stream reuse, per-slot fallback and no redundant still rendering passed.');
+
+// The cache owns decoded frames only. Each slot keeps its own supported values.
+const sharedPath = 'FortniteGame/Content/Textures/T_SharedTint.uasset';
+const sharedRequest = runtime.resolveMeshImage('shared-tints.uasset', { interactive: true });
+pending.get('shared-tints.uasset').resolve(); await tick();
+const sharedMeshWorker = workers.at(-1);
+sharedMeshWorker.send({
+  type: 'mesh', path: 'shared-tints.uasset',
+  positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]).buffer,
+  indices: new Uint32Array([0, 1, 2, 0, 2, 1]).buffer,
+  uv0: new Float32Array([0, 0, 1, 0, 0, 1]).buffer,
+  sections: [
+    { firstIndex: 0, numTriangles: 1, materialIndex: 0 },
+    { firstIndex: 3, numTriangles: 1, materialIndex: 1 }
+  ],
+  materialMetadata: [0, 1].map(slot => ({
+    textureParameters: [
+      { name: 'PM_Diffuse', path: '/Game/Textures/T_SharedTint.T_SharedTint' },
+      { name: 'Diffuse', path: '/Game/Textures/T_SharedTint.T_SharedTint' }
+    ],
+    vectorParameterValues: [
+      { name: 'BaseColor', r: slot ? 0.2 : 0.8, g: 0.4, b: slot ? 0.9 : 0.1, a: 1 },
+      { name: 'Emissive', r: slot ? 0.3 : 0, g: 0, b: 0, a: 1 }
+    ],
+    scalarParameterValues: [
+      { name: 'Roughness', value: slot ? 0.25 : 0.75 },
+      { name: 'Opacity', value: slot ? 0.5 : 1 }
+    ]
+  }))
+});
+sharedMeshWorker.send({ type: 'done', exitCode: 0 });
+const sharedFirst = await sharedRequest;
+pending.get(sharedPath).resolve(); await tick();
+const sharedTextureWorker = workers.at(-1);
+sharedTextureWorker.send({ type: 'pixels', path: sharedPath, width: 1, height: 1, pixels: new ArrayBuffer(4) });
+sharedTextureWorker.send({ type: 'done', exitCode: 0 });
+const sharedFinal = await sharedFirst.materialPromise;
+const [warmSlot, coolSlot] = sharedFinal.manifest.materials;
+assert.notEqual(warmSlot, coolSlot, 'Shared texture cannot share mutable per-slot material values');
+assert.deepEqual(Array.from(warmSlot.baseColor), [0.8, 0.4, 0.1, 1]);
+assert.deepEqual(Array.from(coolSlot.baseColor), [0.2, 0.4, 0.9, 1]);
+assert.equal(warmSlot.roughness, 0.75); assert.equal(coolSlot.roughness, 0.25);
+assert.equal(warmSlot.opacity, 1); assert.equal(coolSlot.opacity, 0.5);
+assert.equal(coolSlot.emissiveColor[0], 0.3);
+assert.equal(warmSlot.baseColorFrame, coolSlot.baseColorFrame, 'Slots must reuse the decoded frame');
+assert.equal(workers.filter(worker => worker.path === sharedPath).length, 1, 'Shared map must decode once');
+const graphColor = context.testMaterialValueFallback({ vectorParameterValues: [
+  { name: 'GradientColor', r: 0.1, g: 0.2, b: 0.3, a: 1 }
+] }, true);
+assert.equal(graphColor.material.baseColor, undefined, 'An unrelated graph color cannot tint a supported diffuse texture');
+
+// A lexical winner is not evidence of the material graph's effective diffuse.
+for (const [suffix, textureParameters, reason] of [
+  ['equal-diffuse', [
+    { name: 'Layer1_Diffuse', path: '/Game/Textures/T_LayerA.T_LayerA' },
+    { name: 'Layer2_Diffuse', path: '/Game/Textures/T_LayerB.T_LayerB' }
+  ], 'ambiguous-diffuse'],
+  ['fallback-cannot-hide-layers', [
+    { name: 'PM_Diffuse', path: '/Game/Textures/T_LayerB.T_LayerB' },
+    { name: 'Layer1_Diffuse', path: '/Game/Textures/T_LayerA.T_LayerA' },
+    { name: 'Layer2_Diffuse', path: '/Game/Textures/T_LayerB.T_LayerB' }
+  ], 'ambiguous-diffuse'],
+  ['equal-base-albedo', [
+    { name: 'BaseColor', path: '/Game/Textures/T_BaseA.T_BaseA' },
+    { name: 'Albedo', path: '/Game/Textures/T_BaseB.T_BaseB' }
+  ], 'ambiguous-diffuse'],
+  ['lego-decorator', [
+    { name: 'LEGO_Decorator', path: '/Game/Textures/T_Decorator.T_Decorator' },
+    { name: 'ColorGradient_Standard', path: '/Game/Textures/T_Gradient.T_Gradient' }
+  ], 'unsupported-decorator'],
+  ['lego-fallback-cannot-hide-decorator', [
+    { name: 'PM_Diffuse', path: '/Game/Textures/T_Brick.T_Brick' },
+    { name: 'LEGO_Decorator', path: '/Game/Textures/T_Decorator.T_Decorator' }
+  ], 'unsupported-decorator'],
+  ['missing-material', [], 'material-unavailable']
+]) {
+  const casePath = suffix + '.uasset';
+  const before = workers.length;
+  const task = runtime.resolveMeshImage(casePath, { interactive: true });
+  pending.get(casePath).resolve(); await tick();
+  const meshWorker = workers.at(-1);
+  meshWorker.send({
+    type: 'mesh', path: casePath,
+    positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]).buffer,
+    indices: new Uint32Array([0, 1, 2]).buffer,
+    uv0: new Float32Array([0, 0, 1, 0, 0, 1]).buffer,
+    sections: [{ firstIndex: 0, numTriangles: 1, materialIndex: 0 }],
+    materialMetadata: [{ textureParameters }]
+  });
+  meshWorker.send({ type: 'done', exitCode: 0 });
+  const first = await task, final = await first.materialPromise;
+  assert.equal(final.manifest.geometry, first.manifest.geometry, 'Unsupported material keeps visible geometry');
+  assert.equal(final.materialFidelity, 'geometry-only');
+  assert.equal(final.missingMaterials[0], 0);
+  assert.equal(final.materialDiagnostics[0].reason, reason);
+  assert.equal(final.manifest.metadata.materialDiagnostics, final.materialDiagnostics);
+  assert.equal(final.manifest.materials[0].baseColorFrame, undefined);
+  assert.equal(workers.length, before + 1, 'Ambiguous/unsupported maps must not spawn a guessed decode');
+}
+assert.equal(viewerMaterials.materialDiagnostics[0].reason, 'texture-unavailable');
+assert.match(viewerMaterials.materialDiagnostics[0].detail, /Texture unavailable/);
+assert.ok(viewerMaterials.materialDiagnostics.every(item => !item.detail || item.detail.length <= 160));
+console.log('Mesh materials: frame-only sharing, distinct slot values, diffuse ambiguity, decorators and bounded missing-material reasons passed.');
+
+// Execute the small production UI formatter without invoking the full page.
+const previewSource = fs.readFileSync(new URL('./preview.js', import.meta.url), 'utf8');
+const materialUi = {};
+vm.runInNewContext(previewSource.slice(previewSource.indexOf('  function setMeta('),
+  previewSource.indexOf('  function bindOrbitStick(')), materialUi);
+const meta = { dataset: {}, hidden: true, textContent: '' };
+assert.equal(materialUi.setMeshMaterialStatus(meta, viewerMaterials.materialFidelity,
+  viewerMaterials.materialDiagnostics), true);
+assert.equal(meta.hidden, false); assert.equal(meta.dataset.level, 'partial');
+assert.match(meta.textContent, /partial material values.*slot 1: texture unavailable/);
+const limitedSlots = Array.from({ length: 24 }, (_, slot) => ({ slot, reason: 'ambiguous-diffuse' }));
+assert.equal(materialUi.setMeshMaterialStatus(meta, 'geometry-only', limitedSlots), true);
+assert.match(meta.textContent, /geometry only.*ambiguous diffuse/);
+assert.match(meta.textContent, /\+22 slots/); assert.ok(meta.textContent.length <= 180);
+assert.equal(materialUi.setMeshMaterialStatus(meta, sharedFinal.materialFidelity, []), false);
+assert.equal(meta.dataset.level, 'preview'); assert.match(meta.textContent, /base color preview/);
+console.log('Mesh material UI: visible partial reasons and bounded fidelity labels passed.');
