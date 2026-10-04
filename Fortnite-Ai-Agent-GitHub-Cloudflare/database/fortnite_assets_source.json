@@ -8,6 +8,6 @@
   "schema": "fnaa.asset-source.v1",
   "sha256": "162cc264e8e0bf5ebb0a26e820c00db4ea7674c54a624b0e37321296bb038147",
   "source": "NovaSparx",
-  "sourceManifest": "https://raw.githubusercontent.com/E8uc/NovaSparx/main/web/asset-list/manifest.json",
+  "sourceManifest": "local-release:asset-list/manifest.json",
   "updatedAt": "2026-10-01T15:22:47.766266+00:00"
 }

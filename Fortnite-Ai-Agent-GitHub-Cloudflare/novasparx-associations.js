@@ -8,7 +8,7 @@
   const CACHE_LIMIT = 18;
 
   const REFERENCE_INDEX_BASE =
-    "https://raw.githubusercontent.com/E8uc/NovaSparx/main/web/reference-index";
+    "novasparx-runtime/reference-index";
 
   let referenceManifestPromise = null;
   let referenceManifestFailureAt = 0;
@@ -1404,7 +1404,8 @@
       manifest?.schema !==
         "novasparx.asset-references.v1" ||
       manifest?.available ===
-        false
+        false ||
+      Number(manifest?.meshToBlueprints?.entries || 0) === 0
     ) {
       return [];
     }

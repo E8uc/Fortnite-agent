@@ -47,6 +47,14 @@
   const MANIFEST_ENDPOINT =
     "https://export-service-new.dillyapis.com/v1/manifests";
 
+  const MAX_METADATA_BYTES =
+    4 * 1024 * 1024;
+
+  const MANIFEST_SOURCE_HOSTS = new Set([
+    "fortnite-direct.dillycdn.com",
+    "stormforge.dillycdn.com"
+  ]);
+
   const DIRECT_CHUNK_BASE =
     "https://egdownload.fastly-edge.com/Builds/Fortnite/CloudDir/";
 
@@ -59,17 +67,11 @@
   const AES_API =
     "https://export-service-new.dillyapis.com/v1/aes";
 
-  const MAX_METADATA_BYTES =
-    4 * 1024 * 1024;
-
   const MAX_SHARD_GZIP_BYTES =
     3 * 1024 * 1024;
 
   const MAX_SHARD_JSON_BYTES =
     24 * 1024 * 1024;
-
-  const MANIFEST_TTL_MS =
-    5 * 60 * 1000;
 
   let locationManifest =
     null;
@@ -86,17 +88,9 @@
   const shardCache =
     new Map();
 
-  let rawManifestCache =
-    null;
-
-  let rawManifestTask =
-    null;
-
-  let studioRawManifestCache =
-    null;
-
-  let studioRawManifestTask =
-    null;
+  let browserReleaseCache = null;
+  let browserReleaseTask = null;
+  let browserReleaseGeneration = 0;
 
   let activeRun =
     null;
@@ -1559,214 +1553,82 @@
     );
   }
 
-  async function studioManifestUrl(
-    options = {}
-  ) {
-    const now =
-      Date.now();
-
-    if (
-      studioRawManifestCache &&
-      !options.refresh &&
-      now -
-        studioRawManifestCache.at <
-        MANIFEST_TTL_MS
-    ) {
-      return studioRawManifestCache
-        .url;
+  function validateBrowserRelease(data) {
+    const invalid = reason => {
+      const error = new Error("NovaSparx browser release descriptor is invalid: " + reason + ".");
+      error.code = "NOVASPARX_RELEASE_INVALID";
+      throw error;
+    };
+    if (data?.schema !== "fnaa.browser-release.v1" ||
+        typeof data.fortniteBuild !== "string" ||
+        !/^\+\+Fortnite\+Release-\d+\.\d+-CL-\d+-Windows$/.test(data.fortniteBuild)) {
+      invalid("schema or exact Fortnite build");
     }
-
-    if (
-      studioRawManifestTask &&
-      !options.signal &&
-      !options.refresh
-    ) {
-      return await studioRawManifestTask;
+    for (const kind of ["live", "studio"]) {
+      const source = data.manifestSources?.[kind];
+      if (!source || source.fullBuild !== data.fortniteBuild ||
+          typeof source.id !== "string" || !source.id.trim() ||
+          typeof source.hash !== "string" || !source.hash.trim() ||
+          !Number.isSafeInteger(source.size) || source.size <= 0 ||
+          typeof source.url !== "string") invalid(kind + " manifest metadata");
+      let url;
+      try { url = new URL(source.url); } catch { invalid(kind + " manifest URL"); }
+      if (url.protocol !== "https:" || !MANIFEST_SOURCE_HOSTS.has(url.hostname) ||
+          (url.port && url.port !== "443") || url.username || url.password || url.hash || url.search ||
+          !/\.manifest$/i.test(url.pathname)) invalid(kind + " manifest URL or source host");
     }
-
-    const request =
-      (async () => {
-        const data =
-          await fetchJson(
-            MANIFEST_ENDPOINT,
-            MAX_METADATA_BYTES,
-            "NovaSparx manifest metadata",
-            {
-              signal:
-                options.signal,
-              cache:
-                "no-store"
-            }
-          );
-
-        const records =
-          Array.isArray(
-            data
-          )
-            ? data
-            : [];
-
-        const matches =
-          records
-            .filter(
-              item =>
-                String(
-                  item?.appName ||
-                  ""
-                )
-                  .toLowerCase() ===
-                  "fortnite_studio" &&
-                String(
-                  item?.labelName ||
-                  ""
-                )
-                  .toLowerCase() ===
-                  "live-windows" &&
-                /^https:\/\//i.test(
-                  String(
-                    item?.downloadUrl ||
-                    ""
-                  )
-                )
-            )
-            .sort(
-              (
-                a,
-                b
-              ) =>
-                Number(
-                  Boolean(
-                    a?.isBugBuild
-                  )
-                ) -
-                Number(
-                  Boolean(
-                    b?.isBugBuild
-                  )
-                ) ||
-                String(
-                  b?.discoveredAt ||
-                  ""
-                )
-                  .localeCompare(
-                    String(
-                      a?.discoveredAt ||
-                      ""
-                    )
-                  )
-            );
-
-        const url =
-          String(
-            matches[0]
-              ?.downloadUrl ||
-            ""
-          );
-
-        if (
-          !url
-        ) {
-          throw new Error(
-            "NovaSparx could not resolve the current Fortnite_Studio manifest."
-          );
-        }
-
-        studioRawManifestCache = {
-          at:
-            Date.now(),
-          url
-        };
-
-        return url;
-      })();
-
-    studioRawManifestTask =
-      request;
-
-    try {
-      return await request;
-    } finally {
-      if (
-        studioRawManifestTask ===
-        request
-      ) {
-        studioRawManifestTask =
-          null;
-      }
-    }
+    return data;
   }
 
-  async function manifestForLocation(
-    location,
-    options = {}
-  ) {
-    return location
-      ?.manifestKind ===
-        "studio"
-      ? await studioManifestUrl(
-          options
-        )
-      : await currentManifestUrl(
-          options
-        );
+  async function getBrowserRelease(options = {}) {
+    throwIfAborted(options.signal);
+    if (browserReleaseCache && !options.refresh) return browserReleaseCache;
+    // A request carrying another caller's signal cannot safely be shared.
+    if (browserReleaseTask && !browserReleaseTask.signal && !options.signal && !options.refresh) {
+      return await browserReleaseTask.promise;
+    }
+    const task = { signal: options.signal || null, generation: browserReleaseGeneration, promise: null };
+    task.promise = (async () => {
+      const data = await fetchJson(new URL("release.json", RUNTIME_BASE), 128 * 1024,
+        "NovaSparx browser release descriptor", {
+          signal: options.signal, cache: options.refresh ? "no-store" : "force-cache"
+        });
+      throwIfAborted(options.signal);
+      if (task.generation !== browserReleaseGeneration) throw abortError(options.signal, "texture-cache-reset");
+      const release = validateBrowserRelease(data);
+      if (browserReleaseTask === task) browserReleaseCache = release;
+      return release;
+    })();
+    browserReleaseTask = task;
+    try { return await task.promise; }
+    finally { if (browserReleaseTask === task) browserReleaseTask = null; }
   }
 
-  async function currentManifestUrl(
-    options = {}
-  ) {
-    const now =
-      Date.now();
-
-    if (
-      rawManifestCache &&
-      !options.refresh &&
-      now -
-        rawManifestCache.at <
-        MANIFEST_TTL_MS
-    ) {
-      return rawManifestCache
-        .url;
+  async function pinnedManifestUrl(kind, options = {}) {
+    const release = await getBrowserRelease(options);
+    const index = kind === "studio"
+      ? await getStudioLocationManifest(options) : await getLocationManifest(options);
+    throwIfAborted(options.signal);
+    if (index.fortniteVersion !== release.fortniteBuild) {
+      const error = new Error("NovaSparx browser release build mismatch: " + kind +
+        " location index does not match the pinned Fortnite build.");
+      error.code = "NOVASPARX_RELEASE_BUILD_MISMATCH";
+      throw error;
     }
+    return release.manifestSources[kind].url;
+  }
 
-    if (
-      rawManifestTask &&
-      !options.signal &&
-      !options.refresh
-    ) {
-      return await rawManifestTask;
-    }
+  async function studioManifestUrl(options = {}) {
+    return await pinnedManifestUrl("studio", options);
+  }
 
-    const request =
-      (async () => {
-        const url =
-          await resolveRawManifestUrl(
-            MANIFEST_ENDPOINT,
-            options
-          );
+  async function manifestForLocation(location, options = {}) {
+    return location?.manifestKind === "studio"
+      ? await studioManifestUrl(options) : await currentManifestUrl(options);
+  }
 
-        rawManifestCache = {
-          at:
-            Date.now(),
-          url
-        };
-
-        return url;
-      })();
-
-    rawManifestTask =
-      request;
-
-    try {
-      return await request;
-    } finally {
-      if (
-        rawManifestTask ===
-        request
-      ) {
-        rawManifestTask =
-          null;
-      }
-    }
+  async function currentManifestUrl(options = {}) {
+    return await pinnedManifestUrl("live", options);
   }
 
   function apiBase() {
@@ -3476,17 +3338,9 @@
 
     shardCache.clear();
 
-    rawManifestCache =
-      null;
-
-    rawManifestTask =
-      null;
-
-    studioRawManifestCache =
-      null;
-
-    studioRawManifestTask =
-      null;
+    browserReleaseGeneration++;
+    browserReleaseCache = null;
+    browserReleaseTask = null;
   }
 
   function status() {
@@ -3516,11 +3370,11 @@
         ),
       rawManifestCached:
         Boolean(
-          rawManifestCache
+          browserReleaseCache?.manifestSources?.live
         ),
       studioRawManifestCached:
         Boolean(
-          studioRawManifestCache
+          browserReleaseCache?.manifestSources?.studio
         ),
       runtimeBase:
         RUNTIME_BASE

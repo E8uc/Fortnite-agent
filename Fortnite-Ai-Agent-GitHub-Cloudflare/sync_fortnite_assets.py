@@ -20,10 +20,7 @@ from typing import Iterable
 ROOT = Path(__file__).resolve().parent
 DEFAULT_DB = ROOT / "database"
 
-DEFAULT_MANIFEST_URL = (
-    "https://raw.githubusercontent.com/"
-    "E8uc/NovaSparx/main/web/asset-list/manifest.json"
-)
+DEFAULT_MANIFEST_FILE = ROOT / "novasparx-runtime/asset-list/manifest.json"
 
 MAX_MANIFEST_BYTES = 1024 * 1024
 MAX_ASSET_GZIP_BYTES = 128 * 1024 * 1024
@@ -768,6 +765,35 @@ def local_source_matches(
     }
 
 
+def sync_local(database_dir: Path, manifest_file: Path, min_entries: int) -> dict:
+    if not manifest_file.is_file():
+        raise SyncError("Local asset manifest is missing. Assemble the pinned release first.")
+    if manifest_file.stat().st_size > MAX_MANIFEST_BYTES:
+        raise SyncError("Local asset manifest exceeds its byte budget.")
+    manifest = load_manifest_bytes(manifest_file.read_bytes())
+    if not min_entries <= int(manifest.get("entries") or 0) <= MAX_ENTRIES:
+        raise SyncError("Local asset count is outside the allowed range.")
+    relative = Path(str(manifest.get("path") or "fortnite_assets.gz"))
+    if relative.is_absolute() or ".." in relative.parts:
+        raise SyncError("Local asset gzip path is unsafe.")
+    compressed_file = (manifest_file.parent / relative).resolve()
+    if not compressed_file.is_relative_to(manifest_file.parent.resolve()):
+        raise SyncError("Local asset gzip path escapes the release.")
+    if not compressed_file.is_file() or compressed_file.stat().st_size > MAX_ASSET_GZIP_BYTES:
+        raise SyncError("Local asset gzip is missing or exceeds its byte budget.")
+    # The same checked hash/no-change path avoids rebuilding an unchanged list.
+    unchanged = local_source_matches(database_dir, manifest)
+    if unchanged is not None:
+        return unchanged
+    return sync_payload(
+        database_dir=database_dir,
+        manifest_url="local-release:asset-list/manifest.json",
+        manifest=manifest,
+        compressed=compressed_file.read_bytes(),
+        min_entries=min_entries,
+    )
+
+
 def sync_remote(
     database_dir: Path,
     manifest_url: str,
@@ -1070,16 +1096,18 @@ def main() -> None:
         default=DEFAULT_DB,
     )
 
-    parser.add_argument(
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument(
         "--manifest-url",
         default=(
             os.getenv(
                 "FNAA_ASSET_MANIFEST_URL",
                 "",
             ).strip()
-            or DEFAULT_MANIFEST_URL
+            or None
         ),
     )
+    source.add_argument("--manifest-file", type=Path)
 
     parser.add_argument(
         "--min-entries",
@@ -1104,14 +1132,10 @@ def main() -> None:
         )
 
     try:
-        result = sync_remote(
-            database_dir=
-                args.database_dir,
-            manifest_url=
-                args.manifest_url,
-            min_entries=
-                args.min_entries,
-        )
+        if args.manifest_url:
+            result = sync_remote(args.database_dir, args.manifest_url, args.min_entries)
+        else:
+            result = sync_local(args.database_dir, args.manifest_file or DEFAULT_MANIFEST_FILE, args.min_entries)
     except SyncError as exc:
         raise SystemExit(
             f"Asset sync failed: {exc}"
