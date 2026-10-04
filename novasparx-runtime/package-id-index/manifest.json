@@ -1,0 +1,12 @@
+{
+  "schema": "novasparx.package-locations.v1",
+  "builtAt": "2026-10-01T13:58:37.0604461+00:00",
+  "fortniteVersion": "\u002B\u002BFortnite\u002BRelease-42.30-CL-58557680-Windows",
+  "hash": "package-id-low-byte",
+  "entries": 1442998,
+  "containers": 21,
+  "shards": 256,
+  "bytes": 61240236,
+  "valueProperty": "path-tab-toc",
+  "path": "{shard}.json.gz"
+}

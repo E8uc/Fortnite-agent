@@ -1,0 +1,16 @@
+{
+  "live": {
+    "url": "https://fortnite-direct.dillycdn.com/manifests/XkPoMCKanDV2tPsMjEC9zIodN2hbyw.manifest",
+    "id": "XkPoMCKanDV2tPsMjEC9zIodN2hbyw",
+    "fullBuild": "++Fortnite+Release-42.30-CL-58557680-Windows",
+    "hash": "695af2bdd3e30a09b43796f355d4eb7ede080f78",
+    "size": 10346346
+  },
+  "studio": {
+    "url": "https://fortnite-direct.dillycdn.com/manifests/BiIVV24CYn6z52SvNEKDekszCn3DEA.manifest",
+    "id": "BiIVV24CYn6z52SvNEKDekszCn3DEA",
+    "fullBuild": "++Fortnite+Release-42.30-CL-58557680-Windows",
+    "hash": "327592aed7614e23df9d54e035aef85543223ded",
+    "size": 2488350
+  }
+}

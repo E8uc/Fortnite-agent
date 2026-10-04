@@ -1,0 +1,16 @@
+{
+  "builtAt": "2026-10-01T15:44:24.865784+00:00",
+  "counts": {
+    "all": 1804101,
+    "cosmetics": 434396,
+    "m": 147427,
+    "meshes": 67552,
+    "new": 20610,
+    "sm": 61165
+  },
+  "fortniteVersion": "42.30",
+  "indexV1": "index-v1/manifest.json",
+  "jsonReferences": 0,
+  "schema": "fnaa.asset-index.v1",
+  "version": 1
+}
