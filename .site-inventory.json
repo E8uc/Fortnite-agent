@@ -14407,7 +14407,7 @@
     {
       "path": "index.html",
       "bytes": 15296,
-      "sha256": "f85ba83a718fc97f518bb78956e464c46f50ca8f431f8a6d4c5bc83378d5d92c"
+      "sha256": "ff492a8eff5881b1a10ea7d394e2095d3806ca4af0d4b764fed9bae252d57731"
     },
     {
       "path": "novasparx-associations.js",
@@ -14471,8 +14471,8 @@
     },
     {
       "path": "novasparx-renderer.js",
-      "bytes": 86734,
-      "sha256": "6b3d082579588124d9b8bfe1e6311cfb3c361b8303550153d2325288a3d18d91"
+      "bytes": 87050,
+      "sha256": "89fc8d1184cf8950ebf709d8446a71492a093d49e0e40784eb8f4c88055d3da2"
     },
     {
       "path": "novasparx-runtime/_framework/AssetRipper.TextureDecoder.99vonl6q1h.wasm",
