@@ -322,3 +322,201 @@ html[data-account-mode="guest"] .profile-account-type::after {
     transition: none !important;
   }
 }
+
+/* Flat frontend theme. Keep the existing layout, states and responsive rules. */
+html[data-theme] {
+  --radius-sm: 4px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
+  --shadow: none;
+}
+
+html[data-theme="fortnite"] {
+  color-scheme: dark;
+  --bg: #222;
+  --bg-soft: #303030;
+  --panel: #282828;
+  --panel-2: #333;
+  --panel-3: #3c3c3c;
+  --line: #444;
+  --line-strong: #555;
+  --text: #e3e3e3;
+  --muted: #b0b0b0;
+  --muted-2: #969696;
+  --accent: #3c7e90;
+  --accent-text: #fff;
+  --link: #8bcdd6;
+  --danger: #efa6a6;
+  --warning: #dbc48d;
+  --override-cyan: #81bbcb;
+}
+
+html[data-theme="black"] {
+  --bg: #171717;
+  --bg-soft: #242424;
+  --panel: #212121;
+  --panel-2: #2b2b2b;
+  --panel-3: #353535;
+  --line: #404040;
+  --line-strong: #555;
+  --muted: #b0b0b0;
+  --muted-2: #969696;
+  --accent: #3c7e90;
+  --accent-text: #fff;
+  --link: #8bcdd6;
+}
+
+html[data-theme="white"] {
+  --accent: #3c7e90;
+  --accent-text: #fff;
+  --link: #286779;
+}
+
+html[data-theme], html[data-theme] body,
+html[data-theme] :is(.app-shell, .chat, .tools-overlay, .settings-overlay, .login-gate) {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body { font-size: 14.4px; line-height: 1.5; }
+
+html[data-theme] :is(.topbar, .tools-header, .settings-header, .composer, .sidebar) {
+  background: var(--bg-soft);
+  border-color: var(--line);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-theme] .composer { border-top: 1px solid var(--line); }
+html[data-theme] .tools-tabs { width: min(1110px, 100%); margin-inline: auto; }
+
+html[data-theme] :is(.welcome h1, .topbar-title, .tools-title, .settings-title, .login-card h1, .tool-section h2) {
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: normal;
+}
+html[data-theme] :is(.topbar-title, .tools-title, .settings-title) { font-size: 18px; }
+html[data-theme] .welcome h1 { font-size: clamp(26px, 6vw, 36px); }
+
+html[data-theme] :is(.composer-inner, .tool-card, .converter-card, .settings-card,
+  .mesh-image-panel, .reference-list, .user-bubble, .user-edit-card, .tool-result,
+  .tool-empty, .plugin-menu, .toast, .e8-usage-banner, .e8-popover, .e8-dialog-card) {
+  border-radius: 4px;
+  border-color: var(--line);
+  background: var(--panel);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-theme] :is(.tool-searchbar input, .tool-input, .tool-textarea, .tool-select,
+  .profile-username-input, .e8-dialog-input) {
+  border-radius: 4px;
+  border-color: var(--line);
+  background: var(--bg);
+  box-shadow: none;
+}
+html[data-theme] :is(.tool-searchbar input, .tool-input, .tool-select, .profile-username-input) {
+  min-height: 46px;
+  font-size: 16px;
+  font-weight: 400;
+}
+html[data-theme] :is(.tool-searchbar input, .tool-input, .tool-textarea, .tool-select,
+  .profile-username-input, .e8-dialog-input):focus { border-color: var(--link); box-shadow: none; }
+
+html[data-theme] :is(.tools-tab, .tool-subtab, .tool-button, .json-view-button,
+  .login-primary, .login-secondary, .language-choice, .theme-choice, .account-action-button,
+  .guest-login-banner button, .fnaa-guest-login, .path-copy, .copy-button, .user-edit-button,
+  .plugin-option, .plugin-icon, .plugin-panel-badge, .sidebar-action, .recent-item,
+  .settings-card-icon, .owner-account-list a, .icon-btn, .send-btn,
+  .e8-menu-item, .e8-dialog-close, .e8-dialog-button, .e8-find-result) {
+  border-radius: 4px;
+  box-shadow: none;
+  font-weight: 400;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+html[data-theme] :is(.tools-tab, .tool-subtab) { color: var(--text); }
+html[data-theme] :is(.send-btn, .tool-button.primary, .tools-tab.active,
+  .login-primary, .language-choice.active, .theme-choice.active, .user-edit-button.primary) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+}
+html[data-theme] :is(.send-btn, .tool-button.primary, .tools-tab.active,
+  .login-primary, .language-choice.active, .theme-choice.active):enabled:hover {
+  background: #316675;
+  border-color: #2d5f6c;
+}
+html[data-theme] .asset-result-actions .json-view-button:first-child {
+  border-color: var(--line-strong);
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 400;
+}
+html[data-theme] .asset-result-card [data-asset-action][data-fnaa-open="1"] {
+  border-color: var(--link);
+  background: var(--panel-3);
+  box-shadow: none;
+}
+html[data-theme] .asset-result-actions .description-cooldown,
+html[data-theme] .asset-result-actions .description-cooldown:disabled {
+  border-color: var(--line-strong);
+  background: var(--panel-3);
+  color: var(--muted);
+}
+html[data-theme] :is(.tools-tab, .tool-button, .json-view-button, .sidebar-action,
+  .send-btn, .icon-btn, .account-action-button, .login-primary, .login-secondary):active {
+  transform: none;
+  filter: none;
+}
+html[data-theme] :is(.asset-result-tags span, .fnaa-cosmetic-placeholder-v101) {
+  border-radius: 4px;
+  border-color: var(--line);
+  background: var(--bg-soft);
+  color: var(--muted);
+}
+html[data-theme] :is(.path-label, .device-field-tag) { color: var(--link); }
+
+html[data-theme] .login-card {
+  width: min(330px, 100%);
+  padding: 15px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+html[data-theme] .login-card h1 { font-size: 36px; line-height: 1.2; }
+html[data-theme] .login-card p { font-size: 14.4px; line-height: 1.5; }
+html[data-theme] .fnaa-login-actions { grid-template-columns: 1fr; gap: 10px; }
+html[data-theme] :is(.login-primary, .login-secondary) { font-size: 16px; }
+html[data-theme] .login-link-button { color: var(--link); font-weight: 400; }
+
+html[data-theme] .mesh-image-stage { background: var(--bg); }
+html[data-theme] .novasparx-orbit-stick { background: var(--panel-2); }
+html[data-theme] .novasparx-stick-knob { box-shadow: none; }
+html[data-theme] .profile-avatar-edit {
+  border-radius: 4px;
+  background: var(--panel-2);
+  color: var(--text);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-theme] .e8-dialog-layer {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Remove decorative scanlines, sweeps and glows without hiding UI states. */
+html[data-theme] :is(.app-shell, .topbar, .tools-header, .settings-header,
+  .tools-tab.active, .tool-subtab.active, .override-theme-choice)::after,
+html[data-theme] .login-card-polished::before { content: none; animation: none; }
+html[data-theme] :is(.fnaa-glitch-pulse .topbar-brand, .fnaa-glitch-pulse .tools-title,
+  .fnaa-glitch-pulse .settings-title) { animation: none; }
+html[data-theme] :is(.fnaa-glitch-pulse .brand-avatar, .fnaa-glitch-pulse .assistant-avatar) { filter: none; }
+html[data-theme] .e8-thinking {
+  color: var(--muted);
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  animation: none;
+}
