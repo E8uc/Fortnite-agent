@@ -13,6 +13,6 @@ class Checks(unittest.TestCase):
   for name in ['.github/novasparx-data.json','.github/novasparx-runtime.json','.github/runtime/new.tar.gz','.github/browser-data/new/manifest.json']:
    with self.subTest(name=name):self.assertTrue(m.checks_for([name])['productionSmoke'])
  def test_changed_browser_proof_cannot_skip_itself(self):
-  for name in ['.github/tests/novasparx-production.browser.test.mjs','.github/tests/novasparx-renderer-alpha.browser.test.mjs']:
+  for name in ['.github/tests/novasparx-production.browser.test.mjs','.github/tests/novasparx-renderer-alpha.browser.test.mjs','.github/tests/novasparx-texture-placement.browser.test.mjs']:
    with self.subTest(name=name):self.assertTrue(m.checks_for([name])['productionSmoke'])
 if __name__=='__main__':unittest.main()

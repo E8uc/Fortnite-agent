@@ -16,7 +16,9 @@ const expected = {
   runtimeSourceRevision: process.env.FNAA_EXPECTED_RUNTIME_REVISION || runtimePin.sourceRevision,
   dataManifestSha256: process.env.FNAA_EXPECTED_DATA_SHA256 || dataPin.sha256
 };
-const assetPath = "FortniteGame/Content/Environments/Apollo/Props/LazyLakeSign/Mesh/SM_LazyLakeLodge_Sign.uasset";
+const assetPath = process.env.FNAA_PRODUCTION_ASSET_PATH || "FortniteGame/Content/Environments/Apollo/Props/LazyLakeSign/Mesh/SM_LazyLakeLodge_Sign.uasset";
+const assetName = path.posix.basename(assetPath, ".uasset");
+const screenshotName = process.env.FNAA_PRODUCTION_ASSET_PATH ? `${assetName}.png` : "lazy-lake.png";
 const output = path.resolve(process.env.FNAA_PROOF_OUTPUT_DIR || "fnaa-production-smoke");
 fs.mkdirSync(output, { recursive: true });
 const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
@@ -133,12 +135,12 @@ try {
     } };
     window.FortniteTools.open("assets");
   });
-  await page.locator("#assetQuery").fill("SM_LazyLakeLodge_Sign");
+  await page.locator("#assetQuery").fill(assetName);
   await page.locator("#assetSearch").click();
   const card = page.locator(".asset-result-card").filter({ hasText: assetPath });
   await card.waitFor();
   await card.locator('[data-asset-action="model"]:not([disabled])').waitFor();
-  check(await card.count() === 1, "Real deployed search found the exact Lazy Lake mesh");
+  check(await card.count() === 1, "Real deployed search found the exact requested mesh");
   await card.locator('[data-asset-action="model"]').click();
 
   stage = "native-preview";
@@ -180,8 +182,8 @@ try {
       uiState: document.querySelector('[data-preview-state="live-3d"]')?.dataset.previewState };
   });
   proof.result = result;
-  check(!result.error, `Native Lazy Lake preview completed${result.error ? `: ${result.error}` : ""}`);
-  check(result.source === "browser-wasm" && result.path?.toLowerCase() === assetPath.toLowerCase(), "Lazy Lake is decoded by production browser WASM");
+  check(!result.error, `Native Mesh preview completed${result.error ? `: ${result.error}` : ""}`);
+  check(result.source === "browser-wasm" && result.path?.toLowerCase() === assetPath.toLowerCase(), "Requested Mesh is decoded by production browser WASM");
   check(result.vertexCount > 0 && result.triangleCount > 0, "Real native geometry is present");
   check(result.textured && result.rgbaFrames.length > 0, "Real native base-color texture frames are applied");
   check(result.rgbaFrames.every(frame => frame.bytes === frame.width * frame.height * 4), "Decoded frames contain complete RGBA pixels");
@@ -195,7 +197,7 @@ try {
     "Actual Cloudflare range/chunk relay returned a nonempty browser response body");
   check(proof.responses.some(response => /\/novasparx-runtime\/.*\.wasm(?:\?|$)/.test(response.url) && response.status === 200),
     "Deployed WASM runtime loaded successfully", "deployment");
-  await card.screenshot({ path: path.join(output, "lazy-lake.png") });
+  await card.screenshot({ path: path.join(output, screenshotName) });
   proof.status = "passed";
 } catch (error) {
   await Promise.allSettled(responseTasks);
@@ -230,7 +232,7 @@ try {
 } finally {
   await Promise.allSettled(responseTasks);
   proof.finishedAt = new Date().toISOString();
-  fs.rmSync(path.join(output, proof.status === "passed" ? "failure.png" : "lazy-lake.png"), { force: true });
+  fs.rmSync(path.join(output, proof.status === "passed" ? "failure.png" : screenshotName), { force: true });
   fs.writeFileSync(path.join(output, "proof.json"), JSON.stringify(proof, null, 2) + "\n");
   await browser?.close();
   console.log(JSON.stringify({ status: proof.status, output, failure: proof.failure,
