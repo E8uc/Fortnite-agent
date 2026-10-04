@@ -434,6 +434,10 @@
           alpha *= texture2D(uOpacityMap, vUV).r;
         }
 
+        // Opaque materials ignore alpha inputs; a graph's scalar Opacity does
+        // not establish masked/translucent blend semantics.
+        if (uAlphaMode == 0) alpha = 1.0;
+
         if (uAlphaMode == 1 && alpha < uCutoff) discard;
         if (alpha < 0.003) discard;
 

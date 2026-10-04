@@ -24,5 +24,13 @@ Import the assembled asset list with `sync_fortnite_assets.py --manifest-file
 /tmp/fnaa-site/novasparx-runtime/asset-list/manifest.json`, then run the existing
 local database builder. Promote only matching build/count/hash inputs.
 
+Before invoking the .NET data builder, run NovaSparx's
+`node tools/check-live-build.mjs --current <complete-release.json>`.
+Exit 0 means unchanged (skip the builder); 10 means changed; 1 is an error.
+`python3 .github/scripts/local-check-plan.py --base origin/main` keeps cheap
+checks for text changes and requires the browser/production proofs for runtime,
+viewer, relay or release changes. A local `--proof-stamp` can reuse identical
+input bytes; use `--record-success` only after those proofs have passed.
+
 The data package contains generated public metadata, not NovaSparx source or
 credentials. Corrupt, incomplete, or mixed-build inputs leave prior outputs intact.

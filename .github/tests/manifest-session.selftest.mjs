@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+let source=fs.readFileSync(new URL('../../Fortnite-Ai-Agent-GitHub-Cloudflare/novasparx-texture-runtime.js',import.meta.url),'utf8');
+source=source.replace('  function clearCaches() {',`
+ globalThis.sessionFactory=createAssetContext;
+ globalThis.loadAssetManifest=typeof assetManifestBytes==='function'?assetManifestBytes:null;
+ function clearCaches() {`);
+let requests=0;
+const data=new Uint8Array(10*1024*1024); data[0]=42;
+const context={URL,Response,Request,Headers,TextDecoder,Uint8Array,ArrayBuffer,AbortController,WebAssembly,setTimeout,clearTimeout,
+ document:{baseURI:'https://example.test/',currentScript:{src:'https://example.test/novasparx-texture-runtime.js?v=121'}},
+ async fetch(){requests++;return new Response(data);}};
+vm.runInNewContext(source,context);
+assert.equal(typeof context.loadAssetManifest,'function','CacheStorage misses need a bounded manifest cache inside the asset');
+const session=context.sessionFactory();
+const url='https://edge.example.test/nova-edge/manifest?url=https%3A%2F%2Ffortnite-direct.dillycdn.com%2Fmanifests%2Fpinned.manifest';
+const options={assetContext:session,expectedManifest:url};
+assert.equal((await context.loadAssetManifest(url,options))[0],42);
+assert.equal((await context.loadAssetManifest(url,options))[0],42);
+assert.equal(requests,1,'Two WASM contexts in one asset reuse the same network manifest bytes');
+assert.equal(session.metrics.manifestCacheHits,1);
+assert.equal(session.manifestBytes,data.byteLength);
+await assert.rejects(context.loadAssetManifest(url+'&different=1',options),/identity.*mismatch/i);
+assert.equal(requests,1,'Different identity cannot read or contaminate an asset cache');
+const cancel=new AbortController();cancel.abort();
+await assert.rejects(context.loadAssetManifest(url,{...options,signal:cancel.signal}),{name:'AbortError'});
+session.release();
+assert.equal(session.manifestBuffers.size,0);assert.equal(session.manifestBytes,0);
+await assert.rejects(context.loadAssetManifest(url,options),{name:'AbortError'});
+const other=context.sessionFactory();
+await context.loadAssetManifest(url,{assetContext:other,expectedManifest:url});
+assert.equal(requests,2,'Replacing/closing an asset does not retain its manifest buffers');
+other.release();
+console.log('Manifest session: one physical load, exact identity, cancellation and bounded cleanup passed.');
+const overlapping=context.sessionFactory();
+const before=requests;
+await Promise.all([context.loadAssetManifest(url,{assetContext:overlapping,expectedManifest:url}),context.loadAssetManifest(url,{assetContext:overlapping,expectedManifest:url})]);
+assert.equal(requests-before,1,'Overlapping same-identity requests share one physical read');
+assert.equal(overlapping.manifestBytes,data.byteLength,'Same key cannot be accounted twice');
+const second=url+'&identity=second';
+await context.loadAssetManifest(second,{assetContext:overlapping,expectedManifest:second});
+assert.equal(overlapping.manifestBytes,data.byteLength,'Eviction stays bounded after overlapping requests');
+overlapping.release();

@@ -776,6 +776,32 @@
     }
   }
 
+  function setMeshMaterialStatus(meta, fidelity, diagnostics = []) {
+    const labels = {
+      'geometry-first': 'geometry visible, loading materials',
+      'geometry-only': 'geometry only',
+      'base-color-preview': 'base color preview',
+      'base-color-partial': 'partial base color',
+      'material-value-preview': 'material values preview',
+      'material-value-partial': 'partial material values'
+    };
+    const reasons = {
+      'ambiguous-diffuse': 'ambiguous diffuse',
+      'unsupported-decorator': 'decorator unsupported',
+      'unsupported-diffuse': 'diffuse unsupported',
+      'material-unavailable': 'material unavailable',
+      'texture-unavailable': 'texture unavailable'
+    };
+    const issues = Array.isArray(diagnostics) ? diagnostics.slice(0, 24) : [];
+    const partial = issues.length > 0 || /partial|geometry-only/.test(fidelity);
+    const summary = issues.slice(0, 2).map(item =>
+      `${Number.isInteger(item.slot) && item.slot >= 0 ? 'slot ' + (item.slot + 1) + ': ' : ''}${reasons[item.reason] || 'material unavailable'}`);
+    if (issues.length > 2) summary.push(`+${issues.length - 2} slots`);
+    setMeta(meta, `Materials: ${labels[fidelity] || String(fidelity).replace(/-/g, ' ')}${summary.length ? ' · ' + summary.join(', ') : ''}`.slice(0, 180),
+      partial ? 'partial' : 'preview');
+    return partial;
+  }
+
   function bindOrbitStick(stick, controller, signal) {
     const knob = stick.querySelector("[data-novasparx-stick-knob]");
     const keys = new Set();
@@ -1906,10 +1932,7 @@
         "unknown"
       ).toLowerCase();
 
-    setMeta(
-      ui.meta,
-      ""
-    );
+    setMeshMaterialStatus(ui.meta, fidelity, manifest?.metadata?.materialDiagnostics);
 
     return {
       interactive:
@@ -4333,16 +4356,18 @@
               } catch (error) {
                 throwIfAborted(signal);
                 if (error?.name === "AbortError") throw error;
-                setMeta(ui.meta, "");
-                setStatus(ui.status, `Mesh material unavailable: ${String(error?.message || error).slice(0, 180)}`, "error");
+                ui.status.hidden = true;
+                setMeshMaterialStatus(ui.meta, 'geometry-only', [{ reason: 'texture-unavailable' }]);
                 return { state: "partial", kind: "staticmesh", interactive: true };
               }
               throwIfAborted(signal);
               await mount(materialResult.manifest);
               result = materialResult;
             }
-            return { state: "ready", kind: "staticmesh", interactive: true,
-              materialFidelity: result.materialFidelity || result.manifest?.metadata?.materialFidelity || result.previewMode };
+            const fidelity = result.materialFidelity || result.manifest?.metadata?.materialFidelity || result.previewMode || 'geometry-only';
+            const partial = setMeshMaterialStatus(ui.meta, fidelity, result.materialDiagnostics || result.manifest?.metadata?.materialDiagnostics);
+            return { state: partial ? "partial" : "ready", kind: "staticmesh", interactive: true,
+              materialFidelity: fidelity };
           }
 
           result = await meshImageResult(result, signal);

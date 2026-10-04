@@ -1983,19 +1983,18 @@
       } catch {}
     }
 
+    const target = workerUrl(location, manifest, maxSize, options.mode);
+    if (options.assetContext) target.searchParams.set('assetSession', '1');
+    const workerStartedAt = Date.now();
     const worker =
       new Worker(
-        workerUrl(
-          location,
-          manifest,
-          maxSize,
-          options.mode
-        ),
+        target,
         {
           type:
             "module"
         }
       );
+    if (options.assetContext) options.assetContext.metrics.workerRuns++;
 
     return new Promise(
       (
@@ -2070,6 +2069,8 @@
             settled =
               true;
 
+            if (options.assetContext) options.assetContext.metrics.workerElapsedMs += Date.now() - workerStartedAt;
+
             cleanup();
 
             if (error) {
@@ -2120,6 +2121,25 @@
             const message =
               event.data ||
               {};
+
+            if (message.type === 'runtime-ready') {
+              if (options.assetContext && Number.isFinite(message.bootMs) && message.bootMs >= 0)
+                options.assetContext.metrics.workerBootMs += message.bootMs;
+              return;
+            }
+            if (message.type === 'manifest-request' && options.assetContext) {
+              assetManifestBytes(message.url, { ...options, expectedManifest: target.searchParams.get('manifest') })
+                .then(bytes => {
+                  if (settled) return;
+                  const buffer = bytes.slice().buffer;
+                  worker.postMessage({ type: 'manifest-bytes', requestId: message.requestId, bytes: buffer }, [buffer]);
+                }, error => {
+                  if (settled) return;
+                  worker.postMessage({ type: 'manifest-bytes', requestId: message.requestId,
+                    error: String(error?.message || error) });
+                });
+              return;
+            }
 
             if (
               message.type ===
@@ -2555,19 +2575,126 @@
     }
   }
 
-  async function locatePackage(id, options) {
+  function createAssetContext() {
+    return {
+      packageManifest: null,
+      packageShards: new Map(),
+      packageBytes: 0,
+      manifestBuffers: new Map(),
+      manifestTasks: new Map(),
+      manifestBytes: 0,
+      released: false,
+      metrics: { packageManifestLoads: 0, packageShardLoads: 0, packageShardHits: 0,
+        workerRuns: 0, workerBootMs: 0, workerElapsedMs: 0, retainedPackageBytes: 0,
+        manifestNetworkRequests: 0, manifestNetworkBytes: 0, manifestCacheHits: 0, retainedManifestBytes: 0 },
+      release() {
+        this.released = true;
+        this.packageManifest = null;
+        this.packageShards.clear();
+        this.packageBytes = this.metrics.retainedPackageBytes = 0;
+        this.manifestBuffers.clear();
+        this.manifestTasks.clear();
+        this.manifestBytes = this.metrics.retainedManifestBytes = 0;
+      }
+    };
+  }
+
+  async function assetManifestBytes(url, options) {
+    throwIfAborted(options.signal);
+    const session = options.assetContext;
+    if (session.released) throw abortError(options.signal);
+    if (typeof url !== 'string' || url !== options.expectedManifest)
+      throw new Error('Asset manifest identity mismatch');
+    const cached = session.manifestBuffers.get(url);
+    if (cached) { session.metrics.manifestCacheHits++; return cached; }
+    const pending = session.manifestTasks.get(url);
+    if (pending) {
+      const bytes = await pending;
+      throwIfAborted(options.signal);
+      if (session.released) throw abortError(options.signal);
+      session.metrics.manifestCacheHits++;
+      return bytes;
+    }
+    const task = loadManifest();
+    session.manifestTasks.set(url, task);
+    try { return await task; }
+    finally { if (session.manifestTasks.get(url) === task) session.manifestTasks.delete(url); }
+
+    async function loadManifest() {
+      const bytes = await fetchBytes(url, 64 * 1024 * 1024, 'Asset manifest', { ...options, cache: 'force-cache' });
+      throwIfAborted(options.signal);
+      if (session.released) throw abortError(options.signal);
+      if (bytes.byteLength < 32) throw new Error('Asset manifest is too short');
+      session.metrics.manifestNetworkRequests++;
+      session.metrics.manifestNetworkBytes += bytes.byteLength;
+      // Keep at most 16 MiB across the active asset's exact immutable URLs.
+      const cap = 16 * 1024 * 1024;
+      if (bytes.byteLength <= cap) {
+        const previous = session.manifestBuffers.get(url);
+        if (previous) {
+          session.manifestBytes -= previous.byteLength;
+          session.manifestBuffers.delete(url);
+        }
+        while (session.manifestBytes + bytes.byteLength > cap) {
+          const oldest = session.manifestBuffers.keys().next().value;
+          session.manifestBytes -= session.manifestBuffers.get(oldest).byteLength;
+          session.manifestBuffers.delete(oldest);
+        }
+        session.manifestBuffers.set(url, bytes);
+        session.manifestBytes += bytes.byteLength;
+        session.metrics.retainedManifestBytes = session.manifestBytes;
+      }
+      return bytes;
+    }
+  }
+
+  async function locatePackage(id, options = {}) {
+    throwIfAborted(options.signal);
     const key = String(id || '').toLowerCase();
     if (!/^[a-f0-9]{16}$/.test(key)) throw new Error('Invalid material Texture package ID');
     const base = new URL('package-id-index/', RUNTIME_BASE);
-    const [meta, paths] = await Promise.all([
-      fetchJson(new URL('manifest.json', base), 128*1024, 'Package ID manifest', options), getLocationManifest(options)
-    ]);
+    const session = options.assetContext;
+    const paths = await getLocationManifest(options);
+    let meta = !options.refresh && session?.packageManifest;
+    if (!meta) {
+      meta = await fetchJson(new URL('manifest.json', base), 128*1024, 'Package ID manifest', options);
+      throwIfAborted(options.signal);
+      if (session) session.metrics.packageManifestLoads++;
+    }
     if (meta.schema !== 'novasparx.package-locations.v1' || meta.hash !== 'package-id-low-byte' ||
         meta.valueProperty !== 'path-tab-toc' || meta.fortniteVersion !== paths.fortniteVersion)
       throw new Error('Material index build or schema mismatch');
-    const compressed = await fetchBytes(new URL(key.slice(-2)+'.json.gz', base), MAX_SHARD_GZIP_BYTES, 'Package ID shard', options);
-    const expanded = await readBounded(new Response(new Response(compressed).body.pipeThrough(new DecompressionStream('gzip'))), MAX_SHARD_JSON_BYTES, 'Expanded package ID shard', options.signal);
-    const data = JSON.parse(new TextDecoder().decode(expanded));
+    if (session) session.packageManifest = meta;
+    const shard = meta.fortniteVersion + ':' + key.slice(-2);
+    let data = !options.refresh && session?.packageShards.get(shard)?.data;
+    if (data) {
+      session.metrics.packageShardHits++;
+      const entry = session.packageShards.get(shard);
+      session.packageShards.delete(shard); session.packageShards.set(shard, entry);
+    } else {
+      const compressed = await fetchBytes(new URL(key.slice(-2)+'.json.gz', base), MAX_SHARD_GZIP_BYTES, 'Package ID shard', options);
+      const expanded = await readBounded(new Response(new Response(compressed).body.pipeThrough(new DecompressionStream('gzip'))), MAX_SHARD_JSON_BYTES, 'Expanded package ID shard', options.signal);
+      data = JSON.parse(new TextDecoder().decode(expanded));
+      throwIfAborted(options.signal);
+      if (session) {
+        session.metrics.packageShardLoads++;
+        // Retain at most four shards and 4 MiB of source JSON for this asset.
+        const cap = 4 * 1024 * 1024;
+        const old = session.packageShards.get(shard);
+        if (old) { session.packageBytes -= old.bytes; session.packageShards.delete(shard); }
+        if (expanded.byteLength <= cap && data.schema === meta.schema && data.valueProperty === meta.valueProperty) {
+          while (session.packageShards.size >= 4 || session.packageBytes + expanded.byteLength > cap) {
+            const oldest = session.packageShards.keys().next().value;
+            session.packageBytes -= session.packageShards.get(oldest).bytes;
+            session.packageShards.delete(oldest);
+          }
+          session.packageShards.set(shard, { data, bytes: expanded.byteLength });
+          session.packageBytes += expanded.byteLength;
+          session.metrics.retainedPackageBytes = session.packageBytes;
+        }
+      }
+    }
+    throwIfAborted(options.signal);
     if (data.schema !== meta.schema || data.valueProperty !== meta.valueProperty) throw new Error('Invalid package ID shard');
     const value = data.items?.[key];
     if (typeof value !== 'string') throw new Error('Material Texture is absent from package index');
@@ -2577,101 +2704,45 @@
   }
 
   function baseColorParameter(material) {
-    const ranked =
-      (material?.textureParameters || [])
-        .filter(parameter =>
-          /^[a-f0-9]{16}$/i.test(
-            String(parameter?.packageId || "")
-          ) ||
-          Boolean(
-            String(parameter?.path || "")
-              .trim()
-          )
-        )
-        .map(parameter => {
-          const name =
-            String(parameter?.name || "")
-              .trim()
-              .toLowerCase();
+    const parameters = Array.isArray(material?.textureParameters) ? material.textureParameters : [];
+    const ranked = parameters
+      .filter(parameter => /^[a-f0-9]{16}$/i.test(String(parameter?.packageId || '')) ||
+        Boolean(String(parameter?.path || '').trim()))
+      .map(parameter => {
+        const name = String(parameter?.name || '').trim().toLowerCase();
+        let score = -1;
+        if (!/lut|lookup|normal|emissive|opacity|mask|rough|metal|spec|decorator/.test(name)) {
+          // CUE4Parse emits this fallback alias after resolving parameters. It
+          // is still name based, so it cannot erase conflicting layer evidence.
+          if (name === 'pm_diffuse') score = 160;
+          else if (/^(base[ _]?colou?r|diffuse|albedo)([ _]?(texture|map))?$/.test(name)) score = 150;
+          // Retain established environment diffuse support (including WS Diffuse).
+          else if (/base[ _]?colou?r|diffuse|albedo|texture[ _]?bc|(^|[_ ])bc($|[_ ])/.test(name)) score = 130;
+        }
+        return { parameter, score };
+      })
+      .filter(item => item.score >= 0)
+      .sort((left, right) => right.score - left.score);
 
-          let score =
-            -1;
+    const hasDecorator = parameters.some(parameter => /decorator/i.test(String(parameter?.name || '')));
+    // Decorator atlases require their material graph; they are not diffuse maps.
+    if (hasDecorator) {
+      return { parameter: null, reason: 'unsupported-decorator' };
+    }
+    if (!ranked.length) return { parameter: null, reason: 'unsupported-diffuse' };
 
-          if (
-            /lut|lookup/.test(name) ||
-            /normal/.test(name) ||
-            /emissive/.test(name) ||
-            /opacity|mask/.test(name) ||
-            /rough|metal|spec/.test(name)
-          ) {
-            score =
-              -1;
-          } else if (
-            name === "pm_diffuse"
-          ) {
-            // CUE4Parse/FModel canonical effective diffuse fallback.
-            score =
-              160;
-          } else if (
-            /^(base[ _]?colou?r|diffuse|albedo)([ _]?(texture|map))?$/.test(name)
-          ) {
-            score =
-              150;
-          } else if (
-            /base[ _]?colou?r|diffuse|albedo|texture[ _]?bc|(^|[_ ])bc($|[_ ])/.test(name)
-          ) {
-            // Environment/building materials commonly expose names such as
-            // WS Diffuse, Trunk_BaseColor and Layer1_Diffuse.
-            score =
-              130;
-          } else if (
-            name.includes("decorator")
-          ) {
-            score =
-              110;
-          } else if (
-            name.includes("color") ||
-            name.includes("colour")
-          ) {
-            score =
-              90;
-          }
-
-          return {
-            parameter,
-            score,
-            name
-          };
-        })
-        .filter(item =>
-          item.score >=
-          85
-        )
-        .sort((left, right) =>
-          right.score -
-            left.score ||
-          left.name.localeCompare(
-            right.name
-          ) ||
-          String(
-            left.parameter
-              ?.packageId ||
-            ""
-          ).localeCompare(
-            String(
-              right.parameter
-                ?.packageId ||
-              ""
-            )
-          )
-        );
-
-    return ranked[0]
-      ?.parameter ||
-      null;
+    const named = ranked.filter(item => item.score !== 160);
+    const bestNamed = named.filter(item => item.score === named[0]?.score);
+    const aliases = ranked.filter(item => item.score === 160);
+    const best = [...aliases, ...bestNamed];
+    const references = new Set(best.map(({ parameter }) => String(parameter.path || '').trim()
+      ? 'path:' + normalizeInput(parameter.path).toLowerCase()
+      : 'id:' + String(parameter.packageId).toLowerCase()));
+    if (references.size > 1) return { parameter: null, reason: 'ambiguous-diffuse' };
+    return { parameter: best[0].parameter, reason: '' };
   }
 
-  function materialValueFallback(material) {
+  function materialValueFallback(material, hasBaseColorTexture = false) {
     const vectorValues =
       Array.isArray(
         material?.vectorParameterValues
@@ -2696,7 +2767,7 @@
       };
 
     const rankedVector =
-      terms =>
+      (terms, excluded = /$^/, allowPartialName = true) =>
         vectorValues
           .map(value => {
             const name =
@@ -2719,7 +2790,7 @@
               !color ||
               /hlod|override/.test(
                 name
-              )
+              ) || excluded.test(name)
             ) {
               score =
                 -1;
@@ -2732,7 +2803,7 @@
               score =
                 120;
             } else if (
-              terms.some(
+              allowPartialName && terms.some(
                 term =>
                   name.includes(
                     term
@@ -2774,7 +2845,7 @@
         "diffuse color",
         "albedo",
         "color"
-      ]);
+      ], /emissive/, !hasBaseColorTexture);
 
     const emissive =
       rankedVector([
@@ -2794,7 +2865,7 @@
       preview.emissiveColor =
         emissive.color;
 
-      if (!base) {
+      if (!base && !hasBaseColorTexture) {
         // Procedural emissive-only materials such as distant background
         // meshes should not fall back to the renderer's white base color.
         preview.baseColor = [
@@ -2806,13 +2877,27 @@
       }
     }
 
+    const scalarValues = Array.isArray(material?.scalarParameterValues) ? material.scalarParameterValues : [];
+    const scalarNames = {
+      roughness: ['roughness', 'roughnessvalue'],
+      metallic: ['metallic', 'metalness'],
+      specular: ['specular', 'specularvalue'],
+      opacity: ['opacity', 'opacityvalue']
+    };
+    for (const [property, names] of Object.entries(scalarNames)) {
+      const value = scalarValues.find(item => names.includes(
+        String(item?.name || '').trim().toLowerCase().replace(/[ _]/g, '')) &&
+        Number.isFinite(Number(item?.value)));
+      if (value) preview[property] = Math.max(0, Math.min(1, Number(value.value)));
+    }
+
     return {
       material:
         preview,
       applied:
         Boolean(
           base ||
-          emissive
+          emissive || Object.keys(preview).length
         )
     };
   }
@@ -2837,6 +2922,7 @@
 
     const request = {
       ...options,
+      assetContext: createAssetContext(),
       signal:
         controller.signal
     };
@@ -2852,6 +2938,8 @@
 
         requestFinished =
           true;
+
+        request.assetContext.release();
 
         controller.abort(
           reason ||
@@ -2962,7 +3050,7 @@
         sections,
         materials: Array.from({ length: materialCount }, (_, index) =>
           materialValueFallback(mesh.materialMetadata[index]).material),
-        metadata: { lod: mesh.lodIndex, materialFidelity: 'geometry-first' }
+        metadata: { lod: mesh.lodIndex, materialFidelity: 'geometry-first', runtimeStats: request.assetContext.metrics }
       };
       const interactive = options.interactive === true;
       globalThis.NovaSparxBrowserGuard?.assertManifestBudget?.(meshManifest);
@@ -2970,7 +3058,7 @@
       const decodedTextureBudget = 64 * 1024 * 1024;
       const uniqueTextures = new Set(mesh.materialMetadata.slice(0, materialCount)
         .filter((_, index) => usedMaterialSlots.has(index))
-        .map(metadata => baseColorParameter(metadata))
+        .map(metadata => baseColorParameter(metadata).parameter)
         .map(parameter => String(parameter?.packageId || parameter?.path || '').trim().toLowerCase())
         .filter(Boolean)).size;
       // Share repeated maps and divide the budget fairly across distinct maps.
@@ -3014,12 +3102,13 @@
 
       const materialPromise =
         (async () => {
-          const resolvedByPackage =
+          const framesByTexture =
             new Map();
 
           try {
             const materials = [];
             const missingMaterials = [];
+            const materialDiagnostics = [];
             let textureMaterialCount = 0;
             let valueMaterialCount = 0;
             let textureLoads = 0;
@@ -3052,10 +3141,11 @@
                 continue;
               }
 
-              const parameter =
+              const selection =
                 baseColorParameter(
                   metadata
                 );
+              const parameter = selection.parameter;
 
               const packageId =
                 String(
@@ -3090,11 +3180,16 @@
                     .applied
                 ) {
                   valueMaterialCount++;
-                } else {
-                  missingMaterials
-                    .push(
-                      index
-                    );
+                }
+
+                if (!valueFallback.applied || (metadata?.textureParameters || []).length) {
+                  missingMaterials.push(index);
+                  materialDiagnostics.push({
+                    slot: index,
+                    fidelity: valueFallback.applied ? 'value-preview' : 'geometry-only',
+                    reason: !(metadata?.textureParameters || []).length && !valueFallback.applied
+                      ? 'material-unavailable' : selection.reason
+                  });
                 }
 
                 continue;
@@ -3112,14 +3207,14 @@
                     )
                       .toLowerCase();
 
-              let material =
-                resolvedByPackage
+              let frame =
+                framesByTexture
                   .get(
                     materialKey
                   );
 
               try {
-              if (!material) {
+              if (!frame) {
                 if (textureLoads >= textureBudget) {
                   throw new Error('Mesh Texture budget reached');
                 }
@@ -3166,26 +3261,24 @@
                 }
                 decodedTextureBytes += texture.pixels.byteLength;
 
-                material = {
-                  baseColorFrame: {
+                frame = {
                     width:
                       texture.width,
                     height:
                       texture.height,
                     pixels:
                       texture.pixels
-                  }
                 };
 
-                resolvedByPackage
+                framesByTexture
                   .set(
                     materialKey,
-                    material
+                    frame
                   );
               }
 
               materials.push(
-                material
+                { ...materialValueFallback(metadata, true).material, baseColorFrame: frame }
               );
 
               textureMaterialCount++;
@@ -3194,6 +3287,9 @@
                 if (error?.name === 'AbortError') throw error;
                 materials.push(valueFallback.material);
                 missingMaterials.push(index);
+                materialDiagnostics.push({ slot: index,
+                  fidelity: valueFallback.applied ? 'value-preview' : 'geometry-only',
+                  reason: 'texture-unavailable', detail: String(error?.message || error).slice(0, 160) });
                 if (valueFallback.applied) valueMaterialCount++;
               }
             }
@@ -3254,13 +3350,14 @@
               manifest: {
                 ...meshManifest,
                 materials,
-                metadata: { ...meshManifest.metadata, materialFidelity: previewMode }
+                metadata: { ...meshManifest.metadata, materialFidelity: previewMode, materialDiagnostics }
               },
               path:
                 mesh.path,
               source:
                 'browser-wasm',
               missingMaterials,
+              materialDiagnostics,
               materialApplied:
                 rendered
                   .textured ===
