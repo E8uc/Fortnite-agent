@@ -12,6 +12,9 @@ python3 .github/scripts/publish-pages.py --site /tmp/fnaa-site
 
 Use normal local Git credentials (`gh auth setup-git` if needed). The publisher
 pushes a complete snapshot without force-pushing. No changed files means no push.
+If Git push is unavailable, use `--transport api` with authenticated `gh`. It
+stages verified files separately and updates `gh-pages` only after every file
+matches the prepared snapshot; rerunning resumes a partial upload.
 
 Data updates use NovaSparx's existing local reference-index builder, followed by
 `tools/create-browser-data-release.py` with explicit mappings and matching Live/

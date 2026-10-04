@@ -100,10 +100,17 @@ def main():
     parser.add_argument("--site", required=True, type=Path)
     parser.add_argument("--remote", default="https://github.com/E8uc/Fortnite-agent.git")
     parser.add_argument("--branch", default="gh-pages")
+    parser.add_argument("--transport", choices=("git", "api"), default="git")
+    parser.add_argument("--repo", default="E8uc/Fortnite-agent", help="GitHub owner/repository for API transport")
+    parser.add_argument("--staging-branch", help="Resume a pages-staging/ branch with API transport")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     try:
-        publish(args.site, args.remote, args.branch, args.dry_run)
+        if args.transport == "api":
+            from publish_pages_api import publish_api
+            publish_api(args.site, args.repo, args.branch, args.staging_branch, args.dry_run, validate_inventory)
+        else:
+            publish(args.site, args.remote, args.branch, args.dry_run)
     except subprocess.CalledProcessError as exc:
         raise SystemExit(f"Publication stopped; previous site retained. Git access/push failed (exit {exc.returncode}); check local Git credentials.") from exc
     except (ValueError, OSError) as exc:
