@@ -1,0 +1,16 @@
+{
+  "schema": "novasparx.asset-references.v1",
+  "builtAt": "2026-10-01T13:58:47.5432424+00:00",
+  "fortniteVersion": "\u002B\u002BFortnite\u002BRelease-42.30-CL-58557680-Windows",
+  "hash": "fnv1a32-low-byte",
+  "meshToBlueprints": {
+    "entries": 0,
+    "bytes": 0,
+    "path": "mesh/{shard}.json.gz"
+  },
+  "blueprintToMeshes": {
+    "entries": 0,
+    "bytes": 0,
+    "path": "blueprint/{shard}.json.gz"
+  }
+}
