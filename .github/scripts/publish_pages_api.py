@@ -28,7 +28,7 @@ def branch_head(repository, branch):
         raise
 
 
-def remote_tree(repository, head):
+def remote_tree(repository, head, known_trees=None):
     commit = api(f"repos/{repository}/git/commits/{head}")
     tree = commit["tree"]["sha"]
     result = api(f"repos/{repository}/git/trees/{tree}?recursive=1")
@@ -37,6 +37,9 @@ def remote_tree(repository, head):
     files = {item["path"]: item["sha"] for item in result["tree"] if item["type"] == "blob"}
     if any(item["mode"] != "100644" for item in result["tree"] if item["type"] == "blob"):
         raise ValueError("Remote staging tree contains links or executable files")
+    if known_trees is not None:
+        known_trees.add(tree)
+        known_trees.update(item["sha"] for item in result["tree"] if item["type"] == "tree")
     return tree, files
 
 
@@ -47,6 +50,34 @@ def blob_sha(contents):
 def local_files(site):
     return {path.relative_to(site).as_posix(): blob_sha(path.read_bytes())
             for path in sorted(site.rglob("*")) if path.is_file()}
+
+
+def create_tree(repository, files, known_trees):
+    directories = {}
+    for path, sha in files.items():
+        current = directories
+        parts = path.split("/")
+        for name in parts[:-1]:
+            current = current.setdefault(name, {})
+        current[parts[-1]] = sha
+
+    def build(directory):
+        entries = [{"path": name, "mode": "040000" if isinstance(value, dict) else "100644",
+                    "type": "tree" if isinstance(value, dict) else "blob",
+                    "sha": build(value) if isinstance(value, dict) else value}
+                   for name, value in directory.items()]
+        entries.sort(key=lambda item: item["path"].encode() + (b"/" if item["type"] == "tree" else b""))
+        body = b"".join(item["mode"].lstrip("0").encode() + b" " + item["path"].encode() +
+                        b"\0" + bytes.fromhex(item["sha"]) for item in entries)
+        sha = hashlib.sha1(b"tree " + str(len(body)).encode() + b"\0" + body).hexdigest()
+        if sha not in known_trees:
+            result = api(f"repos/{repository}/git/trees", {"tree": entries}, "POST")
+            if result["sha"] != sha:
+                raise ValueError("GitHub directory tree does not match the computed Git tree")
+            known_trees.add(sha)
+        return sha
+
+    return build(directories)
 
 
 def update_ref(repository, branch, commit, existing):
@@ -93,12 +124,13 @@ def publish_api(site, repository, branch, staging_branch, dry_run, validate_inve
         print(f"Prepared {release['fortniteBuild']}; API target {repository}:{branch}; staging {staging_branch}; no publication performed")
         return
 
+    known_trees = set()
     published = branch_head(repository, branch)
-    if published and remote_tree(repository, published)[1] == desired:
+    if published and remote_tree(repository, published, known_trees)[1] == desired:
         print("Published branch already contains this exact site; nothing changed")
         return
     staged = branch_head(repository, staging_branch)
-    staged_files = remote_tree(repository, staged)[1] if staged else {}
+    staged_files = remote_tree(repository, staged, known_trees)[1] if staged else {}
     if staged_files != desired:
         root = Path(__file__).resolve().parents[2]
         source_tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=root, text=True).strip()
@@ -109,12 +141,14 @@ def publish_api(site, repository, branch, staging_branch, dry_run, validate_inve
             if "HTTP 404" not in (error.output or ""):
                 raise
         else:
-            listing = subprocess.check_output(["git", "ls-tree", "-r", "-z", "HEAD"], cwd=root)
-            available.update(entry.split(b"\t", 1)[0].split()[2].decode()
-                             for entry in listing.split(b"\0") if entry and entry.split()[1] == b"blob")
-        seed = [{"path": name, "mode": "100644", "type": "blob", "sha": sha}
-                for name, sha in desired.items() if sha in available]
-        tree = api(f"repos/{repository}/git/trees", {"tree": seed}, "POST")["sha"]
+            known_trees.add(source_tree)
+            listing = subprocess.check_output(["git", "ls-tree", "-r", "-t", "-z", "HEAD"], cwd=root)
+            for entry in listing.split(b"\0"):
+                if entry:
+                    _, kind, sha = entry.split(b"\t", 1)[0].split()
+                    (available if kind == b"blob" else known_trees).add(sha.decode())
+        seed = {name: sha for name, sha in desired.items() if sha in available}
+        tree = create_tree(repository, seed, known_trees)
         parents = [staged or published] if staged or published else []
         commit = api(f"repos/{repository}/git/commits", {
             "message": "Seed verified Pages staging tree", "tree": tree, "parents": parents,
