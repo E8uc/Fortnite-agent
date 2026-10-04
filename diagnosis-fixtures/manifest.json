@@ -1,0 +1,107 @@
+[
+  {
+    "path": "/Engine/EditorMeshes/Camera/SM_CineCam",
+    "physicalPath": "Engine/Content/EditorMeshes/Camera/SM_CineCam.uasset",
+    "file": "staticmesh.json",
+    "rootTypes": [
+      "StaticMesh"
+    ],
+    "source": "https://export-service-new.dillyapis.com/v1/export?Path=%2FEngine%2FEditorMeshes%2FCamera%2FSM_CineCam&Raw=false",
+    "retrieved": "2026-09-19",
+    "sha256": "301ddc5fd5eb4667beca8cd312b7b82b2a6c4c6f150709d9162e181ded2b63f9",
+    "buildVersion": "unverified (live service, not proven identical to manual database)"
+  },
+  {
+    "path": "/AnimatorKit/Meshes/SKM_EmptyMesh",
+    "physicalPath": "Engine/Plugins/Animation/AnimatorKit/Content/Meshes/SKM_EmptyMesh.uasset",
+    "file": "skeletalmesh.json",
+    "rootTypes": [
+      "SkeletalMesh"
+    ],
+    "source": "https://export-service-new.dillyapis.com/v1/export?Path=%2FAnimatorKit%2FMeshes%2FSKM_EmptyMesh&Raw=false",
+    "retrieved": "2026-09-19",
+    "sha256": "9af027a26232752b528f059fb769d2aef40b5b5a9fd4fe74fa4355605c4b1a46",
+    "buildVersion": "unverified (live service, not proven identical to manual database)"
+  },
+  {
+    "path": "/Engine/EngineSky/BP_Sky_Shere",
+    "physicalPath": "Engine/Content/EngineSky/BP_Sky_Shere.uasset",
+    "file": "blueprint-prefix-redirector.json",
+    "rootTypes": [
+      "ObjectRedirector",
+      "ObjectRedirector"
+    ],
+    "source": "https://export-service-new.dillyapis.com/v1/export?Path=%2FEngine%2FEngineSky%2FBP_Sky_Shere&Raw=false",
+    "retrieved": "2026-09-19",
+    "sha256": "31b0bf3009c96e98c3a6e213633b17d30c3ee659548d6fb2ff30c10e7fee6ba1",
+    "buildVersion": "unverified (live service, not proven identical to manual database)"
+  },
+  {
+    "path": "/Engine/ArtTools/RenderToTexture/Textures/T_EV_BlankWhite_01",
+    "error": "not JSON"
+  },
+  {
+    "path": "/Engine/ArtTools/RenderToTexture/MaterialFunctions/MF_UnwwrapUVs",
+    "physicalPath": "Engine/Content/ArtTools/RenderToTexture/MaterialFunctions/MF_UnwwrapUVs.uasset",
+    "file": "material-prefix-redirector.json",
+    "rootTypes": [
+      "ObjectRedirector"
+    ],
+    "source": "https://export-service-new.dillyapis.com/v1/export?Path=%2FEngine%2FArtTools%2FRenderToTexture%2FMaterialFunctions%2FMF_UnwwrapUVs&Raw=false",
+    "retrieved": "2026-09-19",
+    "sha256": "5801544654e9ce6c5d720aa12674dbe97fc5da94c32f2d74dfdedc530cca833c",
+    "buildVersion": "unverified (live service, not proven identical to manual database)"
+  },
+  {
+    "path": "/WaterAdvanced/Niagara/Emitters/SW_River_Secondary_Emitter",
+    "physicalPath": "Engine/Plugins/Experimental/WaterAdvanced/Content/Niagara/Emitters/SW_River_Secondary_Emitter.uasset",
+    "file": "sw-prefix-niagara-emitter.json",
+    "rootTypes": [
+      "NiagaraEmitter"
+    ],
+    "source": "https://export-service-new.dillyapis.com/v1/export?Path=%2FWaterAdvanced%2FNiagara%2FEmitters%2FSW_River_Secondary_Emitter&Raw=false",
+    "retrieved": "2026-09-19",
+    "sha256": "3188e1d01954e2742bddbe65fba987fb7aea814d89d1d8d1bc1d465d6935774c",
+    "buildVersion": "unverified (live service, not proven identical to manual database)"
+  },
+  {
+    "path": "/Game/Accessories/FORT_Backpacks/Backpack_F_MED_Jail_Bird_Bumble/Animation/Anim_Backpack_Jail_Bird_Bumble_Base",
+    "physicalPath": "FortniteGame/Content/Accessories/FORT_Backpacks/Backpack_F_MED_Jail_Bird_Bumble/Animation/Anim_Backpack_Jail_Bird_Bumble_Base.uasset",
+    "file": "animation.json",
+    "rootTypes": [
+      "AnimSequence"
+    ],
+    "source": "https://export-service-new.dillyapis.com/v1/export?Path=%2FGame%2FAccessories%2FFORT_Backpacks%2FBackpack_F_MED_Jail_Bird_Bumble%2FAnimation%2FAnim_Backpack_Jail_Bird_Bumble_Base&Raw=false",
+    "retrieved": "2026-09-19",
+    "sha256": "ec5d01d8aa6f7052e88b0fba91ed5012966fe457b5e38b4fab4009f912b5827c",
+    "buildVersion": "unverified (live service, not proven identical to manual database)"
+  },
+  {
+    "path": "/NiagaraToolsets/Templates/NS_Fire",
+    "physicalPath": "Engine/Plugins/Experimental/Toolsets/NiagaraToolsets/Content/Templates/NS_Fire.uasset",
+    "file": "vfx.json",
+    "rootTypes": [
+      "NiagaraSystem"
+    ],
+    "source": "https://export-service-new.dillyapis.com/v1/export?Path=%2FNiagaraToolsets%2FTemplates%2FNS_Fire&Raw=false",
+    "retrieved": "2026-09-19",
+    "sha256": "31ad836d99c85ea4179d818f99ad191301c388fd82facda9ba8dd623291a854f",
+    "buildVersion": "unverified (live service, not proven identical to manual database)"
+  },
+  {
+    "path": "/DeformerGraph/DeformerCollections/DA_DeformerCollection_RecomputeNormals",
+    "physicalPath": "Engine/Plugins/Animation/DeformerGraph/Content/DeformerCollections/DA_DeformerCollection_RecomputeNormals.uasset",
+    "file": "data-prefix-deformer-collection.json",
+    "rootTypes": [
+      "MeshDeformerCollection"
+    ],
+    "source": "https://export-service-new.dillyapis.com/v1/export?Path=%2FDeformerGraph%2FDeformerCollections%2FDA_DeformerCollection_RecomputeNormals&Raw=false",
+    "retrieved": "2026-09-19",
+    "sha256": "169c7d907f1ae7c449b57e3c701cc965a160e9d125e8138ecbe2195e7c2032e5",
+    "buildVersion": "unverified (live service, not proven identical to manual database)"
+  },
+  {
+    "path": "/Engine/ArtTools/RenderToTexture/Meshes/S_1_Unit_Plane",
+    "error": "curl: (56) CONNECT tunnel failed, response 403\n"
+  }
+]

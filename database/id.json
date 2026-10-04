@@ -1,0 +1,979 @@
+{
+    "Islands": {
+        "Creative": {
+            "The Block Tilted01": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Block_Tilted01.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Block_Tilted01.PID_Playset_105x105_Composed_Block_Tilted01",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/TheBlock_Tilted01.TheBlock_Tilted01"
+            },
+            "The Block Tilted02": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Block_Tilted02.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Block_Tilted02.PID_Playset_105x105_Composed_Block_Tilted02",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/TheBlock_Tilted02.TheBlock_Tilted02"
+            },
+            "The Block Tilted03": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Block_Tilted03.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Block_Tilted03.PID_Playset_105x105_Composed_Block_Tilted03",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/TheBlock_Tilted03.TheBlock_Tilted03"
+            },
+            "Wasteland Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Desert_02.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Desert_02.PID_Playset_105x105_Composed_Desert_02",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Desert_Large_02.Desert_Large_02"
+            },
+            "Canyon Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Desert.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Desert.PID_Playset_105x105_Composed_Desert",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Desert_Large.Desert_Large"
+            },
+            "Horseshoe Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Escape.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Escape.PID_Playset_105x105_Composed_Escape",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Escape_Large.Escape_Large"
+            },
+            "Meadow Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_FlatGrass.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_FlatGrass.PID_Playset_105x105_Composed_FlatGrass",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/FlatGrass_Large.FlatGrass_Large"
+            },
+            "Shoreline Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_FlatGrassV2.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_FlatGrassV2.PID_Playset_105x105_Composed_FlatGrassV2",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/FlatGrass_LargeV2.FlatGrass_LargeV2"
+            },
+            "Grid Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_FlatGrid.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_FlatGrid.PID_Playset_105x105_Composed_FlatGrid",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/FlatGrid_Large.FlatGrid_Large"
+            },
+            "Ice Lake Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_IceLake.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_IceLake.PID_Playset_105x105_Composed_IceLake",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/IceLake_Large.IceLake_Large"
+            },
+            "Kevin Floating Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Kevin.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Kevin.PID_Playset_105x105_Composed_Kevin",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Kevin_Large.Kevin_Large"
+            },
+            "Lagoon Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Lagoon.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Lagoon.PID_Playset_105x105_Composed_Lagoon",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Lagoon_Large.Lagoon_Large"
+            },
+            "Arid Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Pandora.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Pandora.PID_Playset_105x105_Composed_Pandora",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Pandora_Large.Pandora_Large"
+            },
+            "Sandbar Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Sandbar.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Sandbar.PID_Playset_105x105_Composed_Sandbar",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Sandbar_Large.Sandbar_Large"
+            },
+            "Archipelago Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_SandBarV2.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_SandBarV2.PID_Playset_105x105_Composed_SandBarV2",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/SandBar_LargeV2.SandBar_LargeV2"
+            },
+            "Caldera Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Volcano_02.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Volcano_02.PID_Playset_105x105_Composed_Volcano_02",
+                "plot": "CR_Legacy/Playgrounds/Items/Plots/Volcano_Large_02.Volcano_Large_02"
+            },
+            "The Shark": {
+                "image": "../images/id/islands/PID_Playset_105x105_Shark_Island.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Shark_Island.PID_Playset_105x105_Shark_Island",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Shark_Large.Shark_Large"
+            },
+            "Large Grid Island": {
+                "image": "../images/id/islands/PID_Playset_150x150_Composed_FlatGrid_Giant.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_150x150_Composed_FlatGrid_Giant.PID_Playset_150x150_Composed_FlatGrid_Giant",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/FlatGrid_Giant.FlatGrid_Giant"
+            },
+            "Oasis Island": {
+                "image": "../images/id/islands/PID_Playset_150x150_Composed_Oasis_Giant.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_150x150_Composed_Oasis_Giant.PID_Playset_150x150_Composed_Oasis_Giant",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Oasis_Giant.Oasis_Giant"
+            },
+            "XL Archipelago Island": {
+                "image": "../images/id/islands/PID_Playset_215x215_Composed_Archipelago_XL.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_215x215_Composed_Archipelago_XL.PID_Playset_215x215_Composed_Archipelago_XL",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Archipelago_XL.Archipelago_XL"
+            },
+            "Survival Island Empty": {
+                "image": "../images/id/islands/PID_Playset_215x215_Composed_Survival_XL_02.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_215x215_Composed_Survival_XL_02.PID_Playset_215x215_Composed_Survival_XL_02",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Survival_XL_02.Survival_XL_02"
+            },
+            "Survival Island with Caves Empty": {
+                "image": "../images/id/islands/PID_Playset_215x215_Composed_Survival_XL_Cave_02.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_215x215_Composed_Survival_XL_Cave_02.PID_Playset_215x215_Composed_Survival_XL_Cave_02",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Survival_XL_Cave_02.Survival_XL_Cave_02"
+            },
+            "Survival Island with Caves": {
+                "image": "../images/id/islands/PID_Playset_215x215_Composed_Survival_XL_Cave.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_215x215_Composed_Survival_XL_Cave.PID_Playset_215x215_Composed_Survival_XL_Cave",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Survival_XL_Cave.Survival_XL_Cave"
+            },
+            "Survival Island": {
+                "image": "../images/id/islands/PID_Playset_215x215_Composed_Survival_XL.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_215x215_Composed_Survival_XL.PID_Playset_215x215_Composed_Survival_XL",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Survival_XL.Survival_XL"
+            },
+            "XL Grid Island": {
+                "image": "../images/id/islands/PID_Playset_215x215_FlatGrid_XL_Island.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_215x215_FlatGrid_XL_Island.PID_Playset_215x215_FlatGrid_XL_Island",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/FlatGrid_XL.FlatGrid_XL"
+            },
+            "Mountain Ridge Island Empty": {
+                "image": "../images/id/islands/PID_Playset_215x215_Mountain_Island_02.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_215x215_Mountain_Island_02.PID_Playset_215x215_Mountain_Island_02",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Mountain_XL_02.Mountain_XL_02"
+            },
+            "Mountain Ridge Island": {
+                "image": "../images/id/islands/PID_Playset_215x215_Mountain_Island.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_215x215_Mountain_Island.PID_Playset_215x215_Mountain_Island",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Mountain_XL.Mountain_XL"
+            },
+            "Frosty Fortress": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_Arctic_Competitive.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_Arctic_Competitive.PID_Playset_60x60_Composed_Arctic_Competitive",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Arctic_Competitive_Medium1.Arctic_Competitive_Medium1"
+            },
+            "Arctic Island": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_Arctic.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_Arctic.PID_Playset_60x60_Composed_Arctic",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Arctic_Medium.Arctic_Medium"
+            },
+            "Black Glass Island": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_BlackGlass.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_BlackGlass.PID_Playset_60x60_Composed_BlackGlass",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/BlackGlass_Medium.BlackGlass_Medium"
+            },
+            "Rivers Edge Island": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_Military.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_Military.PID_Playset_60x60_Composed_Military",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Military_Medium.Military_Medium"
+            },
+            "Greasy Grove POI Island": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_POI_Greasy.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_POI_Greasy.PID_Playset_60x60_Composed_POI_Greasy",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/POI_Greasy_Medium.POI_Greasy_Medium"
+            },
+            "Tilted Towers POI Island": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_POI_Tilted.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_POI_Tilted.PID_Playset_60x60_Composed_POI_Tilted",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/POI_Tilted_Medium.POI_Tilted_Medium"
+            },
+            "Tropical Island": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_Tropical.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_Tropical.PID_Playset_60x60_Composed_Tropical",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Tropical_Medium.Tropical_Medium"
+            },
+            "Volcano Island": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_Volcano.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_Volcano.PID_Playset_60x60_Composed_Volcano",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Volcano_Large.Volcano_Large"
+            },
+            "The Block": {
+                "image": "../images/id/islands/PID_Temp_Island_Flat_60x60_001.png",
+                "playset": "/CR_Legacy/Playsets/Plots/PID_Temp_Island_Flat_60x60_001.PID_Temp_Island_Flat_60x60_001",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/TheBlock_Season7.TheBlock_Season7"
+            },
+            "Temperate Island": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed.PID_Playset_60x60_Composed",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Temperate_Medium.Temperate_Medium"
+            },
+            "Fortilla Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Arena_01_Island.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Arena_01_Island.PID_Playset_105x105_Arena_01_Island",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Arena_Large_01.Arena_Large_01"
+            },
+            "Debris Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Arena_02_Island.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Arena_02_Island.PID_Playset_105x105_Arena_02_Island",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Arena_Large_02.Arena_Large_02"
+            }
+        },
+        "Unreleased": {
+            "Loki Dock": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Loki_02.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Loki_02.PID_Playset_105x105_Composed_Loki_02",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Loki_Large_02.Loki_Large_02"
+            },
+            "Loki Forest": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Loki_03.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Loki_03.PID_Playset_105x105_Composed_Loki_03",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Loki_Large_03.Loki_Large_03"
+            },
+            "Loki Snow": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Loki_04.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Loki_04.PID_Playset_105x105_Composed_Loki_04",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Loki_Large_04.Loki_Large_04"
+            },
+            "StrayKite Mall Heist": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Loki_06.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Loki_06.PID_Playset_105x105_Composed_Loki_06",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Loki_Large_06.Loki_Large_06"
+            },
+            "Loki Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_Loki.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_Loki.PID_Playset_105x105_Composed_Loki",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Loki_Large.Loki_Large"
+            },
+            "Power Plant Island": {
+                "image": "../images/id/islands/PID_Playset_105x105_Composed_PowerPlant.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_105x105_Composed_PowerPlant.PID_Playset_105x105_Composed_PowerPlant",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/PowerPlant_Large.PowerPlant_Large"
+            },
+            "Temperate Hub 001": {
+                "image": "../images/id/islands/PID_Playset_30x30_Composed_Hub_01.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_30x30_Composed_Hub_01.PID_Playset_30x30_Composed_Hub_01",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/S11_Hub_01.S11_Hub_01"
+            },
+            "Flat Grid Hub Spoke": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_Hub_FlatGrid_02.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_Hub_FlatGrid_02.PID_Playset_60x60_Composed_Hub_FlatGrid_02",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/TheHub_FlatGrid_02.TheHub_FlatGrid_02"
+            },
+            "Flat Grid Hub Cardinal": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_Hub_FlatGrid_03.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_Hub_FlatGrid_03.PID_Playset_60x60_Composed_Hub_FlatGrid_03",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/TheHub_FlatGrid_03.TheHub_FlatGrid_03"
+            },
+            "Flat Grid Hub": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_Hub_FlatGrid.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_Hub_FlatGrid.PID_Playset_60x60_Composed_Hub_FlatGrid",
+                "plot": ""
+            },
+            "Floating Island Hub Spoke": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_Hub_FloatingIsland_02.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_Hub_FloatingIsland_02.PID_Playset_60x60_Composed_Hub_FloatingIsland_02",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/TheHub_FloatingIsland_02.TheHub_FloatingIsland_02"
+            },
+            "Floating Island Hub Cardinal": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_Hub_FloatingIsland_03.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_Hub_FloatingIsland_03.PID_Playset_60x60_Composed_Hub_FloatingIsland_03",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/TheHub_FloatingIsland_03.TheHub_FloatingIsland_03"
+            },
+            "Floating Island Hub": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_Hub_FloatingIsland.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_Hub_FloatingIsland.PID_Playset_60x60_Composed_Hub_FloatingIsland",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/TheHub_FloatingIsland.TheHub_FloatingIsland"
+            },
+            "Lake Hub Cardinal": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_Hub_Lake_02.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_Hub_Lake_02.PID_Playset_60x60_Composed_Hub_Lake_02",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/TheHub_Lake_02.TheHub_Lake_02"
+            },
+            "Lake Hub Spoke": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_Hub_Lake.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_Hub_Lake.PID_Playset_60x60_Composed_Hub_Lake",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/TheHub_Lake.TheHub_Lake"
+            },
+            "The Hub": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_Hub.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_Hub.PID_Playset_60x60_Composed_Hub",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/TheHub_01.TheHub_01"
+            },
+            "Razor Island": {
+                "image": "../images/id/islands/PID_Playset_60x60_Composed_Razor.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Composed_Razor.PID_Playset_60x60_Composed_Razor",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Razor_Medium.Razor_Medium"
+            },
+            "Featured Island 1": {
+                "image": "../images/id/islands/PID_Playset_60x60_Featured.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Featured.PID_Playset_60x60_Featured",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Featured_Temperate_Medium1.Featured_Temperate_Medium1"
+            },
+            "Featured Island 2": {
+                "image": "../images/id/islands/PID_Playset_60x60_Featured.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Featured.PID_Playset_60x60_Featured",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Featured_Temperate_Medium2.Featured_Temperate_Medium2"
+            },
+            "Featured Island 3": {
+                "image": "../images/id/islands/PID_Playset_60x60_Featured.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Featured.PID_Playset_60x60_Featured",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Featured_Temperate_Medium3.Featured_Temperate_Medium3"
+            },
+            "Featured Island 4": {
+                "image": "../images/id/islands/PID_Playset_60x60_Featured.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_60x60_Featured.PID_Playset_60x60_Featured",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Featured_Temperate_Medium4.Featured_Temperate_Medium4"
+            },
+            "SlappyShores_POI": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/CRP_SlappyShores/SetupAssets/Maps/PID_CP_SlappyShores_POI.PID_CP_SlappyShores_POI",
+                "plot": "NOT_PLOT"
+            },
+            "Arena Aftermath": {
+                "image": "../images/id/islands/PID_Playset_Arena_Aftermath.png",
+                "playset": "/CR_Legacy/Playsets/PID_Playset_Arena_Aftermath.PID_Playset_Arena_Aftermath",
+                "plot": "/CR_Legacy/Playgrounds/Items/Plots/Arena_Aftermath.Arena_Aftermath"
+            }
+        },
+        "Lego": {
+            "Starter Island": {
+                "image": "../images/id/islands/PID_LimeEmptyPlot.png",
+                "playset": "/LimeEmptyPlot/Playsets/Maps/PID_LimeEmptyPlot.PID_LimeEmptyPlot",
+                "plot": "/LimeGFSMetaData/Plots/LimeEmptyPlotDefinition.LimeEmptyPlotDefinition"
+            },
+            "LEGO® Brick Grid Island": {
+                "image": "../images/id/islands/PID_LimeStudPlot.png",
+                "playset": "/LimeEmptyPlot/Playsets/Maps/PID_LimeStudPlot.PID_LimeStudPlot",
+                "plot": "/LimeGFSMetaData/Plots/LimeStudPlotDefinition.LimeStudPlotDefinition"
+            },
+            "Music Concert": {
+                "image": "../images/id/islands/PID_MusicalWalk.png",
+                "playset": "/MusicalWalk/Playsets/Levels/PID_MusicalWalk.PID_MusicalWalk",
+                "plot": "/LimeGFSMetaData/Plots/MusicalWalkPlotDefinition.MusicalWalkPlotDefinition"
+            },
+            "Obstacle Course": {
+                "image": "../images/id/islands/PID_ObstacleCourse.png",
+                "playset": "/ObstacleCourse/Playsets/Maps/PID_ObstacleCourse.PID_ObstacleCourse",
+                "plot": "/LimeGFSMetaData/Plots/ObstacleCoursePlotDefinition.ObstacleCoursePlotDefinition"
+            },
+            "Home Builder": {
+                "image": "../images/id/islands/PID_Townscaper.png",
+                "playset": "/TownScaper/Playsets/Maps/PID_Townscaper.PID_Townscaper",
+                "plot": "/LimeGFSMetaData/Plots/TownscaperPlotDefinition.TownscaperPlotDefinition"
+            }
+        },
+        "Turtle Ninja": {
+            "TMNT Flat Grid": {
+                "image": "../images/id/islands/MeltedIronFlatGridPlotDefinition.png",
+                "playset": "NOT_PLAYSET",
+                "plot": "/MeltedIronGFSMetaData/Plots/MeltedIronFlatGridPlotDefinition.MeltedIronFlatGridPlotDefinition"
+            },
+            "TMNT Flat Grid XL": {
+                "image": "../images/id/islands/MeltedIronFlatGridXLPlotDefinition.png",
+                "playset": "NOT_PLAYSET",
+                "plot": "/MeltedIronGFSMetaData/Plots/MeltedIronFlatGridXLPlotDefinition.MeltedIronFlatGridXLPlotDefinition"
+            }
+        },
+        "Fall Guys": {
+            "Fall Guys Empty Grid": {
+                "image": "../images/id/islands/PID_BeanEmptyPlot1.png",
+                "playset": "/BeanEmptyPlot1/Playsets/Maps/PID_BeanEmptyPlot1.PID_BeanEmptyPlot1",
+                "plot": "/BeanstalkGFSMetaData/Plots/BeanstalkEmptyPlot1Definition.BeanstalkEmptyPlot1Definition"
+            },
+            "Fall Guys Empty Large Grid": {
+                "image": "../images/id/islands/PID_BeanEmptyPlot2.png",
+                "playset": "/BeanEmptyPlot2/Playsets/Maps/PID_BeanEmptyPlot2.PID_BeanEmptyPlot2",
+                "plot": "/BeanstalkGFSMetaData/Plots/BeanstalkEmptyPlot2Definition.BeanstalkEmptyPlot2Definition"
+            },
+            "Fall Guys Empty XL Grid": {
+                "image": "../images/id/islands/PID_BeanEmptyPlot3.png",
+                "playset": "/BeanEmptyPlot3/Playsets/Maps/PID_BeanEmptyPlot3.PID_BeanEmptyPlot3",
+                "plot": "/BeanstalkGFSMetaData/Plots/BeanstalkEmptyPlot3Definition.BeanstalkEmptyPlot3Definition"
+            },
+            "Fall Guys Empty Shoreline": {
+                "image": "../images/id/islands/PID_BeanEmptyPlot4.png",
+                "playset": "/BeanEmptyPlot4/Playsets/Maps/PID_BeanEmptyPlot4.PID_BeanEmptyPlot4",
+                "plot": "/BeanstalkGFSMetaData/Plots/BeanstalkEmptyPlot4Definition.BeanstalkEmptyPlot4Definition"
+            },
+            "Fall Guys Starter": {
+                "image": "../images/id/islands/PID_BeanStarter.png",
+                "playset": "/BeanStarter/Playsets/Maps/PID_BeanStarter.PID_BeanStarter",
+                "plot": "/BeanstalkGFSMetaData/Plots/BeanStarterPlotDefinition.BeanStarterPlotDefinition"
+            }
+        },
+        "The Walking Dead Universe": {
+            "The Walking Dead Universe Flat Grid": {
+                "image": "../images/id/islands/DarkVortexFlatGridPlotDefinition.png",
+                "playset": "NOT_PLAYSET",
+                "plot": "/DarkVortexGFSMetaData/Plots/DarkVortexFlatGridPlotDefinition.DarkVortexFlatGridPlotDefinition"
+            },
+            "The Walking Dead Universe Flat Grid XL": {
+                "image": "../images/id/islands/DarkVortexFlatGridXLPlotDefinition.png",
+                "playset": "NOT_PLAYSET",
+                "plot": "/DarkVortexGFSMetaData/Plots/DarkVortexFlatGridXLPlotDefinition.DarkVortexFlatGridXLPlotDefinition"
+            }
+        },
+        "Squid Game": {
+            "Squid Game Flat Grid": {
+                "image": "../images/id/islands/SolidWaveFlatGridPlotDefinition.png",
+                "playset": "NOT_PLAYSET",
+                "plot": "/SolidWaveGFSMetaData/Plots/SolidWaveFlatGridPlotDefinition.SolidWaveFlatGridPlotDefinition"
+            },
+            "Squid Game Flat Grid XL": {
+                "image": "../images/id/islands/SolidWaveFlatGridXLPlotDefinition.png",
+                "playset": "NOT_PLAYSET",
+                "plot": "/SolidWaveGFSMetaData/Plots/SolidWaveFlatGridXLPlotDefinition.SolidWaveFlatGridXLPlotDefinition"
+            }
+        },
+        "KPop Demon Hunters": {
+            "KPop Demon Hunters Flat Grid": {
+                "image": "../images/id/islands/BrightCoilFlatGridPlotDefinition.png",
+                "playset": "NOT_PLAYSET",
+                "plot": "/BrightCoilGFSMetaData/Plots/BrightCoilFlatGridPlotDefinition.BrightCoilFlatGridPlotDefinition"
+            },
+            "KPop Demon Hunters Flat Grid XL": {
+                "image": "../images/id/islands/BrightCoilFlatGridPlotDefinition.png",
+                "playset": "NOT_PLAYSET",
+                "plot": "/BrightCoilGFSMetaData/Plots/BrightCoilFlatGridXLPlotDefinition.BrightCoilFlatGridXLPlotDefinition"
+            }
+        },
+        "Rocket League ?!?": {
+            "FN1 Flat Grid": {
+                "image": "../images/id/islands/FN1FlatGridPlotDefinition.png",
+                "playset": "NOT_PLAYSET" ,
+                "plot": "/FN1GFSMetaData/Plots/FN1FlatGridPlotDefinition.FN1FlatGridPlotDefinition"
+            }
+        },
+        "Stars Wars": {
+            "Akita Flat Grid": {
+                "image": "../images/id/islands/AkitaFlatGridPlotDefinition.png",
+                "playset": "NOT_PLAYSET" ,
+                "plot": "/AkitaGFSMetaData/Plots/AkitaFlatGridPlotDefinition.AkitaFlatGridPlotDefinition"
+            },
+            "Akita Flat Grid XL": {
+                "image": "../images/id/islands/AkitaFlatGridXLPlotDefinition.png",
+                "playset": "NOT_PLAYSET" ,
+                "plot": "/AkitaGFSMetaData/Plots/AkitaFlatGridXLPlotDefinition.AkitaFlatGridXLPlotDefinition"
+            }
+        }
+    },
+    "Prefabs/Gallerys": {
+        "Unreleased": {
+            "Spiky Stadium": {
+                "image": "../images/id/prefabs/PID_016_Athena_SpikyStadium.png",
+                "playset": "/Game/Playsets/PID_016_Athena_SpikyStadium.PID_016_Athena_SpikyStadium"
+            },
+            "BGA_Athena_Jetpack_Container_Blimp": {
+                "image": "../images/id/prefabs/PPID_CRP_Covert_BGA_Athena_Jetpack_Container_Blimp.png",
+                "playset": "/CRP_Covert/SetupAssets/Maps/PPIDs/PPID_CRP_Covert_BGA_Athena_Jetpack_Container_Blimp.PPID_CRP_Covert_BGA_Athena_Jetpack_Container_Blimp"
+            },
+            "BGA_Athena_Keycard_Lock_HollowBase": {
+                "image": "../images/id/prefabs/PPID_CRP_Covert_BGA_Athena_Keycard_Lock_HollowBase.png",
+                "playset": "/CRP_Covert/SetupAssets/Maps/PPIDs/PPID_CRP_Covert_BGA_Athena_Keycard_Lock_HollowBase.PPID_CRP_Covert_BGA_Athena_Keycard_Lock_HollowBase"
+            },
+            "CP_Foudation_3x7_CoastMotel_01": {
+                "image": "../images/id/prefabs/PID_CP_Foudation_3x7_CoastMotel_01.png",
+                "playset": "/CRP_Foundation/SetupAssets/Maps/PID_CP_Foudation_3x7_CoastMotel_01.PID_CP_Foudation_3x7_CoastMotel_01"
+            },
+            "CP_Foundation_3x3_CliffHouse_a": {
+                "image": "../images/id/prefabs/PID_CP_Foundation_3x3_CliffHouse_a.png",
+                "playset": "/CRP_Foundation/SetupAssets/Maps/PID_CP_Foundation_3x3_CliffHouse_a.PID_CP_Foundation_3x3_CliffHouse_a"
+            },
+            "CP_Foundation_3x3_GenericHouse_e": {
+                "image": "../images/id/prefabs/PID_CP_Foundation_3x3_GenericHouse_e.png",
+                "playset": "/CRP_Foundation/SetupAssets/Maps/PID_CP_Foundation_3x3_GenericHouse_e.PID_CP_Foundation_3x3_GenericHouse_e"
+            },
+            "CP_Foundation_3x3_PawnShop_a": {
+                "image": "../images/id/prefabs/PID_CP_Foundation_3x3_PawnShop_a.png",
+                "playset": "/CRP_Foundation/SetupAssets/Maps/PID_CP_Foundation_3x3_PawnShop_a.PID_CP_Foundation_3x3_PawnShop_a"
+            },
+            "CP_Foundation_3x3_TacoStand_a": {
+                "image": "../images/id/prefabs/PID_CP_Foundation_3x3_TacoStand_a.png",
+                "playset": "/CRP_Foundation/SetupAssets/Maps/PID_CP_Foundation_3x3_TacoStand_a.PID_CP_Foundation_3x3_TacoStand_a"
+            },
+            "CP_Foundation_3x7_StripMallStores_01": {
+                "image": "../images/id/prefabs/PID_CP_Foundation_3x7_StripMallStores_01.png",
+                "playset": "/CRP_Foundation/SetupAssets/Maps/PID_CP_Foundation_3x7_StripMallStores_01.PID_CP_Foundation_3x7_StripMallStores_01"
+            },
+            "CP_Foundation_5x5_Park_b": {
+                "image": "../images/id/prefabs/PID_CP_Foundation_5x5_Park_b.png",
+                "playset": "/CRP_Foundation/SetupAssets/Maps/PID_CP_Foundation_5x5_Park_b.PID_CP_Foundation_5x5_Park_b"
+            },
+            "CP_Foundation_5x7_StripMallBar_01": {
+                "image": "../images/id/prefabs/PID_CP_Foundation_5x7_StripMallBar_01.png",
+                "playset": "/CRP_Foundation/SetupAssets/Maps/PID_CP_Foundation_5x7_StripMallBar_01.PID_CP_Foundation_5x7_StripMallBar_01"
+            },
+            "CP_Foundation_5x9_CoastMotel_01": {
+                "image": "../images/id/prefabs/PID_CP_Foundation_5x9_CoastMotel_01.png",
+                "playset": "/CRP_Foundation/SetupAssets/Maps/PID_CP_Foundation_5x9_CoastMotel_01.PID_CP_Foundation_5x9_CoastMotel_01"
+            },
+            "BP_Athena_Environmental_ZipLine_Spline": {
+                "image": "../images/id/prefabs/PPID_CRP_SlappyShores_BP_Athena_Environmental_ZipLine_Spline.png",
+                "playset": "/CRP_SlappyShores/SetupAssets/Maps/PPIDs/PPID_CRP_SlappyShores_BP_Athena_Environmental_ZipLine_Spline.PPID_CRP_SlappyShores_BP_Athena_Environmental_ZipLine_Spline"
+            },
+            "CP_Monument": {
+                "image": "../images/id/prefabs/PPID_CR_Legacy_CP_Monument.png",
+                "playset": "/CR_Legacy/Playsets/PlaysetProps/PPID_CR_Legacy_CP_Monument.PPID_CR_Legacy_CP_Monument"
+            },
+            "CP_March_Statue": {
+                "image": "../images/id/prefabs/PPID_CR_Legacy_CP_March_Statue.png",
+                "playset": "/CR_Legacy/Playsets/PlaysetProps/PPID_CR_Legacy_CP_March_Statue.PPID_CR_Legacy_CP_March_Statue"
+            },
+            "Relevancy Test Gallery": {
+                "image": "../images/id/prefabs/PID_CP_Relevancy_TEST.png",
+                "playset": "/CR_Legacy/Playsets/PID_CP_Relevancy_TEST.PID_CP_Relevancy_TEST"
+            },
+            "Monument": {
+                "image": "../images/id/prefabs/PID_CP_Prop_Monument_a.png",
+                "playset": "/CR_Legacy/Playsets/PID_CP_Prop_Monument_a.PID_CP_Prop_Monument_a"
+            }
+        },
+        "Star Wars": {
+            "ATAT Prefab": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_ATAT_Prefab_A.PID_FNEC_SW_A_ATAT_Prefab_A"
+            },
+            "ATST Prefab": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_ATST_Prefab_A.PID_FNEC_SW_A_ATST_Prefab_A"
+            },
+            "Crash Prop Gallery": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_Crash_Props_A.PID_FNEC_SW_A_Crash_Props_A"
+            },
+            "eATeAT Prop Gallery A": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_eATeAT_Props_A.PID_FNEC_SW_A_eATeAT_Props_A"
+            },
+            "eATeAT Prop Gallery B": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_eATeAT_Props_B.PID_FNEC_SW_A_eATeAT_Props_B"
+            },
+            "FOBase Gallery A": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_FOBase_Gallery_A.PID_FNEC_SW_A_FOBase_Gallery_A"
+            },
+            "FOBase Gallery B": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_FOBase_Gallery_B.PID_FNEC_SW_A_FOBase_Gallery_B"
+            },
+            "FOBase Front Gate": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_FOBase_Prefab_A.PID_FNEC_SW_A_FOBase_Prefab_A"
+            },
+            "FOBase Tower": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_FOBase_Prefab_B.PID_FNEC_SW_A_FOBase_Prefab_B"
+            },
+            "FOBase Front": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_FOBase_Prefab_C.PID_FNEC_SW_A_FOBase_Prefab_C"
+            },
+            "FOBase Back": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_FOBase_Prefab_D.PID_FNEC_SW_A_FOBase_Prefab_D"
+            },
+            "FOBase Prop Gallery A": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_FOBase_Props_A.PID_FNEC_SW_A_FOBase_Props_A"
+            },
+            "FOBase Prop Gallery B": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_FOBase_Props_B.PID_FNEC_SW_A_FOBase_Props_B"
+            },
+            "FOBase Prop Gallery C": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_FOBase_Props_C.PID_FNEC_SW_A_FOBase_Props_C"
+            },
+            "Landing Pad A": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_LandingPad_A.PID_FNEC_SW_A_LandingPad_A"
+            },
+            "Landing Pad B": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_LandingPad_B.PID_FNEC_SW_A_LandingPad_B"
+            },
+            "MountainTemple Prop Gallery": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_MountainTemple_Props_A.PID_FNEC_SW_A_MountainTemple_Props_A"
+            },
+            "OPEnclave Gallery A": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_OPEnclave_Gallery_A.PID_FNEC_SW_A_OPEnclave_Gallery_A"
+            },
+            "OPEnclave Gallery B": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_OPEnclave_Gallery_B.PID_FNEC_SW_A_OPEnclave_Gallery_B"
+            },
+            "OPEnclave Gallery C": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_OPEnclave_Gallery_C.PID_FNEC_SW_A_OPEnclave_Gallery_C"
+            },
+            "OPEnclave Prefab A": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_OPEnclave_Prefab_A.PID_FNEC_SW_A_OPEnclave_Prefab_A"
+            },
+            "OPEnclave Prefab B": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_OPEnclave_Prefab_B.PID_FNEC_SW_A_OPEnclave_Prefab_B"
+            },
+            "OPEnclave Prefab C": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_OPEnclave_Prefab_C.PID_FNEC_SW_A_OPEnclave_Prefab_C"
+            },
+            "OPEnclave Prefab D": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_OPEnclave_Prefab_D.PID_FNEC_SW_A_OPEnclave_Prefab_D"
+            },
+            "OPEnclave Prefab E": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_OPEnclave_Prefab_E.PID_FNEC_SW_A_OPEnclave_Prefab_E"
+            },
+            "OPEnclave Prefab Crawler": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_OPEnclave_Prefab_F.PID_FNEC_SW_A_OPEnclave_Prefab_F"
+            },
+            "OPEnclave Prop Gallery A": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_OPEnclave_Props_A.PID_FNEC_SW_A_OPEnclave_Props_A"
+            },
+            "OPEnclave Prop Gallery B": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_OPEnclave_Props_B.PID_FNEC_SW_A_OPEnclave_Props_B"
+            },
+            "Outpost Prop Gallery A": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_Outpost_Props_A.PID_FNEC_SW_A_Outpost_Props_A"
+            },
+            "Outpost Prop Gallery B": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_Outpost_Props_B.PID_FNEC_SW_A_Outpost_Props_B"
+            },
+            "Outpost Prop Gallery C": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_Outpost_Props_C.PID_FNEC_SW_A_Outpost_Props_C"
+            },
+            "Outpost Prop Gallery D": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_Outpost_Props_D.PID_FNEC_SW_A_Outpost_Props_D"
+            },
+            "ResBase Gallery A": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_ResBase_Gallery_A.PID_FNEC_SW_A_ResBase_Gallery_A"
+            },
+            "ResBase Gallery B": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_ResBase_Gallery_B.PID_FNEC_SW_A_ResBase_Gallery_B"
+            },
+            "ResBase Nature": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_ResBase_Nature_A.PID_FNEC_SW_A_ResBase_Nature_A"
+            },
+            "ResBase A": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_ResBase_Prefab_A.PID_FNEC_SW_A_ResBase_Prefab_A"
+            },
+            "ResBase B": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_ResBase_Prefab_B.PID_FNEC_SW_A_ResBase_Prefab_B"
+            },
+            "ResBase Prop Gallery A": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_ResBase_Props_A.PID_FNEC_SW_A_ResBase_Props_A"
+            },
+            "ResBase Prop Gallery B": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_ResBase_Props_B.PID_FNEC_SW_A_ResBase_Props_B"
+            },
+            "ResBase Prop Gallery C": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_ResBase_Props_C.PID_FNEC_SW_A_ResBase_Props_C"
+            },
+            "Akita Ships Prop Gallery": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_A_Comp/SetupAssets/Maps/PID_FNEC_SW_A_Ships_Props_A.PID_FNEC_SW_A_Ships_Props_A"
+            },
+            "AT-ST": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_B_Comp/SetupAssets/Maps/PID_FNEC_SW_HangarRoom_Prefab_A.PID_FNEC_SW_HangarRoom_Prefab_A"
+            },
+            "AT-AT": {
+                "image": "../images/id/islands/PID_CP_SlappyShores_POI.png",
+                "playset": "/SW_B_Comp/SetupAssets/Maps/PID_FNEC_SW_TrenchRoom_Prefab_A.PID_FNEC_SW_TrenchRoom_Prefab_A"
+            }
+        }
+    },
+    "Devices": {
+        "Creative (Beta - UEFN)": {
+            "Partner Pickup": {
+                "image": "../images/id/devices/PID_PG_PartnerOnly.png",
+                "playset": "/CR_Legacy/Playsets/PID_PG_PartnerOnly.PID_PG_PartnerOnly"
+            },
+            "Triple S": {
+                "image": "../images/id/devices/PID_PG_Props_Shoes.png",
+                "playset": "/CR_Legacy/Playsets/PID_PG_Props_Shoes.PID_PG_Props_Shoes"
+            },
+            "Silent Llama-tron": {
+                "image": "../images/id/devices/PID_CP_Devices_TVSilent.png",
+                "playset": "/CR_Legacy/Playsets/PID_CP_Devices_TVSilent.PID_CP_Devices_TVSilent"
+            },
+            "Llama-tron": {
+                "image": "../images/id/devices/PID_CP_Devices_TVScreen.png",
+                "playset": "/CR_Legacy/Playsets/PID_CP_Devices_TVScreen.PID_CP_Devices_TVScreen"
+            },
+            "Bowl": {
+                "image": "../images/id/devices/PID_CP_Collectible_Bowl.png",
+                "playset": "/CR_Legacy/Playsets/PID_CP_Collectible_Bowl.PID_CP_Collectible_Bowl"
+            },
+            "Paper": {
+                "image": "../images/id/devices/PID_CP_Collectible_Paper.png",
+                "playset": "/CR_Legacy/Playsets/PID_CP_Collectible_Paper.PID_CP_Collectible_Paper"
+            },
+            "Vote Accolades": {
+                "image": "../images/id/devices/PID_Device_VoteAccolade.png",
+                "playset": "/CRD_Accolades/SetupAssets/PID_Device_VoteAccolade.PID_Device_VoteAccolade"
+            },
+            "Animated Mesh": {
+                "image": "../images/id/devices/PID_CP_Devices_AnimatedMesh.png",
+                "playset": "/CRD_AnimatedMesh/SetupAssets/PID_CP_Devices_AnimatedMesh.PID_CP_Devices_AnimatedMesh"
+            },
+            "NPC Spawner": {
+                "image": "../images/id/devices/PID_Device_AISpawner_Character.png",
+                "playset": "/CRD_AISpawner/SetupAssets/PID_Device_AISpawner_Character.PID_Device_AISpawner_Character"
+            },
+            "Cinematic Sequence Device": {
+                "image": "../images/id/devices/PID_CP_Devices_Cinematic.png",
+                "playset": "/CRD_CinematicSequence/SetupAssets/PID_CP_Devices_Cinematic.PID_CP_Devices_Cinematic"
+            },
+            "Clapboard": {
+                "image": "../images/id/devices/PID_CP_Devices_Clapboard.png",
+                "playset": "/CRD_Clapboard/SetupAssets/PID_CP_Devices_Clapboard.PID_CP_Devices_Clapboard"
+            },
+            "Emote Volume": {
+                "image": "../images/id/devices/PID_CP_Devices_DanceVolume.png",
+                "playset": "/CRD_DanceVolume/SetupAssets/PID_CP_Devices_DanceVolume.PID_CP_Devices_DanceVolume"
+            },
+            "Emote Controller": {
+                "image": "../images/id/devices/PID_CP_Devices_EmoteController.png",
+                "playset": "/CRD_EmoteController/SetupAssets/PID_CP_Devices_EmoteController.PID_CP_Devices_EmoteController"
+            },
+            "Emote Controller V2": {
+                "image": "../images/id/devices/PID_Device_EmoteController.png",
+                "playset": "/CRD_EmoteController/SetupAssets/PID_Device_EmoteController.PID_Device_EmoteController"
+            },
+            "Camera Focus Device": {
+                "image": "../images/id/devices/PID_CP_Device_CameraFocus.png",
+                "playset": "/CRD_FocusDevice/SetupAssets/ID/PID_CP_Device_CameraFocus.PID_CP_Device_CameraFocus"
+            },
+            "Game Stream": {
+                "image": "../images/id/devices/PID_CP_Devices_GameStream.png",
+                "playset": "/CRD_GameStream/SetupAssets/PID_CP_Devices_GameStream.PID_CP_Devices_GameStream"
+            },
+            "Shared Save Data Device V2": {
+                "image": "../images/id/devices/PID_Device_SharedSaveData_V2.png",
+                "playset": "/CRD_GlobalSaveData/SetupAssets/PID_Device_SharedSaveData_V2.PID_Device_SharedSaveData_V2"
+            },
+            "Shared Save Data Device": {
+                "image": "../images/id/devices/PID_Devices_GlobalSaveData.png",
+                "playset": "/CRD_GlobalSaveData/SetupAssets/PID_Devices_GlobalSaveData.PID_Devices_GlobalSaveData"
+            },
+            "Gravity Gun Controller": {
+                "image": "../images/id/devices/PID_Device_GravityGunController.png",
+                "playset": "/CRD_GravityGunController/SetupAssets/PID_Device_GravityGunController.PID_Device_GravityGunController"
+            },
+            "GrindRailControlPoint": {
+                "image": "../images/id/devices/PID_CP_Devices_GrindRailControlPoint.png",
+                "playset": "/CRD_GrindRail/SetupAssets/PID_CP_Devices_GrindRailControlPoint.PID_CP_Devices_GrindRailControlPoint"
+            },
+            "Video Player": {
+                "image": "../images/id/devices/PID_Device_VideoPlayer.png",
+                "playset": "/CRD_LlamatronV2/SetupAssets/PID_Device_VideoPlayer.PID_Device_VideoPlayer"
+            },
+            "Video Player ": {
+                "image": "../images/id/devices/PID_Device_Llamatron.png",
+                "playset": "/CRD_LlamatronV2/SetupAssets/PID_Device_Llamatron.PID_Device_Llamatron"
+            },
+            "Item Shop Mannequin V2": {
+                "image": "../images/id/devices/PID_CP_Devices_MannequinStore.png",
+                "playset": "/CRD_Mannequin/SetupAssets/PID_CP_Devices_MannequinStore.PID_CP_Devices_MannequinStore"
+            },
+            "Item Shop Mannequin": {
+                "image": "../images/id/devices/PID_Device_ItemShopMannequin.png",
+                "playset": "/CRD_Mannequin/SetupAssets/PID_Device_ItemShopMannequin.PID_Device_ItemShopMannequin"
+            },
+            "Stage Light": {
+                "image": "../images/id/devices/PID_StageLight.png",
+                "playset": "/CRD_StageLight/SetupAssets/PID_StageLight.PID_StageLight"
+            },
+            "Item Shop Portal": {
+                "image": "../images/id/devices/PID_CP_Devices_Store.png",
+                "playset": "/CRD_Store/SetupAssets/PID_CP_Devices_Store.PID_CP_Devices_Store"
+            },
+            "Item Shop Portal V2": {
+                "image": "../images/id/devices/PID_CP_Devices_Store_V2.png",
+                "playset": "/CRD_Store/SetupAssets/PID_CP_Devices_Store_V2.PID_CP_Devices_Store_V2"
+            },
+            "Streaming Radio": {
+                "image": "../images/id/devices/PID_CP_Device_StreamingRadio.png",
+                "playset": "/CRD_StreamingRadio/SetupAssets/PID_CP_Device_StreamingRadio.PID_CP_Device_StreamingRadio"
+            },
+            "Streaming Radio V2": {
+                "image": "../images/id/devices/PID_Device_StreamingRadio.png",
+                "playset": "/CRD_StreamingRadio/SetupAssets/PID_Device_StreamingRadio.PID_Device_StreamingRadio"
+            },
+            "Throwing Toy Spawner": {
+                "image": "../images/id/devices/PID_CP_Devices_ThrowingToy.png",
+                "playset": "/CRD_ThrowingToy/SetupAssets/ID/PID_CP_Devices_ThrowingToy.PID_CP_Devices_ThrowingToy"
+            },
+            "Script Device": {
+                "image": "../images/id/devices/PID_BP_ScriptDevice.png",
+                "playset": "/CRD_VerseDevices/SetupAssets/PID_BP_ScriptDevice.PID_BP_ScriptDevice"
+            },
+            "Video Player (New)": {
+                "image": "../images/id/devices/PID_Device_VideoPlayerV3.png",
+                "playset": "/CRD_VideoPlayer/SetupAssets/PID_Device_VideoPlayerV3.PID_Device_VideoPlayerV3"
+            },
+            "Video Schedule": {
+                "image": "../images/id/devices/PID_CP_Devices_VideoSchedule.png",
+                "playset": "/CRD_VideoSchedule/SetupAssets/PID_CP_Devices_VideoSchedule.PID_CP_Devices_VideoSchedule"
+            },
+            "Environment Light Rig": {
+                "image": "../images/id/devices/PID_Environment_Light_Rig.png",
+                "playset": "/CreativeCoreDevices/SetupAssets/PID_Environment_Light_Rig.PID_Environment_Light_Rig"
+            },
+            "Dance Capture": {
+                "image": "../images/id/devices/PID_CP_Device_Dance_Capture.png",
+                "playset": "/CRD_Papaya_Dance_Mannequin/SetupAssets/PID_CP_Device_Dance_Capture.PID_CP_Device_Dance_Capture"
+            },
+            "Dance Capture V2": {
+                "image": "../images/id/devices/PID_Device_DanceCapture.png",
+                "playset": "/CRD_Papaya_Dance_Mannequin/SetupAssets/PID_Device_DanceCapture.PID_Device_DanceCapture"
+            },
+            "Character Transformation Device": {
+                "image": "../images/id/devices/PID_Device_PointOfLight.png",
+                "playset": "/CRD_VFX_Spawner/SetupAssets/PID_Device_PointOfLight.PID_Device_PointOfLight"
+            },
+            "Streaming Data Trigger": {
+                "image": "../images/id/devices/PID_CP_Device_StreamingDataTrigger.png",
+                "playset": "/CRD_DataChannelTrigger/SetupAssets/PID_CP_Device_StreamingDataTrigger.PID_CP_Device_StreamingDataTrigger"
+            },
+            "Skydome": {
+                "image": "../images/id/devices/PID_CP_Devices_Skydome.png",
+                "playset": "/CRD_SkydomeDevice/SetupAssets/PID_CP_Devices_Skydome.PID_CP_Devices_Skydome"
+            },
+            "Skydome V2": {
+                "image": "../images/id/devices/PID_Device_Skydome.png",
+                "playset": "/CRD_SkydomeDevice/SetupAssets/PID_Device_Skydome.PID_Device_Skydome"
+            },
+            "Conversation Device": {
+                "image": "../images/id/devices/PID_Device_Conversation.png",
+                "playset": "/CRD_ConversationDevice/SetupAssets/PID_Device_Conversation.PID_Device_Conversation"
+            },
+            "LinkCodeMutator": {
+                "image": "../images/id/devices/PID_CP_Devices_LinkCodeMutator.png",
+                "playset": "/CRD_LinkCodeMutator/SetupAssets/PID_CP_Devices_LinkCodeMutator.PID_CP_Devices_LinkCodeMutator"
+            },
+            "Patchwork Big Knob": {
+                "image": "../images/id/devices/PID_CP_Devices_FabricBigKnob.png",
+                "playset": "/CRD_FabricBigKnob/SetupAssets/PID_CP_Devices_FabricBigKnob.PID_CP_Devices_FabricBigKnob"
+            },
+            "Stamina Collectible": {
+                "image": "../images/id/devices/PID_Prop_StaminaCollectible.png",
+                "playset": "/StaminaGameplay/Gameplay/Items/Shared/SetupAssets/PID_Prop_StaminaCollectible.PID_Prop_StaminaCollectible"
+            }
+        },
+        "Lego": {
+            "Chair": {
+                "image": "../images/id/devices/PID_CP_Devices_LimeChairDevice.png",
+                "playset": "/CRD_LimeChairDevice/SetupAssets/PID_CP_Devices_LimeChairDevice.PID_CP_Devices_LimeChairDevice"
+            },
+            "Item Spawner": {
+                "image": "../images/id/devices/PID_CP_Devices_LimeItemSpawner.png",
+                "playset": "/CRD_LimeItemSpawner/SetupAssets/PID_CP_Devices_LimeItemSpawner.PID_CP_Devices_LimeItemSpawner"
+            },
+            "Player Spawner": {
+                "image": "../images/id/devices/PID_Device_LimePlayerSpawnPad.png",
+                "playset": "/LimePlayerSpawn/ItemDefinitions/PID_Device_LimePlayerSpawnPad.PID_Device_LimePlayerSpawnPad"
+            },
+            "LEGO® Collectible": {
+                "image": "../images/id/devices/PID_LimeCollectible.png",
+                "playset": "/CRD_LimeCollectible/PID_LimeCollectible.PID_LimeCollectible"
+            },
+            "Assembly Device": {
+                "image": "../images/id/devices/PID_LimeAssemble.png",
+                "playset": "/CRD_LimeAssemble/SetupAssets/PID_LimeAssemble.PID_LimeAssemble"
+            }
+        },
+        "TurtleNinja": {
+            "TMNT Character Spawner": {
+                "image": "../images/id/devices/PID_CP_Devices_MeltedIronCharacterSpawner.png",
+                "playset": "/MeltedIronCharacterSpawner/SetupAssets/PID_CP_Devices_MeltedIronCharacterSpawner.PID_CP_Devices_MeltedIronCharacterSpawner"
+            },
+            "TMNT Supply Drop Spawner": {
+                "image": "../images/id/devices/PID_CP_Devices_LinedNotebook_SupplyDropSpawner.png",
+                "playset": "/CRD_LinedNotebook/SetupAssets/PID_CP_Devices_LinedNotebook_SupplyDropSpawner.PID_CP_Devices_LinedNotebook_SupplyDropSpawner"
+            },
+            "TMNT Loot Crate": {
+                "image": "../images/id/devices/PID_CP_Devices_LinedNotebook_LootCrate.png",
+                "playset": "/CRD_LinedNotebook/SetupAssets/PID_CP_Devices_LinedNotebook_LootCrate.PID_CP_Devices_LinedNotebook_LootCrate"
+            },
+            "TMNT Sewer Tunnel": {
+                "image": "../images/id/devices/PID_CP_Devices_LinedNotebook_HidingProp.png",
+                "playset": "/CRD_LinedNotebook/SetupAssets/PID_CP_Devices_LinedNotebook_HidingProp.PID_CP_Devices_LinedNotebook_HidingProp"
+            },
+            "TMNT Driftboard Spawner": {
+                "image": "../images/id/devices/PID_CP_Devices_LinedNotebook_Driftboard_Spawner.png",
+                "playset": "/CRD_LinedNotebook/SetupAssets/PID_CP_Devices_LinedNotebook_Driftboard_Spawner.PID_CP_Devices_LinedNotebook_Driftboard_Spawner"
+            }
+        },
+        "SquidGame": {
+            "Llama Bank": {
+                "image": "../images/id/devices/PID_CP_Devices_Llama_Bank.png",
+                "playset": "/SolidWave_ExtraAssets/SetupAssets/PID_CP_Devices_Llama_Bank.PID_CP_Devices_Llama_Bank"
+            },
+            "Gonggi - Blue Circle": {
+                "image": "../images/id/devices/PID_CP_Devices_CarryableItemSpawner_Gonggi_CB.png",
+                "playset": "/SolidWave_ExtraAssets/SolidWaveSwashSpark/PID_CP_Devices_CarryableItemSpawner_Gonggi_CB.PID_CP_Devices_CarryableItemSpawner_Gonggi_CB"
+            },
+            "Gonggi - Red Circle": {
+                "image": "../images/id/devices/PID_CP_Devices_CarryableItemSpawner_Gonggi_CR.png",
+                "playset": "/SolidWave_ExtraAssets/SolidWaveSwashSpark/PID_CP_Devices_CarryableItemSpawner_Gonggi_CR.PID_CP_Devices_CarryableItemSpawner_Gonggi_CR"
+            },
+            "Gonggi - Purple Square": {
+                "image": "../images/id/devices/PID_CP_Devices_CarryableItemSpawner_Gonggi_SP.png",
+                "playset": "/SolidWave_ExtraAssets/SolidWaveSwashSpark/PID_CP_Devices_CarryableItemSpawner_Gonggi_SP.PID_CP_Devices_CarryableItemSpawner_Gonggi_SP"
+            },
+            "Gonggi - Green Triangle": {
+                "image": "../images/id/devices/PID_CP_Devices_CarryableItemSpawner_Gonggi_TG.png",
+                "playset": "/SolidWave_ExtraAssets/SolidWaveSwashSpark/PID_CP_Devices_CarryableItemSpawner_Gonggi_TG.PID_CP_Devices_CarryableItemSpawner_Gonggi_TG"
+            },
+            "Gonggi - Yellow Triangle": {
+                "image": "../images/id/devices/PID_CP_Devices_CarryableItemSpawner_Gonggi_TY.png",
+                "playset": "/SolidWave_ExtraAssets/SolidWaveSwashSpark/PID_CP_Devices_CarryableItemSpawner_Gonggi_TY.PID_CP_Devices_CarryableItemSpawner_Gonggi_TY"
+            },
+            "Giftbox": {
+                "image": "../images/id/devices/PID_CP_Devices_HidingProp_SwashTide.png",
+                "playset": "/CRD_HidingProp_SwashTide/SetupAssets/PID_CP_Devices_HidingProp_SwashTide.PID_CP_Devices_HidingProp_SwashTide"
+            }
+        },
+        "RocketRacing": {
+            "RR Track": {
+                "image": "../images/id/devices/PID_CP_Devices_DelMarTrack.png",
+                "playset": "/CRD_DelMarTrack/SetupAssets/PID_CP_Devices_DelMarTrack.PID_CP_Devices_DelMarTrack"
+            },
+            "RR Player Start Position": {
+                "image": "../images/id/devices/PID_CP_Devices_DelMarPlayerStart.png",
+                "playset": "/CRD_DelMarPlayerStart/SetupAssets/PID_CP_Devices_DelMarPlayerStart.PID_CP_Devices_DelMarPlayerStart"
+            },
+            "RR Competitive Race Manager": {
+                "image": "../images/id/devices/PID_CP_Devices_DelMarCompetitiveRaceManager.png",
+                "playset": "/CRD_DelMarRaceManager/SetupAssets/PID_CP_Devices_DelMarCompetitiveRaceManager.PID_CP_Devices_DelMarCompetitiveRaceManager"
+            },
+            "RR Speed Run Race Manager": {
+                "image": "../images/id/devices/PID_CP_Devices_DelMarSpeedRunRaceManager.png",
+                "playset": "/CRD_DelMarRaceManager/SetupAssets/PID_CP_Devices_DelMarSpeedRunRaceManager.PID_CP_Devices_DelMarSpeedRunRaceManager"
+            },
+            "RR Active Track Volume": {
+                "image": "../images/id/devices/PID_CP_Devices_DelMarActiveTrackVolume.png",
+                "playset": "/CRD_DelMarActiveTrackVolume/SetupAssets/PID_CP_Devices_DelMarActiveTrackVolume.PID_CP_Devices_DelMarActiveTrackVolume"
+            },
+            "RR Checkpoint": {
+                "image": "../images/id/devices/PID_CP_Devices_DelMarCheckpoint.png",
+                "playset": "/CRD_DelMarCheckpoint/SetupAssets/PID_CP_Devices_DelMarCheckpoint.PID_CP_Devices_DelMarCheckpoint"
+            },
+            "RR  Elimination Volume": {
+                "image": "../images/id/devices/PID_CP_Devices_DelMarEliminationVolume.png",
+                "playset": "/CRD_DelMarEliminationVolume/SetupAssets/PID_CP_Devices_DelMarEliminationVolume.PID_CP_Devices_DelMarEliminationVolume"
+            },
+            "RR Boost Pad": {
+                "image": "../images/id/devices/PID_CP_Devices_DelMarSpeedPad.png",
+                "playset": "/CRD_DelMarSpeedPad/SetupAssets/PID_CP_Devices_DelMarSpeedPad.PID_CP_Devices_DelMarSpeedPad"
+            }
+        }
+    },
+    "Weapons": {
+        "nothing for the moment": {
+            "image": "",
+            "playset": ""
+        }
+    }
+}

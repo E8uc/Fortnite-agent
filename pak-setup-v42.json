@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "baseline": {
+    "fortniteVersion": "42.00",
+    "year": 2026,
+    "mode": "Creative 1.0"
+  },
+  "status": "community-reference",
+  "warning": "Placement only. Does not document how to create or modify PAK/UCAS files.",
+  "setups": {
+    "mesh-method": {
+      "android": {
+        "folder": "\\\\Android\\\\data\\\\com.epicgames.fortnite\\\\files\\\\InstalledBundles\\\\GFP_BaseInstallRoot\\\\FortniteGame\\\\Content\\\\Paks",
+        "target": "pakchunk30-Android_ASTCClient.ucas"
+      },
+      "pc": {
+        "folder": "C:\\\\Program Files\\\\Epic Games\\\\Fortnite\\\\FortniteGame\\\\Content\\\\Paks",
+        "target": "pakchunk30-WindowsClient.ucas"
+      }
+    },
+    "create-old-island": {
+      "android": "\\\\Android\\\\data\\\\com.epicgames.fortnite\\\\files\\\\InstalledBundles\\\\Startup\\\\FortniteGame\\\\Content\\\\Paks",
+      "pc": "C:\\\\Program Files\\\\Epic Games\\\\Fortnite\\\\FortniteGame\\\\Content\\\\Paks"
+    },
+    "dev-buildings": {
+      "android": "\\\\Android\\\\data\\\\com.epicgames.fortnite\\\\files\\\\InstalledBundles\\\\Startup\\\\FortniteGame\\\\Content\\\\Paks",
+      "pc": "C:\\\\Program Files\\\\Epic Games\\\\Fortnite\\\\FortniteGame\\\\Content\\\\Paks"
+    },
+    "dev-inventory": {
+      "android": "\\\\Android\\\\data\\\\com.epicgames.fortnite\\\\files\\\\InstalledBundles\\\\Startup\\\\FortniteGame\\\\Content\\\\Paks",
+      "pc": "C:\\\\Program Files\\\\Epic Games\\\\Fortnite\\\\FortniteGame\\\\Content\\\\Paks"
+    },
+    "orange-white-copy": {
+      "android": "\\\\Android\\\\data\\\\com.epicgames.fortnite\\\\files\\\\InstalledBundles\\\\GFP_BlitzRoot\\\\FortniteGame\\\\Content\\\\Paks",
+      "pc": "C:\\\\Program Files\\\\Epic Games\\\\Fortnite\\\\FortniteGame\\\\Content\\\\Paks"
+    }
+  }
+}

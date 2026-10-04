@@ -1,0 +1,13 @@
+{
+  "bytes": 12746380,
+  "entries": 1804101,
+  "fortniteBuild": "++Fortnite+Release-42.30-CL-58557680-Windows",
+  "fortniteVersion": "42.30",
+  "newAssets": 20610,
+  "removedAssets": 7504,
+  "schema": "fnaa.asset-source.v1",
+  "sha256": "162cc264e8e0bf5ebb0a26e820c00db4ea7674c54a624b0e37321296bb038147",
+  "source": "NovaSparx",
+  "sourceManifest": "local-release:asset-list/manifest.json",
+  "updatedAt": "2026-10-01T15:22:47.766266+00:00"
+}

@@ -1,0 +1,13 @@
+// Deployed from GitHub main by Cloudflare Workers Builds.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fortnite-ai-agent-api",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-17",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "workers_dev": true,
+  "keep_vars": true,
+  "vars": {
+    "NOVASPARX_AUTOLINK_URL": "https://fortnite-ai-agent-autolink.a39328122.workers.dev"
+  }
+}

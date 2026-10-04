@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+
+  "name": "fortnite-ai-agent-autolink",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-01",
+
+  "workers_dev": true,
+  "keep_vars": true,
+
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "NOVA_LINK",
+        "class_name": "NovaLinkDurableObject"
+      }
+    ]
+  },
+
+  "exports": {
+    "NovaLinkDurableObject": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}

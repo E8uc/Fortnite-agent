@@ -1,0 +1,5819 @@
+(() => {
+  "use strict";
+
+  const API = String(
+    window.FNAA_CONFIG?.apiEndpoint ||
+    window.FORTNITE_AI_API_ENDPOINT ||
+    ""
+  ).trim().replace(/\/+$/, "");
+
+  const objectUrls = new Map();
+
+  const viewerSessions =
+    new Map();
+
+  const audioSessions =
+    new Map();
+
+  // Image and live Mesh views share one decoded asset while its panel is open.
+  let meshPreview = null;
+
+  function releaseMeshResult(path) {
+    const entry = meshPreview;
+    if (!entry || (path && entry.path !== path)) return;
+    meshPreview = null;
+    entry.controller.abort("mesh-preview-released");
+    for (const result of [entry.result, entry.finalResult]) {
+      if (!result) continue;
+      result.manifest = null;
+      result.blob = null;
+      result.materialPromise = null;
+    }
+    entry.result = entry.finalResult = entry.promise = null;
+  }
+
+  function waitForMeshResult(promise, signal) {
+    throwIfAborted(signal);
+    if (!signal) return promise;
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        // A view switch keeps the decode alive; close, timeout and pagehide do not.
+        if (!["replaced-by-new-asset-action", "replaced-by-new-request"].includes(signal.reason)) {
+          releaseMeshResult();
+        }
+        reject(abortError(signal));
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      Promise.resolve(promise).then(resolve, reject).finally(() => {
+        signal.removeEventListener("abort", onAbort);
+      });
+    });
+  }
+
+  async function resolveSharedMesh(path, interactive, signal) {
+    if (!meshPreview || meshPreview.path !== path || meshPreview.controller.signal.aborted) {
+      if (meshPreview) release(meshPreview.path);
+      const entry = { path, controller: new AbortController(), result: null, finalResult: null, promise: null };
+      meshPreview = entry;
+      entry.promise = window.NovaSparxTextureRuntime.resolveMeshImage(path, {
+        interactive,
+        maxMaterialSize: 2048,
+        signal: entry.controller.signal
+      }).then(result => {
+        if (meshPreview !== entry || entry.controller.signal.aborted) {
+          result.manifest = result.blob = result.materialPromise = null;
+          throw abortError(entry.controller.signal);
+        }
+        entry.result = result;
+        if (result.materialPromise) {
+          result.materialPromise = result.materialPromise.then(finalResult => {
+            if (meshPreview !== entry || entry.controller.signal.aborted) {
+              finalResult.manifest = finalResult.blob = null;
+              throw abortError(entry.controller.signal);
+            }
+            entry.finalResult = finalResult;
+            return finalResult;
+          });
+          // Closing during material decode must not create an unhandled rejection.
+          result.materialPromise.catch(() => {});
+        }
+        return result;
+      }).catch(error => {
+        if (meshPreview === entry) releaseMeshResult(path);
+        throw error;
+      });
+    }
+    const entry = meshPreview;
+    const result = entry.finalResult || await waitForMeshResult(entry.promise, signal);
+    throwIfAborted(signal);
+    return entry.finalResult || result;
+  }
+
+  async function meshImageResult(result, signal) {
+    if (result.blob) return result;
+    const image = await window.NovaSparxRenderer.render(result.manifest, { signal });
+    throwIfAborted(signal);
+    result.blob = image.blob;
+    return { ...result, ...image };
+  }
+
+  function objectUrlLimit() {
+    const state =
+      window.NovaSparxBrowserGuard
+        ?.status?.() ||
+      {};
+
+    if (state.isIOS) {
+      return 2;
+    }
+
+    if (state.isMobile) {
+      return 3;
+    }
+
+    return 8;
+  }
+
+  function rememberObjectUrl(
+    path,
+    url
+  ) {
+    const key =
+      String(path || "")
+        .trim();
+
+    if (!key || !url) {
+      return;
+    }
+
+    release(key, { preserveMesh: true });
+
+    objectUrls.set(
+      key,
+      url
+    );
+
+    const limit =
+      objectUrlLimit();
+
+    while (
+      objectUrls.size >
+      limit
+    ) {
+      const oldestKey =
+        objectUrls.keys()
+          .next()
+          .value;
+
+      if (!oldestKey) {
+        break;
+      }
+
+      if (
+        audioSessions.has(
+          oldestKey
+        )
+      ) {
+        release(
+          oldestKey
+        );
+
+        continue;
+      }
+
+      const oldestUrl =
+        objectUrls.get(
+          oldestKey
+        );
+
+      try {
+        if (oldestUrl) {
+          URL.revokeObjectURL(
+            oldestUrl
+          );
+        }
+      } catch {}
+
+      objectUrls.delete(
+        oldestKey
+      );
+    }
+  }
+
+  function abortError(
+    signal
+  ) {
+    const error =
+      new Error(
+        "NovaSparx preview was cancelled because a newer request replaced it."
+      );
+
+    error.name =
+      "AbortError";
+
+    error.code =
+      "NOVASPARX_REQUEST_REPLACED";
+
+    error.reason =
+      signal?.reason ||
+      "cancelled";
+
+    return error;
+  }
+
+  function throwIfAborted(
+    signal
+  ) {
+    if (signal?.aborted) {
+      throw abortError(
+        signal
+      );
+    }
+  }
+
+  const t = (key, fallback = "") =>
+    window.FortniteI18n?.t?.(key) ||
+    fallback ||
+    key;
+
+  function release(path, options = {}) {
+    const key =
+      String(path || "")
+        .trim();
+
+    if (!key) return;
+
+    if (!options.preserveMesh) releaseMeshResult(key);
+
+    const session =
+      viewerSessions.get(
+        key
+      );
+
+    if (session) {
+      for (
+        const cleanup of
+        Array.isArray(
+          session.cleanup
+        )
+          ? session.cleanup
+          : []
+      ) {
+        try {
+          cleanup?.();
+        } catch {}
+      }
+
+      session.cleanup =
+        [];
+
+      try {
+        session.controller
+          ?.dispose?.();
+      } catch {}
+
+      try {
+        session.host
+          ?.replaceChildren?.();
+      } catch {}
+
+      if (session.host) {
+        session.host.hidden =
+          true;
+      }
+
+      if (session.controls) {
+        session.controls.hidden =
+          true;
+        for (const button of session.controls.querySelectorAll("button")) {
+          button.onclick = null;
+        }
+        for (const input of session.controls.querySelectorAll("input")) {
+          input.oninput = null;
+        }
+      }
+
+      session.controller = null;
+
+      try {
+        session.panel
+          ?.classList
+          .remove(
+            "novasparx-viewer-expanded"
+          );
+      } catch {}
+
+      if (
+        session.panel
+          ?.dataset
+          ?.viewerPath ===
+        key
+      ) {
+        delete session.panel
+          .dataset.viewerPath;
+      }
+
+      if (
+        session.panel
+          ?.dataset
+          ?.previewAssetPath ===
+        key
+      ) {
+        delete session.panel
+          .dataset.previewAssetPath;
+      }
+
+      viewerSessions.delete(
+        key
+      );
+    }
+
+    const audio =
+      audioSessions.get(
+        key
+      );
+
+    if (audio) {
+      try {
+        audio.pause();
+      } catch {}
+
+      try {
+        audio.removeAttribute(
+          "src"
+        );
+
+        audio.load?.();
+      } catch {}
+
+      audio.hidden =
+        true;
+
+      audioSessions.delete(
+        key
+      );
+    }
+
+    const old =
+      objectUrls.get(
+        key
+      );
+
+    if (old) {
+      try {
+        URL.revokeObjectURL(
+          old
+        );
+      } catch {}
+
+      objectUrls.delete(
+        key
+      );
+    }
+  }
+
+  function releaseAll() {
+    for (
+      const key of
+      [
+        ...viewerSessions.keys(),
+        ...audioSessions.keys(),
+        ...objectUrls.keys(),
+        ...(meshPreview ? [meshPreview.path] : [])
+      ]
+    ) {
+      release(
+        key
+      );
+    }
+  }
+
+  function releaseMeshPreview(exceptPath = "") {
+    if (meshPreview && meshPreview.path !== String(exceptPath || "").trim()) {
+      release(meshPreview.path);
+    }
+  }
+
+  function viewerSessionLimit() {
+    const state =
+      window.NovaSparxBrowserGuard
+        ?.status?.() ||
+      {};
+
+    if (
+      state.isIOS ||
+      state.isMobile
+    ) {
+      return 1;
+    }
+
+    return 2;
+  }
+
+  function trimViewerSessions(
+    exceptKey = ""
+  ) {
+    const limit =
+      viewerSessionLimit();
+
+    while (
+      viewerSessions.size >=
+      limit
+    ) {
+      const oldestKey =
+        [
+          ...viewerSessions.keys()
+        ]
+          .find(
+            (value) =>
+              value !==
+              exceptKey
+          );
+
+      if (!oldestKey) {
+        break;
+      }
+
+      const oldSession =
+        viewerSessions.get(
+          oldestKey
+        );
+
+      const oldStatus =
+        oldSession?.panel
+          ?.querySelector?.(
+            ".mesh-image-status"
+          );
+
+      release(
+        oldestKey
+      );
+
+      if (oldStatus) {
+        setStatus(
+          oldStatus,
+          "3D viewer closed to free browser memory.",
+          "idle"
+        );
+      }
+
+      if (oldSession?.panel) {
+        oldSession.panel
+          .querySelector?.(
+            ".mesh-image-stage"
+          )
+          ?.setAttribute(
+            "data-preview-state",
+            "released"
+          );
+      }
+    }
+  }
+
+  function endpoint(
+    route,
+    path,
+    retry = false
+  ) {
+    if (!API || !path) {
+      return "";
+    }
+
+    const url =
+      new URL(
+        `${API}${route}`
+      );
+
+    url.searchParams.set(
+      "path",
+      String(path).trim()
+    );
+
+    if (retry) {
+      url.searchParams.set(
+        "retry",
+        String(Date.now())
+      );
+    }
+
+    return url.toString();
+  }
+
+  function loadImage(
+    image,
+    url,
+    timeoutMs = 18_000,
+    signal =
+      window.NovaSparxBrowserGuard
+        ?.activeSignal?.() ||
+      null
+  ) {
+    return new Promise(
+      (resolve, reject) => {
+        if (!url) {
+          resolve(false);
+          return;
+        }
+
+        throwIfAborted(
+          signal
+        );
+
+        let finished = false;
+        let timer = null;
+
+        const cleanup =
+          () => {
+            if (timer) {
+              clearTimeout(
+                timer
+              );
+            }
+
+            image.onload =
+              null;
+
+            image.onerror =
+              null;
+
+            signal
+              ?.removeEventListener?.(
+                "abort",
+                onAbort
+              );
+          };
+
+        const done =
+          (ok) => {
+            if (finished) {
+              return;
+            }
+
+            finished =
+              true;
+
+            cleanup();
+
+            resolve(
+              Boolean(ok)
+            );
+          };
+
+        const onAbort =
+          () => {
+            if (finished) {
+              return;
+            }
+
+            finished =
+              true;
+
+            cleanup();
+
+            try {
+              image.removeAttribute(
+                "src"
+              );
+            } catch {}
+
+            reject(
+              abortError(
+                signal
+              )
+            );
+          };
+
+        timer =
+          setTimeout(
+            () => {
+              if (finished) {
+                return;
+              }
+
+              finished =
+                true;
+
+              cleanup();
+
+              try {
+                image.removeAttribute(
+                  "src"
+                );
+              } catch {}
+
+              resolve(false);
+            },
+            timeoutMs
+          );
+
+        signal
+          ?.addEventListener?.(
+            "abort",
+            onAbort,
+            {
+              once:
+                true
+            }
+          );
+
+        image.onload =
+          () =>
+            done(
+              image.naturalWidth > 0 &&
+              image.naturalHeight > 0
+            );
+
+        image.onerror =
+          () =>
+            done(false);
+
+        image.src = url;
+      }
+    );
+  }
+
+  async function inspect(
+    path,
+    options = {}
+  ) {
+    try {
+      return (
+        await window.NovaSparx
+          ?.inspect?.(
+            path,
+            options
+          )
+      ) || null;
+    } catch (error) {
+      if (
+        options.signal
+          ?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        throw abortError(
+          options.signal
+        );
+      }
+
+      return null;
+    }
+  }
+
+  function assetType(info, path) {
+    return window.FNAAAssetDiagnosis?.diagnosePath(path, info).kind || "other";
+  }
+
+  function firstMaterial(
+    info
+  ) {
+    if (
+      info?.material &&
+      typeof info.material ===
+      "object"
+    ) {
+      return info.material;
+    }
+
+    if (
+      Array.isArray(
+        info?.materials
+      ) &&
+      info.materials.length
+    ) {
+      return info.materials[0];
+    }
+
+    if (
+      Array.isArray(
+        info?.Materials
+      ) &&
+      info.Materials.length
+    ) {
+      return info.Materials[0];
+    }
+
+    return null;
+  }
+
+  function firstMaterialTexture(
+    info
+  ) {
+    const material =
+      firstMaterial(info);
+
+    if (!material) {
+      return "";
+    }
+
+    for (
+      const key of [
+        "baseColorTexture",
+        "BaseColorTexture",
+
+        "diffuseTexture",
+        "DiffuseTexture",
+
+        "emissiveTexture",
+        "EmissiveTexture",
+
+        "normalTexture",
+        "NormalTexture",
+
+        "opacityTexture",
+        "OpacityTexture",
+
+        "packedTexture",
+        "PackedTexture"
+      ]
+    ) {
+      const value =
+        material[key];
+
+      if (
+        typeof value ===
+          "string" &&
+        value.trim()
+      ) {
+        return value.trim();
+      }
+    }
+
+    return "";
+  }
+
+  function materialFidelity(
+    info
+  ) {
+    return String(
+      info?.materialFidelity ||
+      info?.MaterialFidelity ||
+      firstMaterial(info)
+        ?.fidelity ||
+      firstMaterial(info)
+        ?.Fidelity ||
+      "unknown"
+    ).toLowerCase();
+  }
+
+  function setMeta(
+    meta,
+    text,
+    fidelity = ""
+  ) {
+    if (!meta) return;
+
+    meta.textContent =
+      text || "";
+
+    meta.hidden =
+      !text;
+
+    if (fidelity) {
+      meta.dataset.level =
+        fidelity;
+    } else {
+      delete meta.dataset.level;
+    }
+  }
+
+  function setStatus(
+    status,
+    text,
+    state = ""
+  ) {
+    status.hidden =
+      false;
+
+    status.textContent =
+      String(text || "");
+
+    if (state) {
+      status.dataset.state =
+        state;
+    } else {
+      delete status.dataset.state;
+    }
+  }
+
+  function bindOrbitStick(stick, controller, signal) {
+    const knob = stick.querySelector("[data-novasparx-stick-knob]");
+    const keys = new Set();
+    const listeners = [];
+    const deadZone = 0.12;
+    const speed = 1.4;
+    let pointerId = null;
+    let frame = null;
+    let lastTime = 0;
+    let velocityX = 0;
+    let velocityY = 0;
+    let disposed = false;
+
+    const stopFrame = () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = null;
+      lastTime = 0;
+    };
+    const tick = now => {
+      frame = null;
+      if (disposed || (!velocityX && !velocityY)) return;
+      if (lastTime) {
+        const elapsed = Math.min(0.05, Math.max(0, (now - lastTime) / 1000));
+        controller.rotateBy?.(velocityX * speed * elapsed, -velocityY * speed * elapsed);
+      }
+      lastTime = now;
+      if (!disposed && (velocityX || velocityY)) frame = requestAnimationFrame(tick);
+    };
+    const setDisplacement = (x, y, radius) => {
+      const length = Math.hypot(x, y);
+      if (length > 1) { x /= length; y /= length; }
+      const magnitude = Math.min(1, length);
+      const scale = magnitude > deadZone ? (magnitude - deadZone) / ((1 - deadZone) * magnitude) : 0;
+      velocityX = x * scale;
+      velocityY = y * scale;
+      if (knob) knob.style.transform = `translate3d(${x * radius}px, ${y * radius}px, 0)`;
+      stick.classList.toggle("is-active", pointerId !== null || keys.size > 0);
+      if (disposed || (!velocityX && !velocityY)) {
+        stopFrame();
+      } else if (frame === null) {
+        lastTime = 0;
+        frame = requestAnimationFrame(tick);
+      }
+    };
+    const stickGeometry = () => {
+      const bounds = stick.getBoundingClientRect();
+      const radius = Math.max(1, (Math.min(bounds.width, bounds.height) - (knob?.offsetWidth || 36)) / 2 - 6);
+      return { bounds, radius };
+    };
+    const updatePointer = event => {
+      const { bounds, radius } = stickGeometry();
+      setDisplacement((event.clientX - bounds.left - bounds.width / 2) / radius,
+        (event.clientY - bounds.top - bounds.height / 2) / radius, radius);
+    };
+    const stopInput = () => {
+      const captured = pointerId;
+      pointerId = null;
+      keys.clear();
+      setDisplacement(0, 0, 0);
+      if (captured !== null) {
+        try { stick.releasePointerCapture(captured); } catch {}
+      }
+    };
+    const onPointerDown = event => {
+      if (disposed || pointerId !== null || event.isPrimary === false || (event.pointerType === "mouse" && event.button !== 0)) return;
+      event.preventDefault();
+      keys.clear();
+      pointerId = event.pointerId;
+      try { stick.focus({ preventScroll: true }); } catch { stick.focus(); }
+      try { stick.setPointerCapture(pointerId); } catch {}
+      updatePointer(event);
+    };
+    const onPointerMove = event => {
+      if (event.pointerId !== pointerId) return;
+      event.preventDefault();
+      updatePointer(event);
+    };
+    const onPointerEnd = event => {
+      if (event.pointerId === pointerId) stopInput();
+    };
+    const updateKeyboard = () => {
+      const x = Number(keys.has("ArrowRight")) - Number(keys.has("ArrowLeft"));
+      const y = Number(keys.has("ArrowDown")) - Number(keys.has("ArrowUp"));
+      setDisplacement(x, y, stickGeometry().radius);
+    };
+    const isArrow = key => ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(key);
+    const onKeyDown = event => {
+      if (!isArrow(event.key)) return;
+      event.preventDefault();
+      if (pointerId !== null || disposed) return;
+      keys.add(event.key);
+      updateKeyboard();
+    };
+    const onKeyUp = event => {
+      if (!isArrow(event.key)) return;
+      event.preventDefault();
+      keys.delete(event.key);
+      if (pointerId === null) updateKeyboard();
+    };
+    const listen = (target, name, listener) => {
+      target.addEventListener(name, listener);
+      listeners.push(() => target.removeEventListener(name, listener));
+    };
+    const cleanup = () => {
+      if (disposed) return;
+      disposed = true;
+      stopInput();
+      for (const remove of listeners) remove();
+      listeners.length = 0;
+    };
+    listen(stick, "pointerdown", onPointerDown);
+    listen(stick, "pointermove", onPointerMove);
+    listen(stick, "pointerup", onPointerEnd);
+    listen(stick, "pointercancel", onPointerEnd);
+    listen(stick, "lostpointercapture", onPointerEnd);
+    listen(stick, "keydown", onKeyDown);
+    listen(stick, "keyup", onKeyUp);
+    listen(stick, "blur", stopInput);
+    listen(window, "blur", stopInput);
+    listen(document, "visibilitychange", () => { if (document.hidden) stopInput(); });
+    if (signal) listen(signal, "abort", cleanup);
+    return cleanup;
+  }
+
+  function createHostUi(
+    host
+  ) {
+    host.innerHTML = `
+      <div class="mesh-image-panel fnaa-preview-panel">
+        <div class="mesh-image-panel-head">
+          <span>PREVIEW</span>
+          <span class="fnaa-preview-engine">
+            NovaSparx 2.0
+          </span>
+        </div>
+
+        <div class="mesh-image-stage">
+          <div
+            class="mesh-image-status"
+            aria-live="polite"
+          ></div>
+
+          <div
+            class="novasparx-live-viewer"
+            data-novasparx-viewer
+            hidden
+          ></div>
+
+          <img
+            class="mesh-preview-image"
+            alt=""
+            decoding="async"
+            hidden
+          />
+
+          <audio
+            class="novasparx-audio-player"
+            controls
+            preload="metadata"
+            hidden
+          ></audio>
+        </div>
+
+        <div
+          class="novasparx-viewer-controls"
+          data-novasparx-controls
+          hidden
+          aria-label="3D viewer controls"
+        >
+          <div class="novasparx-viewer-primary">
+            <div class="novasparx-orbit-control">
+              <span class="novasparx-stick-label">Rotate</span>
+              <div class="novasparx-orbit-stick" data-novasparx-stick tabindex="0"
+                role="group" aria-roledescription="analog stick"
+                aria-label="Rotate camera around Mesh. Drag or use arrow keys."
+                title="Drag or use arrow keys to rotate">
+                <span class="novasparx-stick-knob" data-novasparx-stick-knob aria-hidden="true"></span>
+              </div>
+            </div>
+            <label class="novasparx-zoom-control">
+              <span class="novasparx-zoom-label">Zoom <output data-novasparx-zoom-output>100%</output></span>
+              <input type="range" min="35" max="700" step="1" value="100"
+                data-novasparx-zoom aria-label="Mesh zoom" aria-valuetext="100%" />
+            </label>
+          </div>
+          <div class="novasparx-viewer-secondary">
+            <button class="json-view-button" type="button" data-novasparx-reset>Reset</button>
+            <button class="json-view-button" type="button" data-novasparx-wireframe aria-pressed="false">Wireframe</button>
+            <button class="json-view-button" type="button" data-novasparx-capture>Capture PNG</button>
+            <button class="json-view-button" type="button" data-novasparx-fullscreen>Fullscreen</button>
+          </div>
+        </div>
+
+        <div
+          class="mesh-image-meta"
+          hidden
+        ></div>
+      </div>`;
+
+    const viewerLabels = [
+      [
+        "[data-novasparx-reset]",
+        "resetView",
+        "Reset"
+      ],
+      [
+        "[data-novasparx-wireframe]",
+        "wireframe",
+        "Wireframe"
+      ],
+      [
+        "[data-novasparx-capture]",
+        "capturePNG",
+        "Capture PNG"
+      ],
+      [
+        "[data-novasparx-fullscreen]",
+        "fullscreen",
+        "Fullscreen"
+      ]
+    ];
+
+    for (
+      const [
+        selector,
+        key,
+        fallback
+      ] of viewerLabels
+    ) {
+      const button =
+        host.querySelector(
+          selector
+        );
+
+      if (button) {
+        button.textContent =
+          t(
+            key,
+            fallback
+          );
+      }
+    }
+
+    return {
+      hostMode: true,
+      panel:
+        host.querySelector(
+          ".mesh-image-panel"
+        ),
+
+      stage:
+        host.querySelector(
+          ".mesh-image-stage"
+        ),
+
+      status:
+        host.querySelector(
+          ".mesh-image-status"
+        ),
+
+      meta:
+        host.querySelector(
+          ".mesh-image-meta"
+        ),
+
+      image:
+        host.querySelector(
+          ".mesh-preview-image"
+        ),
+
+      audio:
+        host.querySelector(
+          ".novasparx-audio-player"
+        ),
+
+      viewer:
+        host.querySelector(
+          "[data-novasparx-viewer]"
+        ),
+
+      controls:
+        host.querySelector(
+          "[data-novasparx-controls]"
+        )
+    };
+  }
+
+  function resolveUi(
+    target
+  ) {
+    if (!target) {
+      return null;
+    }
+
+    const existingPanel =
+      target.matches?.(
+        ".mesh-image-panel"
+      )
+        ? target
+        : target.querySelector?.(
+            ".mesh-image-panel"
+          );
+
+    if (existingPanel) {
+      return {
+        hostMode: false,
+        panel:
+          existingPanel,
+
+        stage:
+          existingPanel.querySelector(
+            ".mesh-image-stage"
+          ),
+
+        status:
+          existingPanel.querySelector(
+            ".mesh-image-status"
+          ),
+
+        meta:
+          existingPanel.querySelector(
+            ".mesh-image-meta"
+          ),
+
+        image:
+          existingPanel.querySelector(
+            ".mesh-preview-image"
+          ),
+
+        audio:
+          existingPanel.querySelector(
+            ".novasparx-audio-player"
+          ),
+
+        viewer:
+          existingPanel.querySelector(
+            "[data-novasparx-viewer]"
+          ),
+
+        controls:
+          existingPanel.querySelector(
+            "[data-novasparx-controls]"
+          )
+      };
+    }
+
+    return createHostUi(
+      target
+    );
+  }
+
+  function resetUi(
+    ui,
+    preserveMesh = false
+  ) {
+    if (
+      !ui?.panel ||
+      !ui?.status ||
+      !ui?.image
+    ) {
+      return;
+    }
+
+    const mountedPath =
+      String(
+        ui.panel.dataset
+          .viewerPath ||
+        ""
+      ).trim();
+
+    if (mountedPath) {
+      release(
+        mountedPath,
+        { preserveMesh }
+      );
+    }
+
+    const previousPath =
+      String(
+        ui.panel.dataset
+          .previewAssetPath ||
+        ""
+      ).trim();
+
+    if (
+      previousPath &&
+      previousPath !==
+        mountedPath
+    ) {
+      release(
+        previousPath,
+        { preserveMesh }
+      );
+    }
+
+    delete ui.panel
+      .dataset.previewAssetPath;
+
+    ui.panel.hidden = false;
+
+    if (ui.stage) {
+      delete ui.stage.dataset
+        .previewState;
+    }
+
+    if (ui.viewer) {
+      ui.viewer.hidden =
+        true;
+
+      ui.viewer
+        .replaceChildren();
+    }
+
+    if (ui.controls) {
+      ui.controls.hidden =
+        true;
+    }
+
+    ui.image.hidden = true;
+
+    ui.image.removeAttribute(
+      "src"
+    );
+
+    if (ui.audio) {
+      try {
+        ui.audio.pause();
+      } catch {}
+
+      ui.audio.hidden =
+        true;
+
+      ui.audio.removeAttribute(
+        "src"
+      );
+
+      try {
+        ui.audio.load();
+      } catch {}
+    }
+
+    setStatus(
+      ui.status,
+      "Finding the best verified preview…"
+    );
+
+    setMeta(
+      ui.meta,
+      ""
+    );
+  }
+
+  async function tryKnownCatalogImage(
+    path,
+    ui
+  ) {
+    if (
+      !window.FortniteTools
+        ?.findKnownImage
+    ) {
+      return false;
+    }
+
+    setStatus(
+      ui.status,
+      "Checking the verified FNAA / Th3Dry image catalogue…"
+    );
+
+    const url =
+      await window.FortniteTools
+        .findKnownImage(path);
+
+    if (!url) {
+      return false;
+    }
+
+    const ok =
+      await loadImage(
+        ui.image,
+        url,
+        10_000
+      );
+
+    if (!ok) {
+      ui.image.removeAttribute(
+        "src"
+      );
+
+      return false;
+    }
+
+    ui.image.hidden = false;
+    ui.status.hidden = true;
+
+    setMeta(
+      ui.meta,
+      "Verified catalogue image • Th3Dry / FNAA",
+      "high"
+    );
+
+    return true;
+  }
+
+  function safePreviewFilename(
+    path
+  ) {
+    const base =
+      assetName(path)
+        .replace(
+          /[^A-Za-z0-9._-]+/g,
+          "_"
+        )
+        .replace(
+          /^_+|_+$/g,
+          ""
+        ) ||
+      "NovaSparx_Asset";
+
+    return (
+      base +
+      "_preview.png"
+    );
+  }
+
+  function savePreviewBlob(
+    blob,
+    filename
+  ) {
+    const url =
+      URL.createObjectURL(
+        blob
+      );
+
+    const anchor =
+      document.createElement(
+        "a"
+      );
+
+    anchor.href =
+      url;
+
+    anchor.download =
+      filename;
+
+    document.body
+      .appendChild(
+        anchor
+      );
+
+    anchor.click();
+    anchor.remove();
+
+    setTimeout(
+      () => {
+        try {
+          URL.revokeObjectURL(
+            url
+          );
+        } catch {}
+      },
+      1_500
+    );
+  }
+
+  function previewUiFromImage(
+    image
+  ) {
+    const panel =
+      image?.closest?.(
+        ".mesh-image-panel"
+      );
+
+    return panel
+      ? resolveUi(panel)
+      : null;
+  }
+
+  function viewerNotice(
+    ui,
+    path,
+    text,
+    state = ""
+  ) {
+    if (!ui?.status) {
+      return;
+    }
+
+    setStatus(
+      ui.status,
+      text,
+      state
+    );
+
+    setTimeout(
+      () => {
+        if (
+          String(
+            ui.panel?.dataset
+              ?.viewerPath ||
+            ""
+          ) ===
+            String(
+              path || ""
+            ).trim()
+        ) {
+          ui.status.hidden =
+            true;
+
+          delete ui.status
+            .dataset.state;
+        }
+      },
+      1_900
+    );
+  }
+
+  function showModelUnavailable(
+    ui,
+    message,
+    inspection = null
+  ) {
+    if (ui?.viewer) {
+      ui.viewer.hidden =
+        true;
+
+      ui.viewer
+        .replaceChildren();
+    }
+
+    if (ui?.controls) {
+      ui.controls.hidden =
+        true;
+    }
+
+    if (ui?.image) {
+      ui.image.hidden =
+        true;
+
+      ui.image.removeAttribute(
+        "src"
+      );
+    }
+
+    if (ui?.stage) {
+      ui.stage.dataset
+        .previewState =
+        "model-error";
+    }
+
+    setStatus(
+      ui.status,
+      message ||
+        "The 3D model could not be rendered.",
+      "error"
+    );
+
+    setMeta(
+      ui.meta,
+      ""
+    );
+
+    return {
+      state: "error",
+      kind:
+        "3d-model-unavailable",
+      inspection
+    };
+  }
+
+  async function mountNovaManifest(
+    path,
+    manifest,
+    ui,
+    sourceLabel =
+      "NovaSparx • live 3D",
+    options = {}
+  ) {
+    if (
+      !ui?.viewer ||
+      !ui?.panel ||
+      !window.NovaSparxRenderer
+        ?.mount
+    ) {
+      return null;
+    }
+
+    const signal =
+      options.signal ||
+      window.NovaSparxBrowserGuard
+        ?.activeSignal?.() ||
+      null;
+
+    throwIfAborted(
+      signal
+    );
+
+    const key =
+      String(
+        options.sessionKey ||
+        ui.panel.dataset
+          .previewAssetPath ||
+        path ||
+        ""
+      ).trim();
+
+    release(
+      key,
+      { preserveMesh: options.preserveMesh === true }
+    );
+
+    trimViewerSessions(
+      key
+    );
+
+    ui.image.hidden =
+      true;
+
+    ui.image.removeAttribute(
+      "src"
+    );
+
+    ui.viewer.hidden =
+      false;
+
+    ui.viewer
+      .replaceChildren();
+
+    if (ui.controls) {
+      ui.controls.hidden =
+        true;
+    }
+
+    if (ui.stage) {
+      ui.stage.dataset
+        .previewState =
+        "live-3d";
+    }
+
+    setStatus(
+      ui.status,
+      "NovaSparx: opening interactive 3D viewer…"
+    );
+
+    let controller =
+      null;
+
+    const zoomInput = ui.controls?.querySelector("[data-novasparx-zoom]");
+    const zoomOutput = ui.controls?.querySelector("[data-novasparx-zoom-output]");
+    let viewActive = true;
+    let lastZoomPercent = null;
+    const syncViewControls = (view = {}) => {
+      if (!viewActive) return;
+      const zoom = Number(view.zoom);
+      if (!Number.isFinite(zoom)) return;
+      const percent = Math.round(Math.max(35, Math.min(700, zoom * 100)));
+      if (percent === lastZoomPercent) return;
+      lastZoomPercent = percent;
+      if (zoomInput) {
+        zoomInput.value = String(percent);
+        zoomInput.setAttribute("aria-valuetext", `${percent}%`);
+      }
+      if (zoomOutput) zoomOutput.textContent = `${percent}%`;
+    };
+
+    try {
+      controller =
+        await window
+          .NovaSparxRenderer
+          .mount(
+            manifest,
+            ui.viewer,
+            {
+              signal,
+              onViewChange: syncViewControls
+            }
+          );
+
+      throwIfAborted(
+        signal
+      );
+    } catch (error) {
+      viewActive = false;
+      try {
+        controller
+          ?.dispose?.();
+      } catch {}
+
+      ui.viewer.hidden =
+        true;
+
+      ui.viewer
+        .replaceChildren();
+
+      throw error;
+    }
+
+    const sessionRecord = {
+      controller,
+      host:
+        ui.viewer,
+      controls:
+        ui.controls,
+      panel:
+        ui.panel,
+      cleanup:
+        [() => { viewActive = false; }]
+    };
+
+    viewerSessions.set(
+      key,
+      sessionRecord
+    );
+
+    ui.panel.dataset
+      .viewerPath =
+      key;
+
+    ui.status.hidden =
+      true;
+
+    if (ui.controls) {
+      ui.controls.hidden =
+        false;
+
+      syncViewControls(controller.getView?.() || { zoom: 1 });
+      if (zoomInput) {
+        zoomInput.oninput = () => {
+          const zoom = Number(zoomInput.value) / 100;
+          controller.setZoom?.(zoom);
+          syncViewControls(controller.getView?.() || { zoom });
+        };
+      }
+
+      const stick = ui.controls.querySelector("[data-novasparx-stick]");
+      if (stick) sessionRecord.cleanup.push(bindOrbitStick(stick, controller, signal));
+
+      const resetButton =
+        ui.controls
+          .querySelector(
+            "[data-novasparx-reset]"
+          );
+
+      const wireframeButton =
+        ui.controls
+          .querySelector(
+            "[data-novasparx-wireframe]"
+          );
+
+      const captureButton =
+        ui.controls
+          .querySelector(
+            "[data-novasparx-capture]"
+          );
+
+      const fullscreenButton =
+        ui.controls
+          .querySelector(
+            "[data-novasparx-fullscreen]"
+          );
+
+      if (resetButton) {
+        resetButton.onclick =
+          () => {
+            controller.reset?.();
+            syncViewControls(controller.getView?.() || { zoom: 1 });
+          };
+      }
+
+      if (wireframeButton) {
+        wireframeButton.setAttribute(
+          "aria-pressed",
+          "false"
+        );
+
+        wireframeButton.onclick =
+          () => {
+            try {
+              const enabled =
+                controller
+                  .toggleWireframe?.();
+
+              wireframeButton
+                .setAttribute(
+                  "aria-pressed",
+                  enabled
+                    ? "true"
+                    : "false"
+                );
+            } catch (error) {
+              viewerNotice(
+                ui,
+                key,
+                error?.message ||
+                  "Wireframe is unavailable for this mesh.",
+                "error"
+              );
+            }
+          };
+      }
+
+      if (captureButton) {
+        captureButton.onclick =
+          async () => {
+            if (
+              captureButton.disabled
+            ) {
+              return;
+            }
+
+            captureButton.disabled =
+              true;
+
+            try {
+              const blob =
+                await controller
+                  .capture?.();
+
+              if (!blob) {
+                throw new Error(
+                  "Capture could not be created."
+                );
+              }
+
+              savePreviewBlob(
+                blob,
+                safePreviewFilename(
+                  key
+                )
+              );
+
+              viewerNotice(
+                ui,
+                key,
+                "PNG capture ready."
+              );
+            } catch (error) {
+              viewerNotice(
+                ui,
+                key,
+                error?.message ||
+                  "PNG capture failed.",
+                "error"
+              );
+            } finally {
+              captureButton.disabled =
+                false;
+            }
+          };
+      }
+
+      if (fullscreenButton) {
+        const fullscreenTarget =
+          ui.panel;
+
+        const requestFullscreen =
+          fullscreenTarget
+            ?.requestFullscreen ||
+          fullscreenTarget
+            ?.webkitRequestFullscreen;
+
+        fullscreenButton.disabled =
+          false;
+
+        const syncFullscreenButton =
+          () => {
+            const nativeActive =
+              document.fullscreenElement ===
+                fullscreenTarget ||
+              document.webkitFullscreenElement ===
+                fullscreenTarget;
+
+            const fallbackActive =
+              fullscreenTarget
+                ?.classList
+                .contains(
+                  "novasparx-viewer-expanded"
+                );
+
+            const active =
+              nativeActive ||
+              fallbackActive;
+
+            fullscreenButton
+              .setAttribute(
+                "aria-pressed",
+                active
+                  ? "true"
+                  : "false"
+              );
+
+            fullscreenButton.textContent =
+              active
+                ? t(
+                    "exitFullscreen",
+                    "Exit Fullscreen"
+                  )
+                : t(
+                    "fullscreen",
+                    "Fullscreen"
+                  );
+          };
+
+        fullscreenButton.onclick =
+          async () => {
+            const nativeActive =
+              document.fullscreenElement ===
+                fullscreenTarget ||
+              document.webkitFullscreenElement ===
+                fullscreenTarget;
+
+            const fallbackActive =
+              fullscreenTarget
+                ?.classList
+                .contains(
+                  "novasparx-viewer-expanded"
+                );
+
+            try {
+              if (nativeActive) {
+                const exitFullscreen =
+                  document.exitFullscreen ||
+                  document.webkitExitFullscreen;
+
+                if (
+                  typeof exitFullscreen ===
+                    "function"
+                ) {
+                  await exitFullscreen
+                    .call(
+                      document
+                    );
+                }
+              } else if (
+                fallbackActive
+              ) {
+                fullscreenTarget
+                  .classList
+                  .remove(
+                    "novasparx-viewer-expanded"
+                  );
+              } else if (
+                typeof requestFullscreen ===
+                  "function"
+              ) {
+                await requestFullscreen
+                  .call(
+                    fullscreenTarget
+                  );
+              } else {
+                fullscreenTarget
+                  .classList
+                  .add(
+                    "novasparx-viewer-expanded"
+                  );
+              }
+
+              syncFullscreenButton();
+            } catch (error) {
+              // Safari on iPhone does not expose arbitrary-element fullscreen.
+              // Fall back to an in-page full-viewport viewer instead.
+              try {
+                fullscreenTarget
+                  .classList
+                  .toggle(
+                    "novasparx-viewer-expanded",
+                    !fallbackActive
+                  );
+
+                syncFullscreenButton();
+              } catch {
+                viewerNotice(
+                  ui,
+                  key,
+                  error?.message ||
+                    "Fullscreen is unavailable on this device.",
+                  "error"
+                );
+              }
+            }
+          };
+
+        fullscreenButton
+          .setAttribute(
+            "aria-pressed",
+            "false"
+          );
+
+        const onFullscreenChange =
+          () => {
+            syncFullscreenButton();
+          };
+
+        document.addEventListener(
+          "fullscreenchange",
+          onFullscreenChange
+        );
+
+        document.addEventListener(
+          "webkitfullscreenchange",
+          onFullscreenChange
+        );
+
+        sessionRecord.cleanup
+          .push(
+            () => {
+              document.removeEventListener(
+                "fullscreenchange",
+                onFullscreenChange
+              );
+
+              document.removeEventListener(
+                "webkitfullscreenchange",
+                onFullscreenChange
+              );
+            }
+          );
+
+        syncFullscreenButton();
+      }
+    }
+
+    const fidelity =
+      String(
+        controller
+          ?.materialFidelity ||
+        manifest?.metadata
+          ?.materialFidelity ||
+        "unknown"
+      ).toLowerCase();
+
+    setMeta(
+      ui.meta,
+      ""
+    );
+
+    return {
+      interactive:
+        true,
+      controller,
+      vertexCount:
+        controller?.vertexCount ||
+        0,
+      triangleCount:
+        controller?.triangleCount ||
+        0,
+      materialCount:
+        controller?.materialCount ||
+        0,
+      textured:
+        Boolean(
+          controller?.textured
+        ),
+      normalMapped:
+        Boolean(
+          controller?.normalMapped
+        ),
+      materialFidelity:
+        fidelity
+    };
+  }
+
+  async function renderNovaManifest(
+    path,
+    manifest,
+    image,
+    status,
+    meta,
+    sourceLabel =
+      "NovaSparx 1.1",
+    options = {}
+  ) {
+    const signal =
+      options.signal ||
+      window.NovaSparxBrowserGuard
+        ?.activeSignal?.() ||
+      null;
+
+    throwIfAborted(
+      signal
+    );
+
+    const ui =
+      options.ui ||
+      previewUiFromImage(
+        image
+      );
+
+    const resourceKey =
+      String(
+        options.sessionKey ||
+        ui?.panel?.dataset
+          ?.previewAssetPath ||
+        path ||
+        ""
+      ).trim();
+
+    if (
+      ui &&
+      window.NovaSparxRenderer
+        ?.mount
+    ) {
+      return mountNovaManifest(
+        path,
+        manifest,
+        ui,
+        sourceLabel,
+        {
+          signal,
+          sessionKey:
+            resourceKey
+        }
+      );
+    }
+
+    if (
+      !window.NovaSparxRenderer
+        ?.render
+    ) {
+      throw new Error(
+        "NovaSparx renderer is not loaded."
+      );
+    }
+
+    setStatus(
+      status,
+      "NovaSparx: rendering CUE4Parse geometry to PNG…"
+    );
+
+    const result =
+      await window.NovaSparxRenderer
+        .render(
+          manifest,
+          {
+            signal
+          }
+        );
+
+    throwIfAborted(
+      signal
+    );
+
+    release(
+      resourceKey
+    );
+
+    const url =
+      URL.createObjectURL(
+        result.blob
+      );
+
+    rememberObjectUrl(
+      resourceKey,
+      url
+    );
+
+    image.src = url;
+    image.alt =
+      `${assetName(resourceKey)} 3D preview`;
+    image.hidden = false;
+
+    status.hidden = true;
+
+    const fidelity =
+      String(
+        manifest?.metadata
+          ?.materialFidelity ||
+        "unknown"
+      ).toLowerCase();
+
+    const quality =
+      result.textured
+        ? (
+            result.normalMapped
+              ? "Textured + normal map"
+              : "Textured"
+          )
+        : "Neutral 3D geometry";
+
+    setMeta(
+      meta,
+      (
+        `${sourceLabel} • ${quality} • ` +
+        `material fidelity: ${fidelity} • ` +
+        `${result.width}×${result.height} • ` +
+        `${Number(
+          result.vertexCount || 0
+        ).toLocaleString()} vertices • ` +
+        `${Number(
+          result.triangleCount || 0
+        ).toLocaleString()} triangles`
+      ),
+      fidelity
+    );
+
+    return result;
+  }
+
+  async function renderNovaMesh(
+    path,
+    image,
+    status,
+    meta,
+    options = {}
+  ) {
+    if (!window.NovaSparx) {
+      throw new Error(
+        "NovaSparx resolver is not loaded."
+      );
+    }
+
+    if (
+      window.NovaSparxLayers
+        ?.resolveMesh
+    ) {
+      setStatus(
+        status,
+        "NovaSparx: trying device cache, browser parser, then streamed fallbacks…"
+      );
+
+      const result =
+        await window.NovaSparxLayers
+          .resolveMesh(
+            path,
+            {
+              preferHQ: true,
+              signal:
+                options.signal ||
+                null,
+              backend:
+                options.backend !==
+                false,
+              backendJson:
+                options.backendJson !==
+                false
+            }
+          );
+
+      return renderNovaManifest(
+        path,
+        result.manifest,
+        image,
+        status,
+        meta,
+        options.sourceLabel ||
+          result.sourceLabel ||
+          "NovaSparx • layered mesh",
+        {
+          signal:
+            options.signal ||
+            null
+        }
+      );
+    }
+
+    // Compatibility path for older cached FNAA pages.
+    let manifest = null;
+    let sourceLabel =
+      "NovaSparx • client-rendered mesh";
+
+    if (
+      window.NovaSparx
+        ?.clientMesh
+    ) {
+      try {
+        setStatus(
+          status,
+          "NovaSparx: streaming compact mesh data to this device…"
+        );
+
+        manifest =
+          await window.NovaSparx
+            .clientMesh(path);
+      } catch (error) {
+        console.warn(
+          "FNAA client mesh fallback:",
+          error
+        );
+      }
+    }
+
+    if (!manifest) {
+      if (
+        !window.NovaSparx
+          ?.resolve
+      ) {
+        throw new Error(
+          "NovaSparx mesh resolver is not available."
+        );
+      }
+
+      setStatus(
+        status,
+        "NovaSparx: resolving compatibility geometry…"
+      );
+
+      manifest =
+        await window.NovaSparx
+          .resolve(
+            path,
+            {
+              preferHQ: true,
+              signal:
+                options.signal ||
+                null
+            }
+          );
+
+      sourceLabel =
+        options.sourceLabel ||
+        "NovaSparx • compatibility mesh";
+    }
+
+    return renderNovaManifest(
+      path,
+      manifest,
+      image,
+      status,
+      meta,
+      sourceLabel,
+      {
+        signal:
+          options.signal ||
+          null
+      }
+    );
+  }
+
+  function previewDeadline(
+    parentSignal,
+    timeoutMs,
+    reason =
+      "novasparx-fast-preview-timeout"
+  ) {
+    const controller =
+      new AbortController();
+
+    let timedOut =
+      false;
+
+    const relayAbort =
+      () => {
+        try {
+          controller.abort(
+            parentSignal?.reason ||
+            "parent-preview-aborted"
+          );
+        } catch {}
+      };
+
+    if (
+      parentSignal?.aborted
+    ) {
+      relayAbort();
+    } else {
+      parentSignal
+        ?.addEventListener?.(
+          "abort",
+          relayAbort,
+          {
+            once:
+              true
+          }
+        );
+    }
+
+    const timer =
+      setTimeout(
+        () => {
+          timedOut =
+            true;
+
+          try {
+            controller.abort(
+              reason
+            );
+          } catch {}
+        },
+        Math.max(
+          1_500,
+          Number(timeoutMs) ||
+          6_500
+        )
+      );
+
+    return {
+      signal:
+        controller.signal,
+
+      timedOut:
+        () =>
+          timedOut,
+
+      cleanup() {
+        clearTimeout(
+          timer
+        );
+
+        parentSignal
+          ?.removeEventListener?.(
+            "abort",
+            relayAbort
+          );
+      }
+    };
+  }
+
+  function fastImageTimeout(
+    desktopMs = 10_000,
+    mobileMs = 6_000
+  ) {
+    return window
+      .NovaSparxBrowserGuard
+      ?.status?.()
+      ?.isMobile
+        ? mobileMs
+        : desktopMs;
+  }
+
+  async function tryExactTypedImage(
+    path,
+    ui,
+    label
+  ) {
+    const base =
+      endpoint(
+        "/image",
+        path
+      );
+
+    if (!base) {
+      return false;
+    }
+
+    const url =
+      new URL(
+        base
+      );
+
+    url.searchParams.set(
+      "direct",
+      "1"
+    );
+
+    setStatus(
+      ui.status,
+      "Checking exact typed preview…"
+    );
+
+    const ok =
+      await loadImage(
+        ui.image,
+        url.toString(),
+        fastImageTimeout(
+          9_000,
+          5_000
+        )
+      );
+
+    if (!ok) {
+      ui.image.removeAttribute(
+        "src"
+      );
+
+      return false;
+    }
+
+    ui.image.hidden = false;
+    ui.status.hidden = true;
+
+    setMeta(
+      ui.meta,
+      label ||
+        "Exact typed asset preview • no cross-type guessing",
+      "high"
+    );
+
+    return true;
+  }
+
+  async function tryDirectAssetImage(
+    path,
+    ui
+  ) {
+    setStatus(
+      ui.status,
+      "Checking verified asset image…"
+    );
+
+    const ok =
+      await loadImage(
+        ui.image,
+        endpoint(
+          "/image",
+          path
+        ),
+        fastImageTimeout(
+          12_000,
+          7_000
+        )
+      );
+
+    if (!ok) {
+      ui.image
+        .removeAttribute(
+          "src"
+        );
+
+      return false;
+    }
+
+    ui.image.hidden = false;
+    ui.status.hidden = true;
+
+    setMeta(
+      ui.meta,
+      "Direct verified asset image • FNAA resolver",
+      "high"
+    );
+
+    return true;
+  }
+
+  async function tryVerifiedBlueprintImage(
+    association,
+    ui
+  ) {
+    const blueprintPath =
+      String(
+        association?.blueprintPath ||
+        ""
+      ).trim();
+
+    if (!blueprintPath) {
+      return false;
+    }
+
+    setStatus(
+      ui.status,
+      "NovaSparx: checking the verified Blueprint preview…"
+    );
+
+    const directBase =
+      endpoint(
+        "/image",
+        blueprintPath
+      );
+
+    if (directBase) {
+      const directUrl =
+        new URL(
+          directBase
+        );
+
+      directUrl.searchParams.set(
+        "direct",
+        "1"
+      );
+
+      const directOk =
+        await loadImage(
+          ui.image,
+          directUrl.toString(),
+          fastImageTimeout(
+            9_000,
+            5_000
+          )
+        );
+
+      if (directOk) {
+        ui.image.hidden = false;
+        ui.status.hidden = true;
+
+        setMeta(
+          ui.meta,
+          "Verified Blueprint preview • exact Blueprint → Mesh relationship",
+          "high"
+        );
+
+        return true;
+      }
+
+      ui.image.removeAttribute(
+        "src"
+      );
+    }
+
+    const previewImagePath =
+      String(
+        association
+          ?.previewImagePath ||
+        ""
+      ).trim();
+
+    if (!previewImagePath) {
+      return false;
+    }
+
+    // This path came from a verified Blueprint JSON property such as Icon,
+    // PreviewImage or Thumbnail. /image will resolve this exact texture only;
+    // raw textures are never promoted into Mesh/Blueprint lookalikes.
+    setStatus(
+      ui.status,
+      "NovaSparx: loading a Blueprint-verified preview texture…"
+    );
+
+    const textureOk =
+      await loadImage(
+        ui.image,
+        endpoint(
+          "/image",
+          previewImagePath
+        ),
+        fastImageTimeout(
+          9_000,
+          5_000
+        )
+      );
+
+    if (!textureOk) {
+      ui.image.removeAttribute(
+        "src"
+      );
+
+      return false;
+    }
+
+    ui.image.hidden = false;
+    ui.status.hidden = true;
+
+    setMeta(
+      ui.meta,
+      "Blueprint JSON verified visual • exact reference • no cross-type guessing",
+      "high"
+    );
+
+    return true;
+  }
+
+  async function tryTextureDecode(
+    path,
+    ui,
+    label =
+      "Decoded Fortnite texture • NovaSparx Layer 8"
+  ) {
+    const signal =
+      ui?.requestSignal ||
+      window.NovaSparxBrowserGuard
+        ?.activeSignal?.() ||
+      null;
+
+    const runtime =
+      window.NovaSparxTextureRuntime;
+
+    if (
+      typeof runtime
+        ?.resolveTexture ===
+        "function"
+    ) {
+      try {
+        const browserState =
+          window.NovaSparxBrowserGuard
+            ?.status?.() ||
+          {};
+
+        const maxSize =
+          browserState.isIOS
+            ? 512
+            : browserState.isMobile
+              ? 768
+              : 1024;
+
+        setStatus(
+          ui.status,
+          "NovaSparx Layer 8: decoding this Texture in your browser…"
+        );
+
+        const result =
+          await runtime
+            .resolveTexture(
+              path,
+              {
+                signal,
+                maxSize
+              }
+            );
+
+        throwIfAborted(
+          signal
+        );
+
+        const objectUrl =
+          URL.createObjectURL(
+            result.blob
+          );
+
+        let loaded =
+          false;
+
+        try {
+          loaded =
+            await loadImage(
+              ui.image,
+              objectUrl,
+              20_000,
+              signal
+            );
+
+          throwIfAborted(
+            signal
+          );
+
+          if (loaded) {
+            rememberObjectUrl(
+              path,
+              objectUrl
+            );
+          }
+        } finally {
+          if (!loaded) {
+            try {
+              URL.revokeObjectURL(
+                objectUrl
+              );
+            } catch {}
+          }
+        }
+
+        if (loaded) {
+          ui.image.hidden =
+            false;
+
+          ui.status.hidden =
+            true;
+
+          setMeta(
+            ui.meta,
+            (
+              label +
+              " • browser CUE4Parse" +
+              " • " +
+              result.width +
+              "×" +
+              result.height
+            ),
+            "high"
+          );
+
+          return true;
+        }
+      } catch (error) {
+        if (
+          signal?.aborted ||
+          error?.name ===
+            "AbortError"
+        ) {
+          throw abortError(
+            signal
+          );
+        }
+
+        const failure = new Error(error?.message || String(error), { cause: error });
+        failure.code = "NOVASPARX_TEXTURE_FAILED";
+        throw failure;
+      }
+    }
+
+    const unavailable = new Error("View Image unavailable: browser Texture runtime or image output is unavailable.");
+    unavailable.code = "NOVASPARX_TEXTURE_FAILED";
+    throw unavailable;
+  }
+
+  async function tryPublicRelatedImage(
+    path,
+    ui,
+    signal = null,
+    label =
+      "Verified related texture • 3D unavailable • no Back4App"
+  ) {
+    if (
+      !window.NovaSparxAssociations
+        ?.publicPreview
+    ) {
+      return {
+        rendered:
+          false,
+        plan:
+          null
+      };
+    }
+
+    const plan =
+      await window
+        .NovaSparxAssociations
+        .publicPreview(
+          path,
+          {
+            signal
+          }
+        );
+
+    throwIfAborted(
+      signal
+    );
+
+    for (
+      const previewPath of
+      plan?.previewImagePaths ||
+      []
+    ) {
+      if (
+        await tryExactTypedImage(
+          previewPath,
+          ui,
+          label
+        )
+      ) {
+        setMeta(
+          ui.meta,
+          label,
+          "partial"
+        );
+
+        return {
+          rendered:
+            true,
+          plan
+        };
+      }
+
+      throwIfAborted(
+        signal
+      );
+    }
+
+    return {
+      rendered:
+        false,
+      plan
+    };
+  }
+
+  async function tryUniversalPreview(
+    path,
+    ui,
+    options = {}
+  ) {
+    if (
+      !window.NovaSparx
+        ?.preview
+    ) {
+      return {
+        rendered: false,
+        plan: null
+      };
+    }
+
+    setStatus(
+      ui.status,
+      "NovaSparx Layer 8: following verified CUE4Parse visual references…"
+    );
+
+    try {
+      const plan =
+        await window.NovaSparx
+          .preview(
+            path,
+            options
+          );
+
+      if (
+        plan?.kind ===
+          "texture" &&
+        plan.previewPath
+      ) {
+        const rendered =
+          await tryTextureDecode(
+            plan.previewPath,
+            ui,
+            (
+              "Layer 8 • CUE4Parse referenced texture" +
+              (
+                plan.textureWidth &&
+                plan.textureHeight
+                  ? ` • ${plan.textureWidth}×${plan.textureHeight}`
+                  : ""
+              )
+            )
+          );
+
+        return {
+          rendered,
+          plan
+        };
+      }
+
+      if (
+        plan?.kind ===
+          "mesh" &&
+        plan.manifest
+      ) {
+        await renderNovaManifest(
+          path,
+          plan.manifest,
+          ui.image,
+          ui.status,
+          ui.meta,
+          "Layer 8 • CUE4Parse referenced model",
+          {
+            signal:
+              options.signal ||
+              null
+          }
+        );
+
+        return {
+          rendered: true,
+          plan
+        };
+      }
+
+      return {
+        rendered: false,
+        plan
+      };
+    } catch (error) {
+      if (error?.code === "NOVASPARX_TEXTURE_FAILED") throw error;
+      if (
+        options.signal
+          ?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        throw abortError(
+          options.signal
+        );
+      }
+
+      return {
+        rendered: false,
+        error: true,
+        plan: {
+          state: "error",
+          kind: "metadata",
+          source:
+            "preview-endpoint-error",
+          attemptedReferences: [],
+          error:
+            error?.message ||
+            String(error)
+        }
+      };
+    }
+  }
+
+  function evidenceColor(
+    info
+  ) {
+    const material =
+      firstMaterial(info);
+
+    const value =
+      material?.baseColor ||
+      material?.BaseColor;
+
+    if (
+      !Array.isArray(value) ||
+      value.length < 3
+    ) {
+      return "rgb(79, 149, 255)";
+    }
+
+    const channels =
+      value.slice(0, 3)
+        .map(
+          (channel) =>
+            Math.round(
+              Math.max(
+                0,
+                Math.min(
+                  1,
+                  Number(channel) || 0
+                )
+              ) * 255
+            )
+        );
+
+    return `rgb(${channels.join(", ")})`;
+  }
+
+  function roundedRect(
+    context,
+    x,
+    y,
+    width,
+    height,
+    radius
+  ) {
+    const r =
+      Math.min(
+        radius,
+        width / 2,
+        height / 2
+      );
+
+    context.beginPath();
+    context.moveTo(x + r, y);
+    context.lineTo(x + width - r, y);
+    context.quadraticCurveTo(
+      x + width,
+      y,
+      x + width,
+      y + r
+    );
+    context.lineTo(
+      x + width,
+      y + height - r
+    );
+    context.quadraticCurveTo(
+      x + width,
+      y + height,
+      x + width - r,
+      y + height
+    );
+    context.lineTo(x + r, y + height);
+    context.quadraticCurveTo(
+      x,
+      y + height,
+      x,
+      y + height - r
+    );
+    context.lineTo(x, y + r);
+    context.quadraticCurveTo(
+      x,
+      y,
+      x + r,
+      y
+    );
+    context.closePath();
+  }
+
+  function drawWrappedText(
+    context,
+    text,
+    x,
+    y,
+    maxWidth,
+    lineHeight,
+    maxLines = 3
+  ) {
+    const words =
+      String(text || "")
+        .split(/\s+/)
+        .filter(Boolean);
+
+    const lines = [];
+    let line = "";
+
+    for (const word of words) {
+      const candidate =
+        line
+          ? `${line} ${word}`
+          : word;
+
+      if (
+        context.measureText(
+          candidate
+        ).width > maxWidth &&
+        line
+      ) {
+        lines.push(line);
+        line = word;
+
+        if (
+          lines.length >=
+          maxLines
+        ) {
+          break;
+        }
+      } else {
+        line = candidate;
+      }
+    }
+
+    if (
+      line &&
+      lines.length < maxLines
+    ) {
+      lines.push(line);
+    }
+
+    lines.forEach(
+      (item, index) => {
+        const final =
+          index === maxLines - 1 &&
+          words.join(" ").length >
+            lines.join(" ").length
+            ? `${item.replace(/[.\s]+$/, "")}…`
+            : item;
+
+        context.fillText(
+          final,
+          x,
+          y + index * lineHeight
+        );
+      }
+    );
+
+    return y +
+      lines.length * lineHeight;
+  }
+
+  function canvasPng(
+    canvas
+  ) {
+    return new Promise(
+      (resolve, reject) => {
+        canvas.toBlob(
+          (blob) =>
+            blob
+              ? resolve(blob)
+              : reject(
+                  new Error(
+                    "Evidence PNG encoding failed."
+                  )
+                ),
+          "image/png"
+        );
+      }
+    );
+  }
+
+  function xmlEscape(
+    value
+  ) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+  }
+
+  function evidenceSvgUrl(
+    path,
+    info,
+    plan
+  ) {
+    const name =
+      xmlEscape(assetName(path));
+
+    const kind =
+      xmlEscape(
+        readableAssetKind(
+          info,
+          path
+        ).toUpperCase()
+      );
+
+    const safePath =
+      xmlEscape(path);
+
+    const references =
+      Array.isArray(
+        info?.references
+      )
+        ? info.references
+        : Array.isArray(
+            info?.References
+          )
+          ? info.References
+          : [];
+
+    const attempted =
+      Array.isArray(
+        plan?.attemptedReferences
+      )
+        ? plan.attemptedReferences
+          .length
+        : 0;
+
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+        <defs>
+          <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#07101f"/>
+            <stop offset="0.55" stop-color="#111d35"/>
+            <stop offset="1" stop-color="#071427"/>
+          </linearGradient>
+        </defs>
+        <rect width="1024" height="1024" fill="url(#bg)"/>
+        <rect width="18" height="1024" fill="#45d6ff"/>
+        <rect x="64" y="64" width="896" height="896" rx="42" fill="#ffffff" opacity="0.06"/>
+        <g font-family="system-ui,Segoe UI,sans-serif">
+          <text x="112" y="136" fill="#45d6ff" font-size="27" font-weight="700">NOVASPARX • LAYER 8</text>
+          <text x="112" y="238" fill="#f5f8ff" font-size="54" font-weight="800">${name}</text>
+          <text x="112" y="310" fill="#b9c8e7" font-size="31" font-weight="600">${kind}</text>
+          <rect x="104" y="360" width="816" height="218" rx="28" fill="#050b18" opacity="0.62"/>
+          <text x="142" y="430" fill="#dce7ff" font-size="23">${safePath}</text>
+          <text x="154" y="742" fill="#dce7ff" font-size="25" font-weight="600">${references.length} verified references</text>
+          <text x="154" y="796" fill="#dce7ff" font-size="25" font-weight="600">${attempted} visual candidates checked</text>
+          <text x="112" y="920" fill="#8495ba" font-size="22">VERIFIED METADATA IMAGE • NOT A VISUAL RECONSTRUCTION</text>
+        </g>
+      </svg>`;
+
+    return (
+      "data:image/svg+xml;charset=utf-8," +
+      encodeURIComponent(svg)
+    );
+  }
+
+  function showEvidenceImage(
+    path,
+    name,
+    ui,
+    url,
+    info,
+    format,
+    plan = null
+  ) {
+    ui.image.src = url;
+    ui.image.alt =
+      `${name} verified metadata preview`;
+    ui.image.hidden = false;
+    ui.status.hidden = true;
+
+    if (ui.stage) {
+      ui.stage.dataset
+        .previewState =
+        "evidence-image";
+    }
+
+    const failure =
+      String(
+        plan?.error || ""
+      ).trim();
+
+    setMeta(
+      ui.meta,
+      failure
+        ? `Layer 8 • NovaSparx unavailable: ${failure} • evidence ${format}`
+        : `Layer 8 • verified evidence ${format} • no visual details invented`,
+      "partial"
+    );
+
+    return {
+      state: "ready",
+      kind: "evidence-image",
+      inspection: info || null
+    };
+  }
+
+  async function renderEvidenceImage(
+    path,
+    info,
+    ui,
+    plan = null
+  ) {
+    const signal =
+      ui?.requestSignal ||
+      null;
+
+    throwIfAborted(
+      signal
+    );
+
+    const canvas =
+      document.createElement(
+        "canvas"
+      );
+
+    const guardStatus =
+      window.NovaSparxBrowserGuard
+        ?.status?.() || {};
+
+    const canvasSize =
+      guardStatus.isIOS
+        ? 640
+        : guardStatus.isMobile
+          ? 768
+          : 1024;
+
+    canvas.width =
+      canvasSize;
+
+    canvas.height =
+      canvasSize;
+
+    const context =
+      canvas.getContext(
+        "2d",
+        { alpha: false }
+      );
+
+    if (
+      context &&
+      canvasSize !== 1024
+    ) {
+      const scale =
+        canvasSize / 1024;
+
+      context.scale(
+        scale,
+        scale
+      );
+    }
+
+    const name =
+      assetName(path);
+
+    if (!context) {
+      release(path);
+
+      return showEvidenceImage(
+        path,
+        name,
+        ui,
+        evidenceSvgUrl(
+          path,
+          info,
+          plan
+        ),
+        info,
+        "image",
+        plan
+      );
+    }
+
+    const kind =
+      readableAssetKind(
+        info,
+        path
+      );
+
+    const references =
+      Array.isArray(
+        info?.references
+      )
+        ? info.references
+        : Array.isArray(
+            info?.References
+          )
+          ? info.References
+          : [];
+
+    const fidelity =
+      materialFidelity(
+        info
+      );
+
+    const accent =
+      evidenceColor(info);
+
+    const background =
+      context.createLinearGradient(
+        0,
+        0,
+        1024,
+        1024
+      );
+
+    background.addColorStop(
+      0,
+      "#07101f"
+    );
+    background.addColorStop(
+      0.55,
+      "#111d35"
+    );
+    background.addColorStop(
+      1,
+      "#071427"
+    );
+
+    context.fillStyle =
+      background;
+    context.fillRect(
+      0,
+      0,
+      1024,
+      1024
+    );
+
+    context.fillStyle =
+      accent;
+    context.fillRect(
+      0,
+      0,
+      18,
+      1024
+    );
+
+    context.fillStyle =
+      "rgba(255,255,255,0.06)";
+    roundedRect(
+      context,
+      64,
+      64,
+      896,
+      896,
+      42
+    );
+    context.fill();
+
+    context.fillStyle =
+      accent;
+    context.font =
+      "700 27px system-ui, sans-serif";
+    context.fillText(
+      "NOVASPARX • LAYER 8",
+      112,
+      136
+    );
+
+    context.fillStyle =
+      "#f5f8ff";
+    context.font =
+      "800 58px system-ui, sans-serif";
+
+    let y =
+      drawWrappedText(
+        context,
+        name,
+        112,
+        232,
+        800,
+        70,
+        3
+      );
+
+    y += 34;
+    context.fillStyle =
+      "#b9c8e7";
+    context.font =
+      "600 31px system-ui, sans-serif";
+    context.fillText(
+      kind.toUpperCase(),
+      112,
+      y
+    );
+
+    y += 70;
+    context.fillStyle =
+      "rgba(5, 11, 24, 0.62)";
+    roundedRect(
+      context,
+      104,
+      y,
+      816,
+      218,
+      28
+    );
+    context.fill();
+
+    context.fillStyle =
+      "#dce7ff";
+    context.font =
+      "500 25px system-ui, sans-serif";
+
+    drawWrappedText(
+      context,
+      String(path || ""),
+      142,
+      y + 58,
+      740,
+      36,
+      4
+    );
+
+    const facts = [
+      `${references.length} verified reference${references.length === 1 ? "" : "s"}`,
+      fidelity !== "unknown"
+        ? `material fidelity: ${fidelity}`
+        : "material fidelity: unavailable",
+      plan?.attemptedReferences?.length
+        ? `${plan.attemptedReferences.length} visual candidate${plan.attemptedReferences.length === 1 ? "" : "s"} checked`
+        : "no deterministic visual candidate"
+    ];
+
+    context.font =
+      "600 25px system-ui, sans-serif";
+
+    facts.forEach(
+      (fact, index) => {
+        const top =
+          742 + index * 54;
+
+        context.fillStyle =
+          accent;
+        context.beginPath();
+        context.arc(
+          125,
+          top - 8,
+          7,
+          0,
+          Math.PI * 2
+        );
+        context.fill();
+
+        context.fillStyle =
+          "#dce7ff";
+        context.fillText(
+          fact,
+          154,
+          top
+        );
+      }
+    );
+
+    context.fillStyle =
+      "#8495ba";
+    context.font =
+      "500 22px system-ui, sans-serif";
+    context.fillText(
+      "VERIFIED METADATA PNG • NOT A VISUAL RECONSTRUCTION",
+      112,
+      920
+    );
+
+    release(path);
+
+    let url;
+
+    try {
+      const blob =
+        await canvasPng(
+          canvas
+        );
+
+      throwIfAborted(
+        signal
+      );
+
+      url =
+        URL.createObjectURL(blob);
+
+      objectUrls.set(
+        path,
+        url
+      );
+    } catch {
+      try {
+        url =
+          canvas.toDataURL(
+            "image/png"
+          );
+      } catch {
+        url = evidenceSvgUrl(
+          path,
+          info,
+          plan
+        );
+      }
+    }
+
+    throwIfAborted(
+      signal
+    );
+
+    return showEvidenceImage(
+      path,
+      name,
+      ui,
+      url,
+      info,
+      url.startsWith(
+        "data:image/svg"
+      )
+        ? "image"
+        : "PNG",
+      plan
+    );
+  }
+
+  async function renderMaterial(
+    path,
+    info,
+    ui
+  ) {
+    const texturePath =
+      firstMaterialTexture(
+        info
+      );
+
+    const fidelity =
+      materialFidelity(
+        info
+      );
+
+    if (
+      texturePath &&
+      await tryTextureDecode(
+        texturePath,
+        ui,
+        `Material preview from verified texture • fidelity: ${fidelity}`
+      )
+    ) {
+      setMeta(
+        ui.meta,
+        `Material preview from verified texture • fidelity: ${fidelity}`,
+        fidelity
+      );
+
+      return true;
+    }
+
+    return false;
+  }
+
+  function readableAssetKind(info, path) {
+    const kind = assetType(info, path);
+    return ({ staticmesh: "static mesh asset", skeletalmesh: "skeletal mesh asset",
+      blueprint: "Blueprint asset", texture: "texture asset", material: "material asset",
+      audio: "audio asset", animation: "animation asset", vfx: "VFX asset",
+      data: "data asset", cosmetic: "cosmetic asset" })[kind] || "Fortnite asset";
+  }
+
+  function assetName(path) {
+    const clean =
+      String(path || "")
+        .replace(/\\/g, "/")
+        .replace(/\.(?:uasset|uexp|ubulk)$/i, "");
+
+    const file =
+      clean.split("/").pop() ||
+      clean;
+
+    return (
+      file.split(".")[0] ||
+      "Unknown asset"
+    ).replace(/_C$/i, "");
+  }
+
+  function audioMimeType(
+    format,
+    bytes
+  ) {
+    const clean =
+      String(format || "")
+        .trim()
+        .toUpperCase();
+
+    let magic = "";
+
+    try {
+      const view =
+        new Uint8Array(
+          bytes,
+          0,
+          Math.min(
+            12,
+            bytes.byteLength
+          )
+        );
+
+      magic =
+        String.fromCharCode(
+          ...view
+        );
+    } catch {}
+
+    if (
+      clean.includes("OGG")
+    ) {
+      return "audio/ogg";
+    }
+
+    if (
+      clean === "WAV" ||
+      (
+        ["PCM", "ADPCM"]
+          .includes(clean) &&
+        magic.startsWith("RIFF")
+      )
+    ) {
+      return "audio/wav";
+    }
+
+    if (
+      clean === "OPUS" &&
+      magic.startsWith("OggS")
+    ) {
+      return "audio/ogg; codecs=opus";
+    }
+
+    return "";
+  }
+
+  function waitForAudioReady(
+    audio,
+    signal,
+    timeoutMs = 8_000
+  ) {
+    return new Promise(
+      (resolve, reject) => {
+        if (!audio) {
+          reject(
+            new Error(
+              "Audio player is unavailable."
+            )
+          );
+          return;
+        }
+
+        if (
+          audio.readyState >=
+          HTMLMediaElement.HAVE_METADATA
+        ) {
+          resolve();
+          return;
+        }
+
+        let settled =
+          false;
+
+        const cleanup =
+          () => {
+            clearTimeout(
+              timer
+            );
+
+            audio.removeEventListener(
+              "loadedmetadata",
+              onReady
+            );
+
+            audio.removeEventListener(
+              "canplay",
+              onReady
+            );
+
+            audio.removeEventListener(
+              "error",
+              onError
+            );
+
+            signal
+              ?.removeEventListener?.(
+                "abort",
+                onAbort
+              );
+          };
+
+        const finish =
+          callback => {
+            if (settled) {
+              return;
+            }
+
+            settled =
+              true;
+
+            cleanup();
+            callback();
+          };
+
+        const onReady =
+          () =>
+            finish(resolve);
+
+        const onError =
+          () =>
+            finish(
+              () => {
+                const code =
+                  Number(
+                    audio.error?.code ||
+                    0
+                  );
+
+                const error =
+                  new Error(
+                    "Browser rejected the decoded audio" +
+                    (
+                      code
+                        ? ` (media error ${code})`
+                        : ""
+                    ) +
+                    "."
+                  );
+
+                error.code =
+                  "NOVASPARX_AUDIO_MEDIA_DECODE_FAILED";
+
+                error.mediaErrorCode =
+                  code;
+
+                reject(error);
+              }
+            );
+
+        const onAbort =
+          () =>
+            finish(
+              () =>
+                reject(
+                  abortError(
+                    signal
+                  )
+                )
+            );
+
+        const timer =
+          setTimeout(
+            () =>
+              finish(
+                () => {
+                  const error =
+                    new Error(
+                      "Browser did not accept the decoded audio in time."
+                    );
+
+                  error.code =
+                    "NOVASPARX_AUDIO_MEDIA_TIMEOUT";
+
+                  reject(error);
+                }
+              ),
+            Math.max(
+              1_000,
+              Number(timeoutMs) ||
+              8_000
+            )
+          );
+
+        audio.addEventListener(
+          "loadedmetadata",
+          onReady,
+          {
+            once:
+              true
+          }
+        );
+
+        audio.addEventListener(
+          "canplay",
+          onReady,
+          {
+            once:
+              true
+          }
+        );
+
+        audio.addEventListener(
+          "error",
+          onError,
+          {
+            once:
+              true
+          }
+        );
+
+        signal
+          ?.addEventListener?.(
+            "abort",
+            onAbort,
+            {
+              once:
+                true
+            }
+          );
+
+        try {
+          audio.load();
+        } catch (error) {
+          finish(
+            () =>
+              reject(error)
+          );
+        }
+      }
+    );
+  }
+
+  function readableAudioFailure(
+    error
+  ) {
+    const text =
+      String(
+        error?.message ||
+        error ||
+        ""
+      )
+        .trim();
+
+    if (
+      /MetaSoundSource is a procedural template/i
+        .test(text)
+    ) {
+      return {
+        code:
+          "NOVASPARX_AUDIO_TEMPLATE",
+        message:
+          "This MetaSound is a reusable template. Its Sounds input is supplied by another asset at runtime, so this file has no single SoundWave or WAV to play."
+      };
+    }
+
+    const lines =
+      text
+        .split(/\r?\n/)
+        .map(
+          line =>
+            line.trim()
+        )
+        .filter(Boolean);
+
+    const explicit =
+      lines.find(
+        line =>
+          /^Error:\s*/i
+            .test(line)
+      );
+
+    const first =
+      explicit ||
+      lines.find(
+        line =>
+          !/^at\s+/i
+            .test(line) &&
+          !/wasm-function|dotnet\.runtime|dotnet\.native/i
+            .test(line)
+      ) ||
+      "Audio could not be decoded.";
+
+    return {
+      code:
+        "NOVASPARX_AUDIO_FAILED",
+      message:
+        first.replace(
+          /^Error:\s*/i,
+          ""
+        )
+    };
+  }
+
+  function audioSizeLabel(
+    bytes
+  ) {
+    const size =
+      Number(
+        bytes?.byteLength ||
+        0
+      );
+
+    if (size >= 1024 * 1024) {
+      return (
+        size /
+        (1024 * 1024)
+      ).toFixed(1) +
+        " MB";
+    }
+
+    return Math.max(
+      1,
+      Math.round(
+        size / 1024
+      )
+    ) + " KB";
+  }
+
+  async function renderPreview(
+    target,
+    path,
+    button,
+    options = {}
+  ) {
+    const clean =
+      String(path || "")
+        .trim();
+
+    if (!target || !clean) {
+      return {
+        state: "error",
+        error:
+          "Missing preview target or asset path."
+      };
+    }
+
+    const requestedKind =
+      String(
+        options.assetKind ||
+        options.classification
+          ?.kind ||
+        ""
+      ).toLowerCase();
+
+    if (meshPreview && (meshPreview.path !== clean || requestedKind !== "staticmesh")) release(meshPreview.path);
+
+    const browser3dReady =
+      (() => {
+        try {
+          return (
+            window.NovaSparxLocalParser
+              ?.status?.()
+              ?.registered ===
+            true
+          );
+        } catch {
+          return false;
+        }
+      })();
+
+    const force3d =
+      browser3dReady &&
+      [
+        "staticmesh",
+        "skeletalmesh",
+        "blueprint-visual"
+      ].includes(
+        requestedKind
+      );
+
+    const ui =
+      resolveUi(target);
+
+    if (
+      !ui?.panel ||
+      !ui?.stage ||
+      !ui?.status ||
+      !ui?.image
+    ) {
+      return {
+        state: "error",
+        error:
+          "Preview UI could not be created."
+      };
+    }
+
+    // Legacy card mode can still behave as a toggle. New FNAA 1.0 host mode
+    // always renders because tools.js owns the outer panel visibility.
+    if (
+      !ui.hostMode &&
+      !ui.panel.hidden
+    ) {
+      ui.panel.hidden = true;
+
+      if (requestedKind === "staticmesh") release(clean);
+
+      if (button) {
+        button.textContent =
+          t(
+            "viewImage",
+            "Preview"
+          );
+      }
+
+      return {
+        state: "hidden"
+      };
+    }
+
+    resetUi(ui, requestedKind === "staticmesh");
+
+    ui.panel.dataset
+      .previewAssetPath =
+      clean;
+
+    if (button) {
+      button.disabled = true;
+      button.textContent =
+        button.dataset
+          .openLabel ||
+        t(
+          "hideImage",
+          "Hide Preview"
+        );
+    }
+
+    const guard =
+      window.NovaSparxBrowserGuard;
+
+    const operation =
+      guard?.beginOperation?.(
+        `preview:${clean}`
+      ) || null;
+
+    const signal =
+      operation?.signal ||
+      null;
+
+    ui.requestSignal =
+      signal;
+
+    try {
+      throwIfAborted(
+        signal
+      );
+      if (
+        requestedKind ===
+        "audio"
+      ) {
+        if (
+          !ui.audio ||
+          typeof window
+            .NovaSparxTextureRuntime
+            ?.resolveAudio !==
+            "function"
+        ) {
+          throw new Error(
+            "NovaSparx browser audio runtime is unavailable."
+          );
+        }
+
+        setStatus(
+          ui.status,
+          "Reading this SoundWave in your browser…"
+        );
+
+        let result;
+        let audioPath =
+          clean;
+        let directError =
+          null;
+
+        try {
+          result =
+            await window
+              .NovaSparxTextureRuntime
+              .resolveAudio(
+                clean,
+                {
+                  signal
+                }
+              );
+        } catch (error) {
+          directError =
+            error;
+
+          throwIfAborted(
+            signal
+          );
+
+          setStatus(
+            ui.status,
+            "Resolving the linked SoundWave…"
+          );
+
+          let candidates = [];
+
+          try {
+            candidates =
+              await window
+                .FortniteTools
+                ?.resolveAudioCandidatePaths?.(
+                  clean,
+                  {
+                    signal
+                  }
+                ) ||
+              await window
+                .FortniteTools
+                ?.resolveSoundWavePaths?.(
+                  clean,
+                  {
+                    signal
+                  }
+                ) ||
+              [];
+          } catch (resolverError) {
+            if (
+              signal?.aborted ||
+              resolverError
+                ?.name ===
+                "AbortError"
+            ) {
+              throw resolverError;
+            }
+          }
+
+          let candidateError =
+            null;
+
+          const seenCandidates =
+            new Set([
+              String(clean)
+                .toLowerCase()
+            ]);
+
+          for (
+            const candidate of
+            candidates
+          ) {
+            throwIfAborted(
+              signal
+            );
+
+            const candidateKey =
+              String(
+                candidate || ""
+              )
+                .trim()
+                .toLowerCase();
+
+            if (
+              !candidateKey ||
+              seenCandidates.has(
+                candidateKey
+              )
+            ) {
+              continue;
+            }
+
+            seenCandidates.add(
+              candidateKey
+            );
+
+            try {
+              result =
+                await window
+                  .NovaSparxTextureRuntime
+                  .resolveAudio(
+                    candidate,
+                    {
+                      signal
+                    }
+                  );
+
+              audioPath =
+                candidate;
+
+              break;
+            } catch (error) {
+              if (
+                signal?.aborted ||
+                error?.name ===
+                  "AbortError"
+              ) {
+                throw error;
+              }
+
+              candidateError =
+                error;
+            }
+          }
+
+          if (!result) {
+            const cause =
+              candidateError ||
+              directError;
+
+            const readable =
+              readableAudioFailure(
+                cause
+              );
+
+            const failure =
+              new Error(
+                readable.code ===
+                  "NOVASPARX_AUDIO_TEMPLATE"
+                  ? readable.message
+                  : "No playable SoundWave could be resolved for this audio asset. " +
+                    readable.message,
+                {
+                  cause
+                }
+              );
+
+            failure.code =
+              readable.code;
+
+            throw failure;
+          }
+        }
+
+        throwIfAborted(
+          signal
+        );
+
+        const mime =
+          audioMimeType(
+            result.format,
+            result.bytes
+          );
+
+        if (!mime) {
+          ui.audio.hidden =
+            true;
+
+          setStatus(
+            ui.status,
+            `SoundWave extracted, but codec ${result.format || "Unknown"} is not browser-playable yet.`,
+            "partial"
+          );
+
+          setMeta(
+            ui.meta,
+            `Browser CUE4Parse SoundWave • ${result.format || "Unknown"} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • resolved audio path" : ""}`,
+            "partial"
+          );
+
+          return {
+            state:
+              "partial",
+            kind:
+              "audio",
+            format:
+              result.format,
+            playable:
+              false,
+            audioPath
+          };
+        }
+
+        const support =
+          ui.audio.canPlayType?.(
+            mime
+          ) ||
+          "";
+
+        if (!support) {
+          setStatus(
+            ui.status,
+            `This browser cannot play extracted ${result.format} audio.`,
+            "partial"
+          );
+
+          setMeta(
+            ui.meta,
+            `Browser CUE4Parse SoundWave • ${result.format} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • resolved audio path" : ""}`,
+            "partial"
+          );
+
+          return {
+            state:
+              "partial",
+            kind:
+              "audio",
+            format:
+              result.format,
+            playable:
+              false,
+            audioPath
+          };
+        }
+
+        const blob =
+          new Blob(
+            [
+              result.bytes
+            ],
+            {
+              type:
+                mime
+            }
+          );
+
+        const url =
+          URL.createObjectURL(
+            blob
+          );
+
+        rememberObjectUrl(
+          clean,
+          url
+        );
+
+        ui.audio.src =
+          url;
+
+        ui.audio.hidden =
+          false;
+
+        ui.status.hidden =
+          true;
+
+        audioSessions.set(
+          clean,
+          ui.audio
+        );
+
+        try {
+          await waitForAudioReady(
+            ui.audio,
+            signal
+          );
+        } catch (mediaError) {
+          release(
+            clean
+          );
+
+          ui.audio.hidden =
+            true;
+
+          setStatus(
+            ui.status,
+            mediaError?.message ||
+              "Browser rejected the decoded audio.",
+            "error"
+          );
+
+          setMeta(
+            ui.meta,
+            `Browser CUE4Parse SoundWave • ${result.format} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • resolved audio path" : ""}`,
+            "partial"
+          );
+
+          const failure =
+            new Error(
+              mediaError?.message ||
+              "Browser rejected the decoded audio.",
+              {
+                cause:
+                  mediaError
+              }
+            );
+
+          failure.code =
+            mediaError?.code ||
+            "NOVASPARX_AUDIO_MEDIA_DECODE_FAILED";
+
+          throw failure;
+        }
+
+        setMeta(
+          ui.meta,
+          `Browser CUE4Parse SoundWave • ${result.format} • ${audioSizeLabel(result.bytes)}${audioPath !== clean ? " • resolved audio path" : ""}`,
+          "high"
+        );
+
+        return {
+          state:
+            "ready",
+          kind:
+            "audio",
+          format:
+            result.format,
+          playable:
+            true,
+          audioPath
+        };
+      }
+
+      if (requestedKind === "staticmesh") {
+        const interactive = options.mode === "model";
+        setStatus(ui.status, interactive ? "Reading this Mesh for the interactive 3D viewer…" : "Reading and rendering this Mesh in your browser…");
+        try {
+          let result = await resolveSharedMesh(clean, interactive, signal);
+
+          throwIfAborted(
+            signal
+          );
+
+          if (interactive) {
+            if (!result.manifest?.geometry) throw new Error("This Mesh has no interactive geometry.");
+            const mount = manifest => mountNovaManifest(clean, manifest, ui, "Browser CUE4Parse Mesh", {
+              signal,
+              sessionKey: clean,
+              preserveMesh: true
+            });
+            const first = await mount(result.manifest);
+            if (!first) throw new Error("The interactive Mesh renderer is unavailable.");
+            if (result.materialPromise) {
+              let materialResult;
+              try {
+                materialResult = await waitForMeshResult(result.materialPromise, signal);
+              } catch (error) {
+                throwIfAborted(signal);
+                if (error?.name === "AbortError") throw error;
+                setMeta(ui.meta, "");
+                setStatus(ui.status, `Mesh material unavailable: ${String(error?.message || error).slice(0, 180)}`, "error");
+                return { state: "partial", kind: "staticmesh", interactive: true };
+              }
+              throwIfAborted(signal);
+              await mount(materialResult.manifest);
+              result = materialResult;
+            }
+            return { state: "ready", kind: "staticmesh", interactive: true,
+              materialFidelity: result.materialFidelity || result.manifest?.metadata?.materialFidelity || result.previewMode };
+          }
+
+          result = await meshImageResult(result, signal);
+
+          const firstUrl =
+            URL.createObjectURL(
+              result.blob
+            );
+
+          let firstLoaded =
+            false;
+
+          try {
+            firstLoaded =
+              await loadImage(
+                ui.image,
+                firstUrl,
+                20_000,
+                signal
+              );
+
+            throwIfAborted(
+              signal
+            );
+          } finally {
+            if (
+              !firstLoaded ||
+              signal?.aborted
+            ) {
+              URL.revokeObjectURL(
+                firstUrl
+              );
+            }
+          }
+
+          if (!firstLoaded) {
+            throw new Error(
+              "Mesh image could not be displayed"
+            );
+          }
+
+          rememberObjectUrl(
+            clean,
+            firstUrl
+          );
+
+          ui.image.hidden =
+            false;
+
+          ui.status.hidden =
+            true;
+
+          setMeta(
+            ui.meta,
+            `Browser CUE4Parse Mesh • ${result.triangleCount} triangles • ${result.materialPromise ? "Geometry ready • loading Texture + Material…" : "material fidelity: " + (result.materialFidelity || result.manifest?.metadata?.materialFidelity || result.previewMode || "geometry-only")}`,
+            result.materialPromise || result.textured || result.materialApplied ? "high" : "partial"
+          );
+
+          if (
+            !result
+              .materialPromise
+          ) {
+            return {
+              state:
+                "ready",
+              kind:
+                "staticmesh",
+              materialFidelity:
+                result.materialFidelity || result.manifest?.metadata?.materialFidelity || result.previewMode,
+              textured: result.textured === true
+            };
+          }
+
+          let materialResult;
+
+          try {
+            materialResult = await waitForMeshResult(result.materialPromise, signal);
+          } catch (materialError) {
+            if (
+              signal?.aborted ||
+              materialError
+                ?.name ===
+                "AbortError"
+            ) {
+              throw materialError;
+            }
+
+            setMeta(
+              ui.meta,
+              `Browser CUE4Parse Mesh • ${result.triangleCount} triangles • Mesh geometry ready • Texture + Material unavailable: ${String(materialError?.message || materialError).slice(0, 180)}`,
+              "partial"
+            );
+
+            return {
+              state:
+                "partial",
+              kind:
+                "staticmesh",
+              materialFidelity:
+                "geometry-only",
+              error:
+                String(
+                  materialError
+                    ?.message ||
+                  materialError
+                )
+            };
+          }
+
+          throwIfAborted(
+            signal
+          );
+
+          materialResult = await meshImageResult(materialResult, signal);
+
+          const finalUrl =
+            URL.createObjectURL(
+              materialResult.blob
+            );
+
+          let finalLoaded =
+            false;
+
+          try {
+            finalLoaded =
+              await loadImage(
+                ui.image,
+                finalUrl,
+                20_000,
+                signal
+              );
+
+            throwIfAborted(
+              signal
+            );
+          } finally {
+            if (
+              !finalLoaded ||
+              signal?.aborted
+            ) {
+              URL.revokeObjectURL(
+                finalUrl
+              );
+            }
+          }
+
+          if (!finalLoaded) {
+            throw new Error(
+              "Textured Mesh image could not be displayed"
+            );
+          }
+
+          rememberObjectUrl(
+            clean,
+            finalUrl
+          );
+
+          ui.image.hidden =
+            false;
+
+          ui.status.hidden =
+            true;
+
+          const textureApplied =
+            materialResult
+              .textured ===
+            true;
+
+          const materialApplied =
+            textureApplied ||
+            materialResult
+              .materialApplied ===
+            true;
+
+          const missingMaterials =
+            Array.isArray(
+              materialResult
+                .missingMaterials
+            )
+              ? materialResult
+                  .missingMaterials
+              : [];
+
+          if (!materialApplied) {
+            setMeta(
+              ui.meta,
+              `Browser CUE4Parse Mesh • ${materialResult.triangleCount} triangles • Mesh geometry ready • no supported BaseColor/Emissive material preview was resolved`,
+              "partial"
+            );
+
+            return {
+              state:
+                "partial",
+              kind:
+                "staticmesh",
+              materialFidelity:
+                "geometry-only",
+              textured:
+                false
+            };
+          }
+
+          const quality =
+            textureApplied
+              ? (
+                  missingMaterials.length
+                    ? "Mesh + Texture + Material • partially resolved"
+                    : "Mesh + Texture + Material"
+                )
+              : (
+                  missingMaterials.length
+                    ? "Mesh + Material • partially resolved"
+                    : "Mesh + Material"
+                );
+
+          setMeta(
+            ui.meta,
+            `Browser CUE4Parse Mesh • ${materialResult.triangleCount} triangles • ${quality}`,
+            missingMaterials.length
+              ? "partial"
+              : "high"
+          );
+
+          return {
+            state:
+              "ready",
+            kind:
+              "staticmesh",
+            materialFidelity:
+              materialResult
+                .materialFidelity,
+            textured:
+              textureApplied
+          };
+        } catch (error) {
+          if (error?.name === "AbortError") throw error;
+          const failure = new Error(error?.message || String(error), {cause:error});
+          failure.code = "NOVASPARX_MESH_FAILED"; throw failure;
+        }
+      }
+      let pathFamily =
+        window.NovaSparxAssociations
+          ?.family?.(
+            clean
+          ) ||
+        "other";
+
+      // Ambiguous names are classified from bounded export JSON before any
+      // visual route is allowed. A name similarity alone never changes family.
+      if (
+        pathFamily ===
+          "other" &&
+        window.NovaSparxAssociations
+          ?.classify
+      ) {
+        try {
+          const classification =
+            await window.NovaSparxAssociations
+              .classify(
+                clean,
+                {
+                  signal
+                }
+              );
+
+          pathFamily =
+            classification?.family ||
+            pathFamily;
+        } catch (error) {
+          if (
+            error?.name ===
+            "AbortError"
+          ) {
+            throw error;
+          }
+        }
+      }
+
+      // 1) Th3Dry/FNAA's known catalogue images are the quickest and most
+      // deterministic layer for islands and Creative devices.
+      if (
+        !force3d &&
+        await tryKnownCatalogImage(
+          clean,
+          ui
+        )
+      ) {
+        return {
+          state: "ready",
+          kind: "catalog-image"
+        };
+      }
+
+      let fastAssociation = null;
+
+      // Mesh/Blueprint fast path: resolve the relationship before touching the
+      // hosted CUE4Parse backend. On phones this is the primary path, not a
+      // fallback, so a dead/restarting backend can never hold the UI for minutes.
+      if (
+        pathFamily === "mesh" ||
+        pathFamily === "blueprint"
+      ) {
+        const browserState =
+          guard?.status?.() ||
+          {};
+
+        if (
+          !force3d &&
+          pathFamily ===
+            "blueprint" &&
+          await tryExactTypedImage(
+            clean,
+            ui,
+            "Verified Blueprint direct preview • exact asset"
+          )
+        ) {
+          return {
+            state: "ready",
+            kind:
+              "blueprint-direct-image"
+          };
+        }
+
+        try {
+          fastAssociation =
+            await window
+              .NovaSparxAssociations
+              ?.resolveVisual?.(
+                clean,
+                null,
+                {
+                  signal
+                }
+              ) ||
+            null;
+        } catch (error) {
+          if (
+            signal?.aborted
+          ) {
+            throw error;
+          }
+        }
+
+        if (
+          !force3d &&
+          fastAssociation
+            ?.blueprintPath &&
+          await tryVerifiedBlueprintImage(
+            fastAssociation,
+            ui
+          )
+        ) {
+          return {
+            state: "ready",
+            kind:
+              pathFamily === "mesh"
+                ? "mesh-blueprint-image"
+                : "blueprint-image",
+            association:
+              fastAssociation
+          };
+        }
+
+        if (
+          browserState.isMobile ||
+          browserState.recoveryMode
+        ) {
+          const localPath =
+            fastAssociation
+              ?.visualPath ||
+            (
+              pathFamily ===
+                "mesh"
+                ? clean
+                : ""
+            );
+
+          let hostedError =
+            "";
+
+          // Layer 1: memory / device cache / local parser only.
+          // This stays nearly instant and never wakes the hosted backend.
+          try {
+            if (localPath) {
+              await renderNovaMesh(
+                localPath,
+                ui.image,
+                ui.status,
+                ui.meta,
+                {
+                  signal,
+                  backend:
+                    false,
+                  backendJson:
+                    false,
+                  sourceLabel:
+                    fastAssociation
+                      ?.blueprintPath
+                      ? "NovaSparx • Blueprint-verified local mesh"
+                      : ""
+                }
+              );
+
+              return {
+                state:
+                  "ready",
+                kind:
+                  "device-local-mesh",
+                association:
+                  fastAssociation
+              };
+            }
+          } catch (error) {
+            if (
+              signal?.aborted
+            ) {
+              throw abortError(
+                signal
+              );
+            }
+
+            if (
+              error?.name !==
+                "AbortError"
+            ) {
+              hostedError =
+                String(
+                  error?.message ||
+                  error ||
+                  ""
+                ).slice(
+                  0,
+                  180
+                );
+            }
+          }
+
+          // Layer 2: one short streamed NSMESH attempt.
+          // The request has its own deadline and the new request-cancellation
+          // protocol kills the backend parser too, so mobile no longer needs
+          // to skip hosted extraction completely.
+          if (localPath) {
+            const hostedBudgetMs =
+              browserState
+                .recoveryMode
+                ? 4_500
+                : browserState
+                    .isIOS
+                  ? 6_500
+                  : 8_500;
+
+            const hosted =
+              previewDeadline(
+                signal,
+                hostedBudgetMs,
+                "novasparx-fast-mobile-mesh-timeout"
+              );
+
+            try {
+              setStatus(
+                ui.status,
+                "NovaSparx: streaming a fast mesh preview…"
+              );
+
+              await renderNovaMesh(
+                localPath,
+                ui.image,
+                ui.status,
+                ui.meta,
+                {
+                  signal:
+                    hosted.signal,
+                  backend:
+                    true,
+                  backendJson:
+                    false,
+                  sourceLabel:
+                    fastAssociation
+                      ?.blueprintPath
+                      ? "NovaSparx • fast Blueprint-verified streamed mesh"
+                      : "NovaSparx • fast streamed mesh"
+                }
+              );
+
+              throwIfAborted(
+                signal
+              );
+
+              return {
+                state:
+                  "ready",
+                kind:
+                  "fast-streamed-mesh",
+                association:
+                  fastAssociation
+              };
+            } catch (error) {
+              if (
+                signal?.aborted
+              ) {
+                throw abortError(
+                  signal
+                );
+              }
+
+              hostedError =
+                hosted.timedOut()
+                  ? (
+                      "Fast streamed mesh exceeded " +
+                      (
+                        hostedBudgetMs /
+                        1000
+                      ).toFixed(
+                        1
+                      ) +
+                      "s and was cancelled."
+                    )
+                  : String(
+                      error?.message ||
+                      error ||
+                      "Fast streamed mesh was unavailable."
+                    ).slice(
+                      0,
+                      220
+                    );
+            } finally {
+              hosted.cleanup();
+            }
+          }
+
+          try {
+            const publicFallback =
+              await tryPublicRelatedImage(
+                clean,
+                ui,
+                signal
+              );
+
+            if (
+              publicFallback.rendered
+            ) {
+              return {
+                state:
+                  "ready",
+                kind:
+                  "verified-related-image",
+                association:
+                  fastAssociation,
+                publicPlan:
+                  publicFallback.plan
+              };
+            }
+          } catch (error) {
+            if (
+              signal?.aborted ||
+              error?.name ===
+                "AbortError"
+            ) {
+              throw abortError(
+                signal
+              );
+            }
+          }
+
+          return renderEvidenceImage(
+            clean,
+            null,
+            ui,
+            {
+              source:
+                "fast-mobile-fallback",
+              blueprintPath:
+                fastAssociation
+                  ?.blueprintPath ||
+                "",
+              attemptedReferences:
+                fastAssociation
+                  ?.blueprintPath
+                  ? [
+                      fastAssociation
+                        .blueprintPath
+                    ]
+                  : [],
+              evidence:
+                fastAssociation
+                  ?.evidence ||
+                "No verified visual completed inside the mobile preview budget.",
+              error:
+                hostedError ||
+                "No verified mesh source was available for this asset."
+            }
+          );
+        }
+      }
+
+      // 2) Dilly-backed direct resolver: cosmetic icons, UI and referenced
+      // textures. Keep this as a direct <img> URL for iPhone Safari stability.
+      if (
+        ![
+          "mesh",
+          "blueprint",
+          "texture"
+        ].includes(
+          pathFamily
+        ) &&
+        window.NovaSparxAssociations
+          ?.allowDirectImage?.(
+            clean
+          ) !== false &&
+        await tryDirectAssetImage(
+          clean,
+          ui
+        )
+      ) {
+        return {
+          state: "ready",
+          kind: "image"
+        };
+      }
+
+      // Exact raw Texture preview is safe because direct=1 never follows JSON
+      // into another asset family.
+      if (
+        pathFamily ===
+          "texture" &&
+        await tryExactTypedImage(
+          clean,
+          ui,
+          "Exact Texture preview • no Mesh/Blueprint promotion"
+        )
+      ) {
+        return {
+          state: "ready",
+          kind:
+            "texture-direct-image"
+        };
+      }
+
+      // 3) Public Dilly JSON can expose exact visual references for many
+      // materials, Blueprints and effects without waking Back4App.
+      let publicPlan = null;
+
+      if (
+        !force3d &&
+        pathFamily !==
+          "texture" &&
+        window.NovaSparxAssociations
+          ?.publicPreview
+      ) {
+        try {
+          publicPlan =
+            await window
+              .NovaSparxAssociations
+              .publicPreview(
+                clean,
+                {
+                  signal
+                }
+              );
+
+          throwIfAborted(
+            signal
+          );
+
+          for (
+            const previewPath of
+            publicPlan
+              ?.previewImagePaths ||
+            []
+          ) {
+            if (
+              await tryExactTypedImage(
+                previewPath,
+                ui,
+                "Verified referenced texture • Dilly JSON • no Back4App"
+              )
+            ) {
+              return {
+                state:
+                  "ready",
+                kind:
+                  "public-referenced-image",
+                publicPlan
+              };
+            }
+
+            throwIfAborted(
+              signal
+            );
+          }
+        } catch (error) {
+          if (
+            signal?.aborted ||
+            error?.name ===
+              "AbortError"
+          ) {
+            throw abortError(
+              signal
+            );
+          }
+
+          publicPlan =
+            null;
+        }
+      }
+
+      // Decode real Textures on the device when no verified public image exists.
+      if (
+        pathFamily ===
+          "texture" &&
+        window.NovaSparxAssociations
+          ?.allowTextureDecode?.(
+            clean
+          ) !== false &&
+        await tryTextureDecode(
+          clean,
+          ui
+        )
+      ) {
+        return {
+          state: "ready",
+          kind: "texture"
+        };
+      }
+
+      // 4) Inspect before deciding what preview is technically honest.
+      const info =
+        await inspect(
+          clean,
+          {
+            signal
+          }
+        );
+
+      const type =
+        assetType(
+          info,
+          clean
+        );
+
+      let resolvedFamily =
+        window.NovaSparxAssociations
+          ?.family?.(
+            clean,
+            info
+          ) ||
+        "other";
+
+      if (
+        resolvedFamily ===
+          "other" &&
+        window.NovaSparxAssociations
+          ?.classify
+      ) {
+        try {
+          const classification =
+            await window.NovaSparxAssociations
+              .classify(
+                clean,
+                {
+                  signal,
+                  inspection: info
+                }
+              );
+
+          resolvedFamily =
+            classification?.family ||
+            resolvedFamily;
+        } catch (error) {
+          if (
+            error?.name ===
+            "AbortError"
+          ) {
+            throw error;
+          }
+        }
+      }
+
+      // A texture is terminal for visual routing. If its direct/decoded image
+      // failed above, do not follow a similarly-named Mesh or Blueprint.
+      if (
+        resolvedFamily ===
+        "texture"
+      ) {
+        return renderEvidenceImage(
+          clean,
+          info,
+          ui,
+          {
+            source:
+              "typed-texture-fallback",
+            attemptedReferences: [],
+            evidence:
+              "Texture type verified; cross-type mesh/Blueprint promotion is disabled."
+          }
+        );
+      }
+
+      if (
+        type.includes(
+          "material"
+        )
+      ) {
+        if (
+          await renderMaterial(
+            clean,
+            info,
+            ui
+          )
+        ) {
+          return {
+            state: "ready",
+            kind: "material-texture",
+            inspection: info
+          };
+        }
+
+        if (force3d) {
+          return showModelUnavailable(
+            ui,
+            "This Blueprint is marked as a 3D visual, but its verified mesh could not be rendered.",
+            info
+          );
+        }
+
+        const universal =
+          await tryUniversalPreview(
+            clean,
+            ui,
+            {
+              signal
+            }
+          );
+
+        if (universal.rendered) {
+          return {
+            state: "ready",
+            kind:
+              universal.plan?.kind ||
+              "universal",
+            inspection:
+              universal.plan
+                ?.inspection ||
+              info
+          };
+        }
+
+        return renderEvidenceImage(
+          clean,
+          universal.plan
+            ?.inspection ||
+            info,
+          ui,
+          universal.plan
+        );
+      }
+
+      if (
+        /(niagara|particle|effect|vfx)/i
+          .test(type)
+      ) {
+        const universal =
+          await tryUniversalPreview(
+            clean,
+            ui,
+            {
+              signal
+            }
+          );
+
+        if (universal.rendered) {
+          return {
+            state: "ready",
+            kind:
+              universal.plan?.kind ||
+              "vfx-reference",
+            inspection:
+              universal.plan
+                ?.inspection ||
+              info
+          };
+        }
+
+        return renderEvidenceImage(
+          clean,
+          universal.plan
+            ?.inspection ||
+            info,
+          ui,
+          universal.plan
+        );
+      }
+
+      if (
+        resolvedFamily ===
+        "blueprint"
+      ) {
+        try {
+          const association =
+            fastAssociation ||
+            await window.NovaSparxAssociations
+              ?.resolveVisual?.(
+                clean,
+                info,
+                {
+                  signal
+                }
+              );
+
+          if (
+            !force3d &&
+            association?.blueprintPath &&
+            await tryVerifiedBlueprintImage(
+              association,
+              ui
+            )
+          ) {
+            return {
+              state: "ready",
+              kind:
+                "blueprint-image",
+              inspection:
+                info,
+              association
+            };
+          }
+
+          if (
+            association?.visualPath
+          ) {
+            const browserState =
+              guard?.status?.() ||
+              {};
+
+            if (
+              browserState.isMobile ||
+              browserState.recoveryMode
+            ) {
+              return renderEvidenceImage(
+                clean,
+                info,
+                ui,
+                {
+                  source:
+                    "blueprint-safe-fallback",
+                  blueprintPath:
+                    association.blueprintPath ||
+                    clean,
+                  attemptedReferences:
+                    [
+                      association.blueprintPath ||
+                      clean
+                    ],
+                  evidence:
+                    association.evidence ||
+                    "Blueprint relationship verified.",
+                  error:
+                    "Blueprint verified, but no lightweight preview image was available. Hosted mesh rendering was skipped on this device to protect stability."
+                }
+              );
+            }
+
+            await renderNovaMesh(
+              association.visualPath,
+              ui.image,
+              ui.status,
+              ui.meta,
+              {
+                signal,
+                sourceLabel:
+                  "NovaSparx • Blueprint-verified mesh"
+              }
+            );
+
+            return {
+              state: "ready",
+              kind:
+                "blueprint-mesh",
+              inspection:
+                info,
+              association
+            };
+          }
+        } catch (error) {
+          if (
+            error?.name ===
+            "AbortError"
+          ) {
+            throw error;
+          }
+
+          console.warn(
+            "FNAA Blueprint association:",
+            error
+          );
+        }
+
+        const universal =
+          await tryUniversalPreview(
+            clean,
+            ui,
+            {
+              signal
+            }
+          );
+
+        if (universal.rendered) {
+          return {
+            state: "ready",
+            kind:
+              universal.plan?.kind ||
+              "blueprint-reference",
+            inspection:
+              universal.plan
+                ?.inspection ||
+              info
+          };
+        }
+
+        return renderEvidenceImage(
+          clean,
+          universal.plan
+            ?.inspection ||
+            info,
+          ui,
+          universal.plan
+        );
+      }
+
+      if (
+        resolvedFamily ===
+          "mesh" ||
+        /(staticmesh|skeletalmesh|mesh)/i
+          .test(type) ||
+        /^s[mk]_?/i.test(
+          clean
+            .split("/")
+            .pop() ||
+          ""
+        )
+      ) {
+        try {
+          let association =
+            fastAssociation;
+
+          try {
+            association =
+              association ||
+              await window.NovaSparxAssociations
+                ?.resolveVisual?.(
+                  clean,
+                  info,
+                  {
+                    signal
+                  }
+                ) ||
+              null;
+          } catch (error) {
+            if (
+              error?.name ===
+              "AbortError"
+            ) {
+              throw error;
+            }
+          }
+
+          if (
+            !force3d &&
+            association?.blueprintPath &&
+            await tryVerifiedBlueprintImage(
+              association,
+              ui
+            )
+          ) {
+            return {
+              state: "ready",
+              kind:
+                "mesh-blueprint-image",
+              inspection:
+                info,
+              association
+            };
+          }
+
+          const visualPath =
+            association?.visualPath ||
+            clean;
+
+          const browserState =
+            guard?.status?.() ||
+            {};
+
+          if (
+            association?.blueprintPath &&
+            (
+              browserState.isMobile ||
+              browserState.recoveryMode
+            )
+          ) {
+            return renderEvidenceImage(
+              clean,
+              info,
+              ui,
+              {
+                source:
+                  "blueprint-safe-fallback",
+                blueprintPath:
+                  association.blueprintPath,
+                attemptedReferences:
+                  [
+                    association.blueprintPath
+                  ],
+                evidence:
+                  association.evidence ||
+                  "A Blueprint relationship was verified.",
+                error:
+                  "Verified Blueprint found, but no lightweight Blueprint image was available. Hosted mesh rendering was skipped on this device to protect browser/server stability."
+              }
+            );
+          }
+
+          await renderNovaMesh(
+            visualPath,
+            ui.image,
+            ui.status,
+            ui.meta,
+            {
+              signal,
+              backend:
+                !browserState.isMobile &&
+                !browserState.recoveryMode,
+              sourceLabel:
+                association
+                  ?.blueprintPath
+                  ? "NovaSparx • Blueprint-verified mesh"
+                  : ""
+            }
+          );
+
+          return {
+            state: "ready",
+            kind:
+              association
+                ?.blueprintPath
+                ? "mesh-blueprint-verified"
+                : "mesh",
+            inspection: info,
+            association
+          };
+        } catch (meshError) {
+          if (
+            signal?.aborted ||
+            meshError?.name ===
+              "AbortError"
+          ) {
+            throw abortError(
+              signal
+            );
+          }
+
+          const browserState =
+            guard?.status?.() ||
+            {};
+
+          if (
+            browserState.isMobile ||
+            browserState.recoveryMode
+          ) {
+            return renderEvidenceImage(
+              clean,
+              info,
+              ui,
+              {
+                source:
+                  "device-safe-mesh-fallback",
+                attemptedReferences: [],
+                error:
+                  meshError?.message ||
+                  "No device-safe mesh preview layer was available."
+              }
+            );
+          }
+
+          if (force3d) {
+            try {
+              const publicFallback =
+                await tryPublicRelatedImage(
+                  clean,
+                  ui,
+                  signal
+                );
+
+              if (
+                publicFallback.rendered
+              ) {
+                return {
+                  state:
+                    "ready",
+                  kind:
+                    "verified-related-image",
+                  inspection:
+                    info,
+                  publicPlan:
+                    publicFallback.plan
+                };
+              }
+            } catch (error) {
+              if (
+                signal?.aborted ||
+                error?.name ===
+                  "AbortError"
+              ) {
+                throw abortError(
+                  signal
+                );
+              }
+            }
+
+            return showModelUnavailable(
+              ui,
+              meshError?.message ||
+                "The 3D mesh could not be rendered.",
+              info
+            );
+          }
+
+          const universal =
+            await tryUniversalPreview(
+              clean,
+              ui,
+              {
+                signal
+              }
+            );
+
+          if (universal.rendered) {
+            return {
+              state: "ready",
+              kind:
+                universal.plan?.kind ||
+                "referenced-mesh",
+              inspection:
+                universal.plan
+                  ?.inspection ||
+                info
+            };
+          }
+
+          const fallbackPlan = {
+            ...(universal.plan || {}),
+            error:
+              universal.plan?.error ||
+              meshError?.message ||
+              String(meshError)
+          };
+
+          return renderEvidenceImage(
+            clean,
+            fallbackPlan
+              ?.inspection ||
+              info,
+            ui,
+            fallbackPlan
+          );
+        }
+      }
+
+      // 5) NovaSparx Layer 8 asks CUE4Parse for a verified referenced texture
+      // or 3D model, then turns that result into the PNG shown to the user.
+      const universal =
+        await tryUniversalPreview(
+          clean,
+          ui,
+          {
+            signal
+          }
+        );
+
+      if (universal.rendered) {
+        return {
+          state: "ready",
+          kind:
+            universal.plan?.kind ||
+            "universal",
+          inspection:
+            universal.plan
+              ?.inspection ||
+            info
+        };
+      }
+
+      // 6) Unknown/non-mesh asset types are never promoted to mesh merely
+      // because a similarly named path exists. Type evidence wins over names.
+
+      // 7) Every remaining asset receives a deterministic PNG evidence card.
+      // It is explicitly labelled and never pretends to be the Fortnite art.
+      return renderEvidenceImage(
+        clean,
+        universal.plan
+          ?.inspection ||
+          info,
+        ui,
+        universal.plan
+      );
+    } catch (error) {
+      if (
+        signal?.aborted ||
+        error?.name ===
+          "AbortError"
+      ) {
+        return {
+          state:
+            "aborted",
+          kind:
+            "cancelled"
+        };
+      }
+
+      if (
+        error?.code ===
+          "NOVASPARX_AUDIO_TEMPLATE"
+      ) {
+        if (ui.audio) {
+          ui.audio.hidden =
+            true;
+
+          ui.audio.removeAttribute(
+            "src"
+          );
+        }
+
+        setStatus(
+          ui.status,
+          error.message,
+          "partial"
+        );
+
+        setMeta(
+          ui.meta,
+          "MetaSound template • runtime WaveAsset input required",
+          "partial"
+        );
+
+        return {
+          state:
+            "partial",
+          kind:
+            "audio",
+          playable:
+            false,
+          template:
+            true,
+          error:
+            error.message
+        };
+      }
+
+      if (
+        error?.code ===
+          "NOVASPARX_AUDIO_FAILED"
+      ) {
+        if (ui.audio) {
+          ui.audio.hidden =
+            true;
+
+          ui.audio.removeAttribute(
+            "src"
+          );
+        }
+
+        setStatus(
+          ui.status,
+          "Listen unavailable: " +
+          error.message
+        );
+
+        return {
+          state:
+            "error",
+          kind:
+            "audio",
+          error:
+            error.message
+        };
+      }
+
+      if (["NOVASPARX_TEXTURE_FAILED", "NOVASPARX_MESH_FAILED"].includes(error?.code)) {
+        if (options.mode === "model") return showModelUnavailable(ui, error.message);
+        ui.image.hidden = true;
+        ui.image.removeAttribute("src");
+        setStatus(ui.status, "View Image unavailable: " + error.message);
+        return { state: "error", kind: "texture", error: error.message };
+      }
+
+      console.warn(
+        "FNAA preview:",
+        error
+      );
+
+      return renderEvidenceImage(
+        clean,
+        null,
+        ui,
+        {
+          source:
+            "path-only-evidence",
+          attemptedReferences: [],
+          error:
+            error?.message ||
+            String(error)
+        }
+      );
+    } finally {
+      const wasCurrent =
+        guard
+          ?.isCurrentOperation?.(
+            operation
+          ) ??
+        !signal?.aborted;
+
+      guard?.endOperation?.(
+        operation
+      );
+
+      if (
+        button &&
+        wasCurrent
+      ) {
+        button.disabled = false;
+
+        if (
+          !ui.panel.hidden
+        ) {
+          button.textContent =
+            button.dataset
+              .openLabel ||
+            t(
+              "hideImage",
+              "Hide Preview"
+            );
+        }
+      }
+    }
+  }
+
+  async function toggle(
+    target,
+    path,
+    button,
+    options = {}
+  ) {
+    return renderPreview(
+      target,
+      path,
+      button,
+      options
+    );
+  }
+
+  window.addEventListener(
+    "pagehide",
+    releaseAll
+  );
+
+  window.FortnitePreview =
+    Object.freeze({
+      version: "2.4.0",
+      toggle,
+      render: renderPreview,
+      release,
+      releaseMeshPreview,
+      releaseAll
+    });
+})();

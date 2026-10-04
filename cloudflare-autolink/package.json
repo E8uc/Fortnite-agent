@@ -1,0 +1,15 @@
+{
+  "name": "fortnite-ai-agent-autolink",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "NovaSparx reverse WebSocket AutoLink edge for FNAA.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

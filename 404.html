@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>E8</title>
+</head>
+<body>
+<script>
+(() => {
+  "use strict";
+
+  const firstSegment =
+    location.pathname
+      .split("/")
+      .filter(Boolean)[0] || "";
+
+  const base =
+    firstSegment
+      ? `/${firstSegment}/`
+      : "/";
+
+  const authHash =
+    /(?:^#|[&#])or_(?:session|login)=/i
+      .test(location.hash || "");
+
+  // Preserve the SPA route, but never bury the OpenRouter callback fragment
+  // inside sessionStorage. auth.js must see #or_session immediately on boot.
+  const current =
+    location.pathname +
+    location.search +
+    (
+      authHash
+        ? ""
+        : location.hash
+    );
+
+  try {
+    sessionStorage.setItem(
+      "fnaa:github-pages-route",
+      current
+    );
+  } catch {}
+
+  location.replace(
+    base +
+    (
+      authHash
+        ? location.hash
+        : ""
+    )
+  );
+})();
+</script>
+</body>
+</html>
