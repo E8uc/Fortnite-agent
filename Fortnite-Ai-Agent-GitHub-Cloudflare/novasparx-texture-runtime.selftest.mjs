@@ -5,6 +5,19 @@ import vm from 'node:vm';
 // Execute production request orchestration and Worker validation; replace only
 // metadata IO and PNG encoding so races are deterministic without live services.
 const workers = [], pending = new Map();
+const releaseBuild = '++Fortnite+Release-42.30-CL-58557680-Windows';
+const pinnedLive = 'https://fortnite-direct.dillycdn.com/manifests/pinned-live.manifest';
+const pinnedStudio = 'https://fortnite-direct.dillycdn.com/manifests/pinned-studio.manifest';
+const releaseFixture = () => ({
+  schema: 'fnaa.browser-release.v1', fortniteBuild: releaseBuild,
+  manifestSources: {
+    live: { url: pinnedLive, id: 'pinned-live', fullBuild: releaseBuild, hash: 'a'.repeat(40), size: 100 },
+    studio: { url: pinnedStudio, id: 'pinned-studio', fullBuild: releaseBuild, hash: 'b'.repeat(40), size: 100 }
+  }
+});
+let browserRelease = releaseFixture(), liveBuild = releaseBuild, studioBuild = releaseBuild;
+let releaseGate = null;
+const metadataRequests = [];
 let source = fs.readFileSync(new URL('./novasparx-texture-runtime.js', import.meta.url), 'utf8');
 source = source.replace('  function clearCaches() {', `
   locate = (path, options) =>
@@ -13,13 +26,32 @@ source = source.replace('  function clearCaches() {', `
       options
     );
   locatePackage = globalThis.testLocatePackage;
-  currentManifestUrl = async () => 'https://example.test/live.manifest';
+  globalThis.testManifestForLocation = manifestForLocation;
   canvasBlob = async () => new Blob(['pixels']);
   sha256Hex = async () => 'test-hash';
   globalThis.testNormalize = normalizeInput;
   function clearCaches() {`);
 const context = {
-  URL, AbortController, ArrayBuffer, Uint8Array, Float32Array, Uint32Array, Blob, setTimeout, clearTimeout,
+  URL, AbortController, ArrayBuffer, Uint8Array, Float32Array, Uint32Array, Blob, TextDecoder, Response, setTimeout, clearTimeout,
+  async fetch(input) {
+    const url = String(input);
+    metadataRequests.push(url);
+    if (url.endsWith('/novasparx-runtime/release.json')) {
+      if (releaseGate) return await releaseGate();
+      return browserRelease === null ? new Response('', { status: 404 }) : Response.json(browserRelease);
+    }
+    if (url.endsWith('/location-index/manifest.json')) return Response.json({
+      schema: 'novasparx.asset-locations.v1', hash: 'fnv1a32-low-byte', fortniteVersion: liveBuild
+    });
+    if (url.endsWith('/studio-location-index/manifest.json')) return Response.json({
+      schema: 'novasparx.asset-locations.v1', hash: 'fnv1a32-low-byte', fortniteVersion: studioBuild
+    });
+    if (url === 'https://export-service-new.dillyapis.com/v1/manifests') return Response.json([
+      { appName: 'Fortnite', labelName: 'Live-Windows', downloadUrl: 'https://fortnite-direct.dillycdn.com/manifests/newer-live.manifest' },
+      { appName: 'Fortnite_Studio', labelName: 'Live-Windows', downloadUrl: 'https://fortnite-direct.dillycdn.com/manifests/newer-studio.manifest' }
+    ]);
+    throw new Error('Unexpected runtime metadata URL: ' + url);
+  },
   WebAssembly, document: {
     baseURI: 'https://example.test/',
     currentScript: {
@@ -28,7 +60,9 @@ const context = {
   },
   FNAA_CONFIG: { apiEndpoint: 'https://example.test' },
   testLocate(path, { signal }) {
-    return new Promise(resolve => pending.set(path, { signal, resolve: () => resolve({ key: path, toc: 'test.utoc', shard: '00' }) }));
+    return new Promise(resolve => pending.set(path, { signal, resolve: () => resolve({
+      key: path, toc: 'test.utoc', shard: '00', manifestKind: path === 'studio-pin.uasset' ? 'studio' : 'live'
+    }) }));
   },
   async testLocatePackage(id) {
     return {
@@ -50,6 +84,68 @@ const context = {
 vm.runInNewContext(source, context);
 const runtime = context.NovaSparxTextureRuntime;
 const tick = () => new Promise(resolve => setImmediate(resolve));
+
+assert.equal(await context.testManifestForLocation({ manifestKind: 'live' }), pinnedLive, 'Live must use the packaged pinned manifest');
+assert.equal(await context.testManifestForLocation({ manifestKind: 'studio' }), pinnedStudio, 'Studio must use the packaged pinned manifest');
+assert.equal(metadataRequests.filter(url => url.endsWith('/release.json')).length, 1, 'Both families share one cached release descriptor');
+assert.equal(metadataRequests.some(url => url.includes('/v1/manifests')), false, 'Runtime must not discover a newer manifest');
+
+for (const family of ['live', 'studio']) {
+  runtime.clearCaches();
+  if (family === 'live') liveBuild = '++Fortnite+Release-43.00-CL-99999999-Windows';
+  else studioBuild = '++Fortnite+Release-43.00-CL-99999999-Windows';
+  await assert.rejects(context.testManifestForLocation({ manifestKind: family }), /release.*build.*mismatch/i);
+  liveBuild = studioBuild = releaseBuild;
+}
+
+for (const alter of [
+  release => { release.schema = 'unknown'; },
+  release => { release.fortniteBuild = '42.30'; },
+  release => { release.manifestSources.live.fullBuild = 'different-build'; },
+  release => { release.manifestSources.studio.url = 'https://unapproved.test/wrong.manifest'; },
+  release => { release.manifestSources.live.url = pinnedLive.replace('https:', 'http:'); },
+  release => { delete release.manifestSources.live.id; },
+  release => { release.manifestSources.studio.size = 0; }
+]) {
+  runtime.clearCaches();
+  browserRelease = releaseFixture(); alter(browserRelease);
+  await assert.rejects(context.testManifestForLocation({ manifestKind: 'live' }), /release descriptor.*invalid/i);
+}
+runtime.clearCaches(); browserRelease = null;
+await assert.rejects(context.testManifestForLocation({ manifestKind: 'live' }), /release descriptor.*HTTP 404/i);
+assert.equal(metadataRequests.some(url => url.includes('/v1/manifests')), false, 'Invalid or missing release must fail without newer-build fallback');
+
+runtime.clearCaches(); browserRelease = releaseFixture();
+let resolveOldRelease;
+releaseGate = () => new Promise(resolve => { resolveOldRelease = resolve; });
+const staleReleaseController = new AbortController();
+const staleRelease = context.testManifestForLocation({ manifestKind: 'live' }, { signal: staleReleaseController.signal });
+const staleRejected = assert.rejects(staleRelease, { name: 'AbortError' });
+await tick();
+releaseGate = null;
+browserRelease.manifestSources.live.url = pinnedLive.replace('pinned-live', 'latest-pinned-live');
+assert.equal(await context.testManifestForLocation({ manifestKind: 'live' }), browserRelease.manifestSources.live.url);
+staleReleaseController.abort('replaced-by-new-texture');
+resolveOldRelease(Response.json(releaseFixture())); await staleRejected;
+assert.equal(await context.testManifestForLocation({ manifestKind: 'live' }), browserRelease.manifestSources.live.url, 'Aborted descriptor fetch must not overwrite the latest cache');
+
+runtime.clearCaches();
+releaseGate = () => new Promise(resolve => { resolveOldRelease = resolve; });
+const beforeReset = context.testManifestForLocation({ manifestKind: 'live' });
+const resetRejected = assert.rejects(beforeReset, { name: 'AbortError' });
+await tick(); runtime.clearCaches(); releaseGate = null;
+resolveOldRelease(Response.json(releaseFixture())); await resetRejected;
+browserRelease = releaseFixture();
+assert.equal(await context.testManifestForLocation({ manifestKind: 'live' }), pinnedLive, 'clearCaches resets the release descriptor and pending work');
+console.log('Runtime release: pinned Live/Studio URLs, mixed-build rejection, missing/invalid release, cancellation and cache reset passed.');
+
+runtime.clearCaches(); liveBuild = '++Fortnite+Release-43.00-CL-99999999-Windows';
+const mixedWorker = runtime.resolveTexture('mixed-release.uasset');
+const mixedWorkerRejected = assert.rejects(mixedWorker, /release.*build.*mismatch/i);
+pending.get('mixed-release.uasset').resolve(); await mixedWorkerRejected;
+assert.equal(workers.length, 0, 'A mixed release must fail before spawning a decode Worker');
+liveBuild = releaseBuild; runtime.clearCaches();
+
 assert.equal(context.testNormalize("Texture2D'/Game/Textures/T_Test.T_Test'"), 'FortniteGame/Content/Textures/T_Test.uasset');
 assert.equal(context.testNormalize('FortniteGame/Content/T_Test.uasset'), 'FortniteGame/Content/T_Test.uasset');
 const a = runtime.resolveTexture('a.uasset');
@@ -60,6 +156,8 @@ assert.equal(pending.get('a.uasset').signal.aborted, true);
 pending.get('b.uasset').resolve(); await tick();
 pending.get('a.uasset').resolve(); await rejectedA;
 assert.equal(workers.length, 1, 'old metadata must not spawn or replace a Worker');
+assert.equal(new URL(workers[0].url.searchParams.get('manifest')).searchParams.get('url'), pinnedLive,
+  'Worker manifest relay must receive the pinned Live URL');
 assert.equal(
   workers[0].url.searchParams.get('chunkBase'),
   'https://example.test/nova-edge/chunk/',
