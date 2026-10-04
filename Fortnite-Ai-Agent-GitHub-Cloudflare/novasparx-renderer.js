@@ -65,9 +65,11 @@
       const acy = positions[c + 1] - positions[a + 1];
       const acz = positions[c + 2] - positions[a + 2];
 
-      const nx = aby * acz - abz * acy;
-      const ny = abz * acx - abx * acz;
-      const nz = abx * acy - aby * acx;
+      // Native Unreal triangles use a left-handed basis. The model matrix
+      // converts these generated normals along with the native positions.
+      const nx = abz * acy - aby * acz;
+      const ny = abx * acz - abz * acx;
+      const nz = aby * acx - abx * acy;
 
       for (const offset of [a, b, c]) {
         normals[offset] += nx;
@@ -172,6 +174,18 @@
     matrix[5] = scale;
     matrix[10] = scale;
     return matrix;
+  }
+
+  function meshModelMatrix(bounds) {
+    // Unreal's left-handed Z-up basis -> WebGL's right-handed Z-up basis.
+    // This is the existing GLB export's SwapYZ followed by a Y-up to Z-up
+    // rotation. Center first; preserve shared positions, indices and UVs.
+    const basis = uniformScale(1 / bounds.radius);
+    basis[5] *= -1;
+    return multiply(
+      basis,
+      translation(-bounds.centerX, -bounds.centerY, -bounds.centerZ)
+    );
   }
 
   function lookAt(eye, center, up) {
@@ -1816,10 +1830,7 @@
         positions,
         signal
       );
-    const model = multiply(
-      uniformScale(1 / bounds.radius),
-      translation(-bounds.centerX, -bounds.centerY, -bounds.centerZ)
-    );
+    const model = meshModelMatrix(bounds);
 
     const view = lookAt(chooseCamera(bounds), [0, 0, 0], [0, 0, 1]);
     const projection = orthographic(-1.1, 1.1, -1.1, 1.1, 0.01, 20);
@@ -2501,18 +2512,7 @@
         signal
       );
 
-    const model =
-      multiply(
-        uniformScale(
-          1 /
-          bounds.radius
-        ),
-        translation(
-          -bounds.centerX,
-          -bounds.centerY,
-          -bounds.centerZ
-        )
-      );
+    const model = meshModelMatrix(bounds);
 
     const flatMesh = bounds.sizeZ < Math.max(bounds.sizeX, bounds.sizeY) * 0.01;
     const state = {

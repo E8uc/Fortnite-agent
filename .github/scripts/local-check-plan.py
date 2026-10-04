@@ -14,7 +14,7 @@ def checks_for(names):
       (name.startswith(SITE) and RUNTIME.match(name[len(SITE):])) or
       name.startswith(('.github/runtime/','.github/browser-data/')) or
       name in ('.github/novasparx-runtime.json','.github/novasparx-data.json','.github/scripts/assemble-site.py') or
-      name.startswith(('.github/tests/novasparx-model-viewer','.github/tests/novasparx-texture-runtime','.github/tests/novasparx-texture-placement','.github/tests/novasparx-production','.github/tests/novasparx-renderer-alpha'))))
+      name.startswith(('.github/tests/novasparx-model-viewer','.github/tests/novasparx-mesh-handedness','.github/tests/novasparx-texture-runtime','.github/tests/novasparx-texture-placement','.github/tests/novasparx-production','.github/tests/novasparx-renderer-alpha'))))
     return {'cheapChecks':True,'nativeBrowserMatrix':bool(relevant),'productionSmoke':bool(relevant),'browserInputs':relevant}
 def input_hash(root):
     digest=hashlib.sha256()
