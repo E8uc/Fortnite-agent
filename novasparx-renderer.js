@@ -893,49 +893,8 @@
         null;
 
       try {
-        // PNG/Image uploads used UNPACK_FLIP_Y_WEBGL. Typed-array uploads do
-        // not consistently honor that flag across WebKit/WebGL versions, so
-        // flip rows explicitly and upload the already-decoded RGBA bytes.
-        const stride =
-          width *
-          4;
-
-        const flipped =
-          new Uint8Array(
-            sourcePixels.byteLength
-          );
-
-        for (
-          let row = 0;
-          row < height;
-          row++
-        ) {
-          throwIfAborted(
-            signal
-          );
-
-          const sourceOffset =
-            row *
-            stride;
-
-          const targetOffset =
-            (
-              height -
-              row -
-              1
-            ) *
-            stride;
-
-          flipped.set(
-            sourcePixels.subarray(
-              sourceOffset,
-              sourceOffset +
-                stride
-            ),
-            targetOffset
-          );
-        }
-
+        // CUE4Parse UVs and decoded image rows use the same top-left origin.
+        // Upload native rows unchanged, as in its existing glTF exporter.
         directTexture =
           gl.createTexture();
 
@@ -964,7 +923,7 @@
           0,
           gl.RGBA,
           gl.UNSIGNED_BYTE,
-          flipped
+          sourcePixels
         );
 
         // Fortnite environment/building UVs commonly tile outside 0..1.
@@ -1379,7 +1338,7 @@
 
       gl.pixelStorei(
         gl.UNPACK_FLIP_Y_WEBGL,
-        1
+        0
       );
 
       gl.texImage2D(
