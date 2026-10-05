@@ -14391,8 +14391,8 @@
     },
     {
       "path": "fnaa-v101.css",
-      "bytes": 5804,
-      "sha256": "128b3de1c698f12ac8a59b7c1285b237249ba67705a0e1bf79ddcb3f60750f09"
+      "bytes": 12585,
+      "sha256": "3933f40e0f012739956fcde2cee3b0927c72b32fa0200aa58ed248b1b1f9865a"
     },
     {
       "path": "fnaa-v101.js",
@@ -14407,7 +14407,7 @@
     {
       "path": "index.html",
       "bytes": 15296,
-      "sha256": "ff492a8eff5881b1a10ea7d394e2095d3806ca4af0d4b764fed9bae252d57731"
+      "sha256": "f78506fa6a5ca1256d19a24965032f0d033188ded7a73eae9db888a9407cff9a"
     },
     {
       "path": "novasparx-associations.js",
