@@ -331,26 +331,6 @@ html[data-theme] {
   --shadow: none;
 }
 
-html[data-theme="fortnite"] {
-  color-scheme: dark;
-  --bg: #222;
-  --bg-soft: #303030;
-  --panel: #282828;
-  --panel-2: #333;
-  --panel-3: #3c3c3c;
-  --line: #444;
-  --line-strong: #555;
-  --text: #e3e3e3;
-  --muted: #b0b0b0;
-  --muted-2: #969696;
-  --accent: #3c7e90;
-  --accent-text: #fff;
-  --link: #8bcdd6;
-  --danger: #efa6a6;
-  --warning: #dbc48d;
-  --override-cyan: #81bbcb;
-}
-
 html[data-theme="black"] {
   --bg: #171717;
   --bg-soft: #242424;
@@ -363,13 +343,17 @@ html[data-theme="black"] {
   --muted-2: #969696;
   --accent: #3c7e90;
   --accent-text: #fff;
+  --accent-hover: #316675;
+  --accent-hover-line: #2d5f6c;
   --link: #8bcdd6;
 }
 
 html[data-theme="white"] {
-  --accent: #3c7e90;
+  --accent: #950000;
   --accent-text: #fff;
-  --link: #286779;
+  --accent-hover: #760000;
+  --accent-hover-line: #760000;
+  --link: #950000;
 }
 
 html[data-theme], html[data-theme] body,
@@ -399,7 +383,7 @@ html[data-theme] :is(.welcome h1, .topbar-title, .tools-title, .settings-title, 
 html[data-theme] :is(.topbar-title, .tools-title, .settings-title) { font-size: 18px; }
 html[data-theme] .welcome h1 { font-size: clamp(26px, 6vw, 36px); }
 
-html[data-theme] :is(.composer-inner, .tool-card, .converter-card, .settings-card,
+html[data-theme] :is(.composer-inner, .tool-card, .converter-card,
   .mesh-image-panel, .reference-list, .user-bubble, .user-edit-card, .tool-result,
   .tool-empty, .plugin-menu, .toast, .e8-usage-banner, .e8-popover, .e8-dialog-card) {
   border-radius: 4px;
@@ -429,7 +413,7 @@ html[data-theme] :is(.tools-tab, .tool-subtab, .tool-button, .json-view-button,
   .login-primary, .login-secondary, .language-choice, .theme-choice, .account-action-button,
   .guest-login-banner button, .fnaa-guest-login, .path-copy, .copy-button, .user-edit-button,
   .plugin-option, .plugin-icon, .plugin-panel-badge, .sidebar-action, .recent-item,
-  .settings-card-icon, .owner-account-list a, .icon-btn, .send-btn,
+  .icon-btn, .send-btn,
   .e8-menu-item, .e8-dialog-close, .e8-dialog-button, .e8-find-result) {
   border-radius: 4px;
   box-shadow: none;
@@ -445,8 +429,8 @@ html[data-theme] :is(.send-btn, .tool-button.primary, .tools-tab.active,
 }
 html[data-theme] :is(.send-btn, .tool-button.primary, .tools-tab.active,
   .login-primary, .language-choice.active, .theme-choice.active):enabled:hover {
-  background: #316675;
-  border-color: #2d5f6c;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover-line);
 }
 html[data-theme] .asset-result-actions .json-view-button:first-child {
   border-color: var(--line-strong);
@@ -509,7 +493,7 @@ html[data-theme] .e8-dialog-layer {
 
 /* Remove decorative scanlines, sweeps and glows without hiding UI states. */
 html[data-theme] :is(.app-shell, .topbar, .tools-header, .settings-header,
-  .tools-tab.active, .tool-subtab.active, .override-theme-choice)::after,
+  .tools-tab.active, .tool-subtab.active)::after,
 html[data-theme] .login-card-polished::before { content: none; animation: none; }
 html[data-theme] :is(.fnaa-glitch-pulse .topbar-brand, .fnaa-glitch-pulse .tools-title,
   .fnaa-glitch-pulse .settings-title) { animation: none; }
@@ -519,4 +503,11 @@ html[data-theme] .e8-thinking {
   background: none;
   -webkit-text-fill-color: currentColor;
   animation: none;
+}
+
+/* Settings pages use compact rows and share one footer. */
+html[data-theme] :is(.language-choice, .theme-choice) { border-radius: 0; }
+html[data-theme] .settings-content :is(.settings-row, .settings-detail-row, .settings-owner-footer) {
+  box-shadow: none;
+  background-image: none;
 }

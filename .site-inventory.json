@@ -26,8 +26,8 @@
     },
     {
       "path": "app.js",
-      "bytes": 149623,
-      "sha256": "ffe35dfd152bd723ceef4c0766e8998de550fc9428abb09837e1d3a955a9dfe7"
+      "bytes": 147430,
+      "sha256": "b91986cd372e1516abbd26662748e327771e04ab69302184f9fbf85bdfcf3245"
     },
     {
       "path": "asset-diagnosis.js",
@@ -14391,8 +14391,8 @@
     },
     {
       "path": "fnaa-v101.css",
-      "bytes": 12585,
-      "sha256": "3933f40e0f012739956fcde2cee3b0927c72b32fa0200aa58ed248b1b1f9865a"
+      "bytes": 12549,
+      "sha256": "b12fe5fb85871669d7482af674fec47544280bdc3d4e68084cb79698106a74cb"
     },
     {
       "path": "fnaa-v101.js",
@@ -14401,13 +14401,13 @@
     },
     {
       "path": "i18n.js",
-      "bytes": 17476,
-      "sha256": "738ee77108b3fecafec90fc8fd8120f3bf4bce9e405090f0405bb31b425ac1cc"
+      "bytes": 19736,
+      "sha256": "033e97474767a2d27b3ac6872d8292013e784577bd47ab3d72c95b78772a663f"
     },
     {
       "path": "index.html",
-      "bytes": 15296,
-      "sha256": "f78506fa6a5ca1256d19a24965032f0d033188ded7a73eae9db888a9407cff9a"
+      "bytes": 16092,
+      "sha256": "6663c531c6408134f9701c611fa2da7153502673eed7983ef56a2ac85bdf74b6"
     },
     {
       "path": "novasparx-associations.js",
@@ -18721,8 +18721,8 @@
     },
     {
       "path": "style.css",
-      "bytes": 52488,
-      "sha256": "8b1ee0de7774e180cd88e6352504a7cbb2c9653a9d80ee798c1692a1a917b684"
+      "bytes": 48994,
+      "sha256": "a90f89f3343341d7ab3c95583c71a330810b8ed94792e511b695257186196ba4"
     },
     {
       "path": "sync_fortnite_assets.py",
