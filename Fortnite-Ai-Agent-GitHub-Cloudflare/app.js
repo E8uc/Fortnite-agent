@@ -535,6 +535,9 @@
   };
 
   let pendingSetupAvatar = "";
+  let settingsPage = "main";
+  let themePreference = "system";
+  const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
 
   const dbPending =
     new Map();
@@ -551,10 +554,13 @@
   applyTheme(
     safeStorageGet(
       THEME_KEY
-    ) || "fortnite"
+    ) || "system"
   );
 
   setupEvents();
+  systemTheme.addEventListener("change", () => {
+    if (themePreference === "system") applyTheme("system");
+  });
   syncChatChromeLabels();
   renderAll();
   ensureGuestLoginButton();
@@ -1835,6 +1841,10 @@
       ?.addEventListener(
         "click",
         () => {
+          if (settingsPage !== "main") {
+            showSettingsPage(settingsPage === "account-info" ? "account" : "main");
+            return;
+          }
           closeSettingsOnly();
 
           navigate(
@@ -1858,6 +1868,11 @@
           );
         }
       );
+
+    els.settingsOverlay?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-settings-target]");
+      if (button) showSettingsPage(button.dataset.settingsTarget);
+    });
 
     els.profileUsernameButton
       ?.addEventListener(
@@ -1998,6 +2013,8 @@
     window.addEventListener(
       "fortnite-language-changed",
       () => {
+        renderAccountUI();
+        showSettingsPage(settingsPage, false);
         syncSettingsApiCard();
         syncUsageUI();
         closeChatUiIfLoaded();
@@ -7293,6 +7310,7 @@
     syncThemeButtons();
     syncSettingsApiCard();
     syncUsageUI();
+    showSettingsPage("main", false);
 
     els.settingsOverlay.hidden =
       false;
@@ -7319,6 +7337,24 @@
           replace: true
         }
       );
+    }
+  }
+
+  function showSettingsPage(page, focus = true) {
+    const titles = {
+      main: "settingsTitle", account: "account", "account-info": "accountInfo",
+      usage: "usage", language: "language", theme: "siteTheme"
+    };
+    if (!Object.hasOwn(titles, page)) return;
+    settingsPage = page;
+    for (const panel of els.settingsOverlay.querySelectorAll("[data-settings-page]")) {
+      panel.hidden = panel.dataset.settingsPage !== page;
+    }
+    const title = $("settingsPageTitle");
+    title.textContent = window.FortniteI18n.t(titles[page]);
+    if (focus) {
+      els.settingsOverlay.querySelector(".settings-content").scrollTop = 0;
+      title.focus({preventScroll: true});
     }
   }
 
@@ -7573,11 +7609,6 @@
             type="button"
           >Log in</button>
 
-          <button
-            class="login-secondary openrouter-create-button"
-            id="createAccountMain"
-            type="button"
-          >Create New</button>
         </div>
 
         <div
@@ -7612,15 +7643,6 @@
           )
       );
 
-    $("createAccountMain")
-      ?.addEventListener(
-        "click",
-        () =>
-          showOpenRouterLogin(
-            "create"
-          )
-      );
-
     $("loginGuest")
       ?.addEventListener(
         "click",
@@ -7652,9 +7674,6 @@
     const loginButton =
       $("loginMain");
 
-    const createButton =
-      $("createAccountMain");
-
     if (loginButton) {
       loginButton.disabled =
         false;
@@ -7663,13 +7682,6 @@
         "Log in";
     }
 
-    if (createButton) {
-      createButton.disabled =
-        false;
-
-      createButton.textContent =
-        "Create New";
-    }
   }
 
   async function showOpenRouterLogin(
@@ -7681,13 +7693,7 @@
     const loginButton =
       $("loginMain");
 
-    const createButton =
-      $("createAccountMain");
-
-    const activeButton =
-      mode === "create"
-        ? createButton
-        : loginButton;
+    const activeButton = loginButton;
 
     const status =
       $("openRouterLoginStatus");
@@ -7708,15 +7714,9 @@
       loginButton.disabled = true;
     }
 
-    if (createButton) {
-      createButton.disabled = true;
-    }
-
     if (activeButton) {
       activeButton.textContent =
-        mode === "create"
-          ? "Opening account setup…"
-          : "Opening login…";
+        "Opening login…";
     }
 
     if (status) {
@@ -7728,9 +7728,7 @@
     }
 
     try {
-      // OpenRouter's authorization page handles both existing-account login
-      // and creating a new free account. FNAA keeps two clear entry buttons
-      // while using one secure provider flow.
+      // Reuse the existing OpenRouter authorization flow.
       await auth
         .signInDefault();
     } catch (error) {
@@ -7879,196 +7877,25 @@
   }
 
   function ensureSettingsApiCard() {
-    let card =
-      $("fnaaSettingsApiCard");
-
-    if (card) {
-      return card;
-    }
-
-    const settingsContent =
-      document.querySelector(
-        ".settings-content"
-      );
-
-    if (!settingsContent) {
-      return null;
-    }
-
-    card =
-      document.createElement(
-        "section"
-      );
-
-    card.id =
-      "fnaaSettingsApiCard";
-
-    card.className =
-      "settings-card settings-stack-card fnaa-api-settings-card";
-
-    card.innerHTML = `
-      <div class="settings-card-icon">API</div>
-
-      <div class="settings-card-main">
-        <h2 data-fnaa-api-title>
-          OpenRouter Account
-        </h2>
-
-        <p id="fnaaSettingsApiState"></p>
-
-        <div class="fnaa-api-actions">
-          <button
-            id="fnaaSettingsApiSave"
-            class="tool-button primary"
-            type="button"
-          ></button>
-
-          <button
-            id="fnaaSettingsApiRemove"
-            class="tool-button"
-            type="button"
-          ></button>
-        </div>
-      </div>`;
-
-    const owner =
-      settingsContent.querySelector(
-        ".owner-settings-card"
-      );
-
-    if (owner) {
-      settingsContent.insertBefore(
-        card,
-        owner
-      );
-    } else {
-      settingsContent.appendChild(
-        card
+    const card = $("fnaaSettingsApiCard");
+    if (card && !card.dataset.settingsBound) {
+      card.dataset.settingsBound = "1";
+      card.querySelector("#fnaaSettingsApiSave")?.addEventListener(
+        "click", () => showOpenRouterLogin("login")
       );
     }
-
-    card
-      .querySelector(
-        "#fnaaSettingsApiSave"
-      )
-      ?.addEventListener(
-        "click",
-        () =>
-          showOpenRouterLogin(
-            "login"
-          )
-      );
-
-    card
-      .querySelector(
-        "#fnaaSettingsApiRemove"
-      )
-      ?.addEventListener(
-        "click",
-        async () => {
-          try {
-            await window.FortniteAuth
-              ?.signOut?.();
-
-            showToast(
-              "Signed out"
-            );
-          } catch (error) {
-            showToast(
-              String(
-                error?.message ||
-                error
-              ),
-              true
-            );
-          }
-        }
-      );
-
     return card;
   }
 
   function syncSettingsApiCard() {
-    const card =
-      ensureSettingsApiCard();
-
+    const card = ensureSettingsApiCard();
     if (!card) return;
-
-    const state =
-      card.querySelector(
-        "#fnaaSettingsApiState"
-      );
-
-    const connect =
-      card.querySelector(
-        "#fnaaSettingsApiSave"
-      );
-
-    const remove =
-      card.querySelector(
-        "#fnaaSettingsApiRemove"
-      );
-
-    const loggedIn =
-      !!accountState.user;
-
-    if (!loggedIn) {
-      if (state) {
-        state.textContent =
-          copyText(
-            "Guest uses E8 access + 15s slow mode.",
-            "L’invité utilise l’accès E8 + mode lent 15 s.",
-            "الضيف يستخدم E8 + سلو مود 15 ثانية."
-          );
-      }
-
-      if (connect) {
-        connect.textContent =
-          "Continue with OpenRouter";
-
-        connect.disabled =
-          false;
-      }
-
-      if (remove) {
-        remove.hidden = true;
-      }
-
-      return;
-    }
-
-    if (state) {
-      state.textContent =
-        copyText(
-          "OpenRouter account connected.",
-          "Compte OpenRouter connecté.",
-          "حساب OpenRouter مربوط."
-        );
-    }
-
-    if (connect) {
-      connect.textContent =
-        copyText(
-          "Reconnect",
-          "Reconnecter",
-          "إعادة الربط"
-        );
-
-      connect.disabled =
-        false;
-    }
-
-    if (remove) {
-      remove.textContent =
-        copyText(
-          "Sign out",
-          "Se déconnecter",
-          "تسجيل الخروج"
-        );
-
-      remove.hidden =
-        false;
-    }
+    const loggedIn = !!accountState.user;
+    const t = window.FortniteI18n.t;
+    card.querySelector("#fnaaSettingsApiState").textContent =
+      t(loggedIn ? "apiConnected" : "apiDisconnected");
+    card.querySelector("#fnaaSettingsApiSave").textContent =
+      t(loggedIn ? "reConnect" : "accountLogin");
   }
 
   function copyText(
@@ -8116,9 +7943,7 @@
         ? profileAvatarSrc()
         : DEFAULT_USER_AVATAR;
 
-    els.profileUsernameButton
-      .textContent =
-      `@${username}`;
+    $("profileUsernameValue").textContent = `@${username}`;
 
     els.profileAccountType
       .textContent =
@@ -8126,11 +7951,12 @@
         ? "OpenRouter account"
         : "Guest";
 
-    els.accountActionButton
-      .textContent =
-      loggedIn
-        ? "Sign out"
-        : "Log in";
+    const actionKey = loggedIn ? "signOut" : "accountLogin";
+    els.accountActionButton.dataset.i18n = actionKey;
+    els.accountActionButton.textContent = window.FortniteI18n.t(actionKey);
+    $("accountStatusPrompt").textContent = window.FortniteI18n.t(
+      loggedIn ? "signOutPrompt" : "logInPrompt"
+    );
 
     els.profileAvatarButton
       .classList
@@ -8488,65 +8314,26 @@
   // ---------------------------------------------------------------------------
 
   function applyTheme(theme) {
-    const allowed =
-      new Set([
-        "black",
-        "white",
-        "fortnite"
-      ]);
-
-    const next =
-      allowed.has(theme)
-        ? theme
-        : "fortnite";
-
-    document.documentElement
-      .dataset.theme =
-      next;
-
-    safeStorageSet(
-      THEME_KEY,
-      next
+    // Keep saved Light/Dark choices; migrate the removed override to Dark.
+    themePreference = theme === "fortnite" ? "black"
+      : ["white", "black", "system"].includes(theme) ? theme : "system";
+    const next = themePreference === "system"
+      ? (systemTheme.matches ? "black" : "white") : themePreference;
+    document.documentElement.dataset.theme = next;
+    safeStorageSet(THEME_KEY, themePreference);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute(
+      "content", next === "white" ? "#f5f5f5" : "#171717"
     );
-
-    const meta =
-      document.querySelector(
-        'meta[name="theme-color"]'
-      );
-
-    if (meta) {
-      meta.setAttribute(
-        "content",
-        next === "white"
-          ? "#f5f5f5"
-          : next === "fortnite"
-            ? "#0a0524"
-            : "#000000"
-      );
-    }
-
     syncThemeButtons();
   }
 
   function syncThemeButtons() {
-    const current =
-      document.documentElement
-        .dataset.theme ||
-      "fortnite";
-
-    for (
-      const button of
-      document.querySelectorAll(
-        "[data-theme-choice]"
-      )
-    ) {
-      button.classList
-        .toggle(
-          "active",
-          button.dataset
-            .themeChoice ===
-          current
-        );
+    for (const button of document.querySelectorAll("[data-theme-choice]")) {
+      const active = button.dataset.themeChoice === themePreference;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+      const current = button.querySelector("[data-theme-current]");
+      if (current) current.hidden = !active;
     }
   }
 

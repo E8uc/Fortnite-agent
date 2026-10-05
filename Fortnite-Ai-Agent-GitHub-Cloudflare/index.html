@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="fortnite">
+<html lang="en" data-theme="black">
 <head>
   <meta charset="UTF-8" />
   <meta
@@ -55,8 +55,8 @@
 
   <title>E8</title>
 
-  <link rel="stylesheet" href="style.css?v=114" />
-  <link rel="stylesheet" href="fnaa-v101.css?v=104" />
+  <link rel="stylesheet" href="style.css?v=115" />
+  <link rel="stylesheet" href="fnaa-v101.css?v=105" />
 </head>
 
 <body>
@@ -348,162 +348,57 @@
         >‹</button>
 
         <div
+          id="settingsPageTitle"
           class="settings-title"
-          data-i18n="settingsTitle"
+          tabindex="-1"
         >Settings</div>
 
         <div></div>
       </header>
 
       <div class="settings-content">
-        <section
-          class="profile-settings"
-          aria-label="Account profile"
-        >
-          <button
-            id="profileAvatarButton"
-            class="profile-avatar-button"
-            type="button"
-            aria-label="Change profile picture"
-          >
-            <img
-              id="profileAvatar"
-              class="profile-avatar"
-              src="assets/default-user-avatar.jpeg"
-              alt=""
-            />
-
-            <span class="profile-avatar-edit">
-              Edit
-            </span>
-          </button>
-
-          <button
-            id="profileUsernameButton"
-            class="profile-username"
-            type="button"
-          >@Guest353</button>
-
-          <div
-            id="profileAccountType"
-            class="profile-account-type"
-          >Guest</div>
-
-          <input
-            id="profileAvatarInput"
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            hidden
-          />
+        <section data-settings-page="main" aria-label="Settings">
+          <button class="settings-row" data-settings-target="account" type="button"><span class="settings-row-label" data-i18n="account">Account</span><span class="settings-row-chevron" aria-hidden="true">›</span></button>
+          <button class="settings-row" data-settings-target="usage" type="button"><span class="settings-row-label" data-i18n="usage">Usage</span><span class="settings-row-chevron" aria-hidden="true">›</span></button>
+          <button class="settings-row" data-settings-target="language" type="button"><span class="settings-row-label" data-i18n="language">Language</span><span class="settings-row-chevron" aria-hidden="true">›</span></button>
+          <button class="settings-row" data-settings-target="theme" type="button"><span class="settings-row-label" data-i18n="theme">Theme</span><span class="settings-row-chevron" aria-hidden="true">›</span></button>
         </section>
 
-        <section class="settings-card settings-stack-card">
-          <div class="settings-card-icon">文</div>
+        <section data-settings-page="account" hidden>
+          <button class="settings-row" data-settings-target="account-info" type="button"><span class="settings-row-label" data-i18n="accountInfo">Account Info</span><span class="settings-row-chevron" aria-hidden="true">›</span></button>
+        </section>
 
-          <div class="settings-card-main">
-            <h2 data-i18n="changeLanguage">
-              Change the language
-            </h2>
-
-            <p data-i18n="language">
-              Language
-            </p>
-
-            <div class="language-grid">
-              <button
-                type="button"
-                class="language-choice"
-                data-set-language="en"
-              >
-                <strong>English</strong>
-                <small>EN</small>
+        <section data-settings-page="account-info" hidden>
+          <div class="settings-detail-row">
+            <span class="settings-row-label" data-i18n="profilePicture">Profile Image</span>
+            <div class="settings-row-value settings-avatar-value">
+              <button id="profileAvatarButton" class="profile-avatar-button" type="button" aria-label="Change profile picture">
+                <img id="profileAvatar" class="profile-avatar" src="assets/default-user-avatar.jpeg" alt="" />
+                <span class="profile-avatar-edit" data-i18n="edit">Edit</span>
               </button>
-
-              <button
-                type="button"
-                class="language-choice"
-                data-set-language="fr"
-              >
-                <strong>Français</strong>
-                <small>FR</small>
-              </button>
-
-              <button
-                type="button"
-                class="language-choice"
-                data-set-language="ar"
-              >
-                <strong>العربية</strong>
-                <small>AR</small>
-              </button>
+              <div id="profileAccountType" class="profile-account-type">Guest</div>
             </div>
+            <input id="profileAvatarInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+          </div>
+          <div class="settings-detail-row">
+            <span class="settings-row-label" data-i18n="username">Username</span>
+            <span id="profileUsernameValue" class="settings-row-value">@Guest</span>
+            <button id="profileUsernameButton" class="tool-button" type="button" data-i18n="edit">Edit</button>
+          </div>
+          <section id="fnaaSettingsApiCard" class="settings-detail-row">
+            <span class="settings-row-label">API</span>
+            <span id="fnaaSettingsApiState" class="settings-row-value">Not Connected To OpenRouter</span>
+            <button id="fnaaSettingsApiSave" class="tool-button" type="button">Log In</button>
+          </section>
+          <hr class="settings-separator" />
+          <h2 data-i18n="accountStatus">Account Status</h2>
+          <div class="settings-detail-row settings-account-status">
+            <span id="accountStatusPrompt" class="settings-row-value">Log in to your account?</span>
+            <button id="accountActionButton" class="account-action-button" type="button">Log In</button>
           </div>
         </section>
 
-        <section class="settings-card settings-stack-card">
-          <div class="settings-card-icon">◐</div>
-
-          <div class="settings-card-main">
-            <h2 data-i18n="changeTheme">
-              Change The Theme
-            </h2>
-
-            <div class="theme-grid">
-              <button
-                type="button"
-                class="theme-choice override-theme-choice"
-                data-theme-choice="fortnite"
-              >
-                <strong data-i18n="fortniteTheme">
-                  Override Theme
-                </strong>
-                <small>DEFAULT</small>
-              </button>
-
-              <button
-                type="button"
-                class="theme-choice"
-                data-theme-choice="black"
-              >
-                <strong data-i18n="blackTheme">
-                  Black Theme
-                </strong>
-              </button>
-
-              <button
-                type="button"
-                class="theme-choice"
-                data-theme-choice="white"
-              >
-                <strong data-i18n="whiteTheme">
-                  White Theme
-                </strong>
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section
-          class="settings-card settings-stack-card e8-usage-settings-card"
-          aria-labelledby="e8UsageTitle"
-        >
-          <div class="settings-card-icon e8-usage-settings-icon">
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              width="22"
-              height="22"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <circle cx="12" cy="12" r="8"></circle>
-              <path d="M12 8v5l3 2"></path>
-            </svg>
-          </div>
-
+        <section data-settings-page="usage" hidden aria-labelledby="e8UsageTitle">
           <div class="settings-card-main">
             <h2 id="e8UsageTitle">Usage</h2>
 
@@ -528,62 +423,41 @@
           </div>
         </section>
 
-        <section class="settings-card owner-settings-card">
-          <div class="settings-card-icon">@</div>
-
-          <div class="settings-card-main">
-            <h2 data-i18n="ownerAccounts">
-              Owner accounts :
-            </h2>
-
-            <div class="owner-account-list">
-              <a
-                href="https://discord.com/users/1010719166367535155"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <span class="owner-service">
-                  Discord
-                </span>
-                <span>@e8uc.</span>
-              </a>
-
-              <a
-                href="https://www.youtube.com/@E8uc"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <span class="owner-service">
-                  Youtube
-                </span>
-                <span>@E8uc</span>
-              </a>
-
-              <a
-                href="https://www.tiktok.com/@1k94"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <span class="owner-service">
-                  Tiktok
-                </span>
-                <span>@1k94</span>
-              </a>
-            </div>
+        <section data-settings-page="language" hidden>
+          <div class="language-grid">
+            <button type="button" class="language-choice" data-set-language="en"><strong>English</strong><small>EN</small></button>
+            <button type="button" class="language-choice" data-set-language="fr"><strong>Français</strong><small>FR</small></button>
+            <button type="button" class="language-choice" data-set-language="ar"><strong>العربية</strong><small>AR</small></button>
           </div>
         </section>
 
-        <button
-          id="accountActionButton"
-          class="account-action-button"
-          type="button"
-          data-i18n="login"
-        >Log in</button>
+        <section data-settings-page="theme" hidden>
+          <div class="theme-grid">
+            <button type="button" class="theme-choice" data-theme-choice="white"><strong data-i18n="whiteTheme">Light Theme</strong><small data-theme-current data-i18n="currentTheme" hidden>(Current)</small></button>
+            <button type="button" class="theme-choice" data-theme-choice="black"><strong data-i18n="blackTheme">Dark Theme</strong><small data-theme-current data-i18n="currentTheme" hidden>(Current)</small></button>
+            <button type="button" class="theme-choice" data-theme-choice="system"><strong data-i18n="systemTheme">System Theme</strong><small data-theme-current data-i18n="currentTheme" hidden>(Current)</small></button>
+          </div>
+        </section>
+
+        <footer class="settings-owner-footer">
+          <hr class="settings-separator" />
+          <h2 data-i18n="ownerAccounts">Owner Accounts</h2>
+          <div class="owner-icon-links">
+            <a href="https://discord.com/users/1010719166367535155" target="_blank" rel="noopener noreferrer" aria-label="Owner Discord account" title="Discord">
+              <svg aria-hidden="true" viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M19.7 5.2a18 18 0 0 0-4.5-1.4l-.6 1.2a16 16 0 0 0-5.2 0l-.6-1.2a18 18 0 0 0-4.5 1.4C1.5 9.4.8 13.5 1.2 17.5a18 18 0 0 0 5.5 2.8l1.2-2a12 12 0 0 1-1.9-.9l.5-.4a13.8 13.8 0 0 0 11 0l.5.4a12 12 0 0 1-1.9.9l1.2 2a18 18 0 0 0 5.5-2.8c.5-4.6-.8-8.7-3.1-12.3ZM8.5 14.8c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Zm7 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Z" /></svg>
+            </a>
+            <a href="https://youtube.com/@e8uc?si=oeMwt-QBnCSvSZMv" target="_blank" rel="noopener noreferrer" aria-label="Owner YouTube account" title="YouTube">
+              <svg aria-hidden="true" viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><path d="M23 7a3 3 0 0 0-2.1-2.1C19 4.4 12 4.4 12 4.4s-7 0-8.9.5A3 3 0 0 0 1 7a32 32 0 0 0-.5 5 32 32 0 0 0 .5 5 3 3 0 0 0 2.1 2.1c1.9.5 8.9.5 8.9.5s7 0 8.9-.5A3 3 0 0 0 23 17a32 32 0 0 0 .5-5 32 32 0 0 0-.5-5ZM9.7 15.4V8.6l6 3.4-6 3.4Z" /></svg>
+            </a>
+          </div>
+          <p data-i18n="discordCommunity">Join our Discord community for more Fortnite tools and more</p>
+          <a class="tool-button primary settings-community-link" href="https://discord.gg/UBCXwQ9ZXr" target="_blank" rel="noopener noreferrer" data-i18n="joinNow">Join Now</a>
+        </footer>
       </div>
     </div>
   </section>
 
-  <script src="i18n.js?v=107"></script>
+  <script src="i18n.js?v=108"></script>
   <script src="config.js?v=fortnite-42-30"></script>
   <script src="auth.js?v=137"></script>
 
@@ -601,7 +475,7 @@
   <script src="preview.js?v=159"></script>
 
   <script src="tools.js?v=161"></script>
-  <script src="app.js?v=146"></script>
+  <script src="app.js?v=147"></script>
   <script src="fnaa-v101.js?v=137"></script>
 </body>
 </html>
