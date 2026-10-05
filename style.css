@@ -616,14 +616,6 @@ html[dir="rtl"] .user-edit-card{
   opacity:1;
 }
 
-.e8-usage-settings-icon svg{
-  display:block;
-}
-
-.e8-usage-settings-card .settings-card-main{
-  min-width:0;
-}
-
 .e8-usage-track{
   width:100%;
   height:6px;
@@ -1995,18 +1987,23 @@ html[dir="rtl"] .asset-search-meta{text-align:left}
 
 .settings-header{
   display:grid;
-  grid-template-columns:42px minmax(0,1fr) 42px;
+  grid-template-columns:44px minmax(0,1fr) 44px;
   align-items:end;
   gap:4px;
   padding:var(--safe-top) 8px 6px;
   border-bottom:1px solid var(--line);
   background:var(--bg-soft);
 }
+.settings-header .icon-btn{
+  width:44px;
+  height:44px;
+}
 .settings-title{
-  line-height:40px;
+  min-width:0;
+  line-height:44px;
   text-align:center;
-  font-size:15px;
-  font-weight:850;
+  font-size:18px;
+  font-weight:500;
 }
 
 .settings-content{
@@ -2018,26 +2015,87 @@ html[dir="rtl"] .asset-search-meta{text-align:left}
   overscroll-behavior-y:contain;
   -webkit-overflow-scrolling:touch;
   touch-action:pan-y;
-  padding:12px 12px calc(46px + var(--safe-bottom));
+  padding:12px 12px calc(24px + var(--safe-bottom));
 }
-.settings-content>*{flex-shrink:0}
-
-.profile-settings{
+.settings-content>[data-settings-page],
+.settings-owner-footer{
+  width:min(680px,100%);
+  margin-inline:auto;
+}
+.settings-content>[data-settings-page]{min-width:0}
+.settings-content h2{
+  margin:12px 0 8px;
+  font-size:14px;
+  font-weight:500;
+}
+.settings-content p{
+  margin:0;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.5;
+}
+.settings-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  width:100%;
+  min-height:48px;
+  padding:10px 12px;
+  border:0;
+  border-bottom:1px solid var(--line);
+  border-radius:0;
+  background:transparent;
+  color:var(--text);
+  text-align:start;
+  cursor:pointer;
+}
+.settings-row:hover,
+.settings-row:active{background:var(--panel-2)}
+.settings-row-label{
+  min-width:0;
+  font-size:14px;
+  font-weight:400;
+}
+.settings-row-chevron{
+  flex:none;
+  color:var(--muted);
+  font-size:22px;
+  line-height:1;
+}
+html[dir="rtl"] .settings-row-chevron{transform:rotate(180deg)}
+.settings-detail-row{
+  display:grid;
+  grid-template-columns:minmax(100px,.75fr) minmax(0,1fr) auto;
+  align-items:center;
+  gap:12px;
+  min-height:56px;
+  padding:8px 12px;
+  border-bottom:1px solid var(--line);
+}
+.settings-account-status{
+  grid-template-columns:minmax(0,1fr) auto;
+}
+.settings-row-value{
+  min-width:0;
+  color:var(--muted);
+  font-size:13px;
+  overflow-wrap:anywhere;
+}
+.settings-avatar-value{
   display:flex;
   flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  padding:8px 10px 18px;
-  text-align:center;
+  align-items:flex-start;
 }
 .profile-avatar-button{
   position:relative;
-  width:142px;
-  height:142px;
+  display:block;
+  width:72px;
+  height:72px;
   padding:0;
   overflow:hidden;
   border:1px solid var(--line);
-  border-radius:50%;
+  border-radius:4px;
   background:var(--panel);
   cursor:pointer;
 }
@@ -2049,112 +2107,100 @@ html[dir="rtl"] .asset-search-meta{text-align:left}
 }
 .profile-avatar-edit{
   position:absolute;
-  left:50%;
-  bottom:8px;
-  transform:translateX(-50%);
-  padding:5px 9px;
-  border:1px solid rgba(255,255,255,.18);
-  border-radius:999px;
-  background:rgba(0,0,0,.66);
-  color:#fff;
-  font-size:9px;
-  font-weight:850;
-  backdrop-filter:blur(10px);
-  -webkit-backdrop-filter:blur(10px);
-}
-.profile-locked .profile-avatar-edit{display:none}
-
-.profile-username{
-  margin-top:9px;
-  padding:4px 10px;
+  inset:auto 3px 3px;
+  padding:2px 4px;
   border:0;
-  border-radius:10px;
-  background:transparent;
-  color:var(--text);
-  font-size:23px;
-  line-height:1.2;
-  font-weight:850;
-  letter-spacing:-.03em;
-}
-.profile-account-type{
-  margin-top:2px;
-  color:var(--muted);
-  font-size:10px;
-  font-weight:700;
-}
-
-.settings-card{
-  width:min(680px,100%);
-  margin:0 auto 10px;
-  padding:13px;
-  border:1px solid var(--line);
-  border-radius:15px;
-  background:var(--panel);
-}
-.settings-stack-card{
-  display:flex;
-  align-items:flex-start;
-  gap:11px;
-}
-.settings-card-icon{
-  width:38px;
-  height:38px;
-  flex:0 0 38px;
-  display:grid;
-  place-items:center;
-  border:1px solid var(--line);
-  border-radius:11px;
+  border-radius:4px;
   background:var(--panel-2);
   color:var(--text);
-  font-size:15px;
-  font-weight:850;
+  font-size:9px;
+  line-height:1.4;
 }
-.settings-card-main{
-  min-width:0;
-  flex:1;
-}
-.settings-card h2{
-  margin:1px 0 5px;
-  font-size:14px;
-}
-.settings-card p{
-  margin:0;
+.profile-locked .profile-avatar-edit{display:none}
+.profile-account-type{
+  display:block;
+  margin-top:6px;
   color:var(--muted);
-  font-size:10px;
-  line-height:1.45;
+  font-size:12px;
+}
+.settings-content :is(#profileUsernameButton,#fnaaSettingsApiSave,.account-action-button,.settings-community-link){
+  min-width:44px;
+  min-height:44px;
+  padding:8px 12px;
+  border:1px solid var(--line-strong);
+  border-radius:4px;
+  background:var(--panel-2);
+  color:var(--text);
+  font-size:13px;
+  font-weight:400;
+  cursor:pointer;
+}
+.settings-content :is(#profileUsernameButton,#fnaaSettingsApiSave,.account-action-button,.settings-community-link):enabled:hover{
+  background:var(--panel-3);
+}
+.settings-content :is(#profileUsernameButton,#fnaaSettingsApiSave,.account-action-button,.settings-community-link).primary{
+  border-color:var(--accent);
+  background:var(--accent);
+  color:var(--accent-text);
+}
+.settings-content :is(#profileUsernameButton,#fnaaSettingsApiSave,.account-action-button,.settings-community-link).primary:hover{
+  border-color:var(--accent-hover-line);
+  background:var(--accent-hover);
+}
+.settings-content button:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
+.settings-content .account-action-button{
+  width:auto;
+  margin:0;
+}
+.settings-separator{
+  height:0;
+  margin:18px 0;
+  border:0;
+  border-top:1px solid var(--line);
 }
 
 .language-grid,
 .theme-grid{
   display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:7px;
-  margin-top:12px;
+  grid-template-columns:1fr;
+  gap:0;
 }
-
 .language-choice,
 .theme-choice{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
   min-width:0;
-  min-height:58px;
-  padding:6px;
-  border:1px solid var(--line);
-  border-radius:13px;
-  background:var(--bg-soft);
+  width:100%;
+  min-height:48px;
+  padding:10px 12px;
+  border:1px solid transparent;
+  border-bottom-color:var(--line);
+  border-radius:0;
+  background:transparent;
   color:var(--text);
-  line-height:1.12;
+  text-align:start;
+  line-height:1.5;
+  cursor:pointer;
 }
 .language-choice strong,
 .theme-choice strong{
-  display:block;
-  font-size:12px;
+  min-width:0;
+  font-size:14px;
+  font-weight:400;
 }
 .language-choice small,
 .theme-choice small{
-  display:block;
-  margin-top:3px;
+  flex:none;
   color:var(--muted);
-  font-size:8px;
+  font-size:12px;
 }
+.language-choice:hover,
+.theme-choice:hover{background:var(--panel-2)}
 .language-choice.active,
 .theme-choice.active{
   border-color:var(--accent);
@@ -2163,55 +2209,44 @@ html[dir="rtl"] .asset-search-meta{text-align:left}
 }
 .language-choice.active small,
 .theme-choice.active small{color:currentColor}
-
-.owner-account-list{
-  display:grid;
-  gap:2px;
-  margin-top:10px;
+.settings-owner-footer{
+  padding-bottom:8px;
+  text-align:center;
 }
-.owner-account-list a{
-  display:grid;
-  grid-template-columns:68px minmax(0,1fr);
-  gap:7px;
-  align-items:center;
-  min-height:34px;
-  padding:0 3px;
-  border-radius:9px;
-  color:var(--text);
-  text-decoration:none;
-  font-size:12px;
-}
-.owner-account-list a:active{background:var(--panel-2)}
-.owner-service{
-  color:var(--muted);
-  font-size:10px;
-  font-weight:850;
-  text-transform:uppercase;
-}
-
-.account-action-button{
-  width:min(680px,100%);
-  min-height:46px;
-  display:block;
-  margin:0 auto;
-  border:1px solid var(--line-strong);
-  border-radius:14px;
-  background:var(--panel);
-  color:var(--text);
-  font-weight:850;
-}
-
-.fnaa-api-settings-card .settings-card-icon{font-size:11px}
-.fnaa-api-actions{
+.settings-owner-footer h2{margin-bottom:8px}
+.owner-icon-links{
   display:flex;
-  gap:7px;
-  flex-wrap:wrap;
-  margin-top:9px;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  margin:0 0 14px;
 }
-.fnaa-api-actions .tool-button{
-  flex:1 1 145px;
-  min-height:40px;
+.owner-icon-links a{
+  display:grid;
+  place-items:center;
+  width:44px;
+  height:44px;
+  border:1px solid var(--line);
+  border-radius:4px;
+  color:var(--text);
+  background:transparent;
+  text-decoration:none;
 }
+.owner-icon-links a:hover{background:var(--panel-2)}
+.owner-icon-links svg{
+  display:block;
+  width:22px;
+  height:22px;
+}
+.settings-owner-footer .settings-community-link{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-top:10px;
+  text-decoration:none;
+}
+.settings-owner-footer .settings-community-link:hover{background:var(--panel-3)}
+#e8UsageSummary{margin-top:8px}
 
 /* ==========================================================================
    BLACK theme
@@ -2219,19 +2254,21 @@ html[dir="rtl"] .asset-search-meta{text-align:left}
 
 html[data-theme="black"]{
   color-scheme:dark;
-  --bg:#000;
-  --bg-soft:#080808;
-  --panel:#101010;
-  --panel-2:#171717;
-  --panel-3:#202020;
-  --line:#2d2d2d;
-  --line-strong:#3b3b3b;
+  --bg:#171717;
+  --bg-soft:#242424;
+  --panel:#212121;
+  --panel-2:#2b2b2b;
+  --panel-3:#353535;
+  --line:#404040;
+  --line-strong:#555;
   --text:#f5f5f5;
-  --muted:#8d8d8d;
-  --muted-2:#666;
-  --accent:#f1f1f1;
-  --accent-text:#111;
-  --link:#5ca8ff;
+  --muted:#b0b0b0;
+  --muted-2:#969696;
+  --accent:#3c7e90;
+  --accent-text:#fff;
+  --accent-hover:#316675;
+  --accent-hover-line:#2d5f6c;
+  --link:#8bcdd6;
 }
 
 /* ==========================================================================
@@ -2250,9 +2287,11 @@ html[data-theme="white"]{
   --text:#111;
   --muted:#666;
   --muted-2:#888;
-  --accent:#111;
+  --accent:#950000;
+  --accent-hover:#760000;
+  --accent-hover-line:#760000;
   --accent-text:#fff;
-  --link:#1769d2;
+  --link:#950000;
   --danger:#b22323;
   --warning:#835627;
 }
@@ -2292,207 +2331,6 @@ html[data-theme="white"] .asset-result-actions .description-cooldown:disabled{
   border-color:#aaa;
   background:#b7b7b7;
   color:#555;
-}
-
-/* ==========================================================================
-   OVERRIDE theme
-   "fortnite" is intentionally retained as the stored theme ID so existing
-   users migrate automatically; visually it is the Override theme.
-   ========================================================================== */
-
-html[data-theme="fortnite"]{
-  color-scheme:dark;
-
-  --bg:#0a0524;
-  --bg-soft:#0e0731;
-  --panel:#130b3d;
-  --panel-2:#1a1051;
-  --panel-3:#211461;
-
-  --line:#49307c;
-  --line-strong:#6641a3;
-
-  --text:#fff;
-  --muted:#aaa2ce;
-  --muted-2:#746b9a;
-
-  --accent:#fff;
-  --accent-text:#10092e;
-
-  --link:#54d7ff;
-  --danger:#ff6fbd;
-  --warning:#d5bd72;
-
-  --override-magenta:#ff3fa9;
-  --override-cyan:#54d7ff;
-  --override-green:#7cff92;
-  --override-purple:#8b5bff;
-  --override-indigo:#150b4f;
-}
-
-html[data-theme="fortnite"],
-html[data-theme="fortnite"] body{
-  background:#0a0524;
-  color:#fff;
-}
-
-html[data-theme="fortnite"] .app-shell,
-html[data-theme="fortnite"] .chat,
-html[data-theme="fortnite"] .tools-overlay,
-html[data-theme="fortnite"] .settings-overlay,
-html[data-theme="fortnite"] .login-gate{
-  background:
-    radial-gradient(circle at 15% 10%,rgba(139,91,255,.19),transparent 28%),
-    radial-gradient(circle at 88% 16%,rgba(84,215,255,.09),transparent 24%),
-    linear-gradient(180deg,#0d0630 0%,#0a0524 50%,#07031c 100%);
-}
-
-html[data-theme="fortnite"] .topbar,
-html[data-theme="fortnite"] .composer,
-html[data-theme="fortnite"] .tools-header,
-html[data-theme="fortnite"] .settings-header{
-  background:rgba(10,5,36,.92);
-  border-color:rgba(139,91,255,.28);
-  backdrop-filter:blur(18px);
-  -webkit-backdrop-filter:blur(18px);
-}
-
-html[data-theme="fortnite"] .sidebar{
-  background:
-    linear-gradient(180deg,rgba(21,11,79,.98),rgba(10,5,36,.98));
-  border-color:rgba(139,91,255,.35);
-}
-
-html[data-theme="fortnite"] .composer-inner,
-html[data-theme="fortnite"] .login-card,
-html[data-theme="fortnite"] .tool-card,
-html[data-theme="fortnite"] .converter-card,
-html[data-theme="fortnite"] .settings-card,
-html[data-theme="fortnite"] .mesh-image-panel,
-html[data-theme="fortnite"] .reference-list{
-  border-color:rgba(139,91,255,.34);
-  background:
-    linear-gradient(180deg,rgba(21,11,79,.92),rgba(13,6,48,.94));
-  box-shadow:
-    0 12px 36px rgba(0,0,0,.22),
-    inset 0 1px 0 rgba(255,255,255,.025);
-}
-
-html[data-theme="fortnite"] .welcome h1,
-html[data-theme="fortnite"] .topbar-title,
-html[data-theme="fortnite"] .tools-title,
-html[data-theme="fortnite"] .settings-title,
-html[data-theme="fortnite"] .login-card h1,
-html[data-theme="fortnite"] .tool-section h2{
-  font-style:italic;
-  letter-spacing:-.025em;
-}
-
-html[data-theme="fortnite"] .topbar::after,
-html[data-theme="fortnite"] .tools-header::after,
-html[data-theme="fortnite"] .settings-header::after{
-  content:"";
-  position:absolute;
-  left:9%;
-  right:9%;
-  bottom:-1px;
-  height:1px;
-  pointer-events:none;
-  background:
-    linear-gradient(
-      90deg,
-      transparent 0 7%,
-      var(--override-magenta) 7% 18%,
-      transparent 18% 36%,
-      var(--override-cyan) 36% 47%,
-      transparent 47% 74%,
-      var(--override-green) 74% 81%,
-      transparent 81%
-    );
-  opacity:.7;
-}
-
-html[data-theme="fortnite"] .send-btn,
-html[data-theme="fortnite"] .tool-button.primary,
-html[data-theme="fortnite"] .tools-tab.active,
-html[data-theme="fortnite"] .login-primary,
-html[data-theme="fortnite"] .language-choice.active,
-html[data-theme="fortnite"] .theme-choice.active{
-  border-color:#fff;
-  background:
-    linear-gradient(100deg,#fff 0 72%,#d8f7ff 100%);
-  color:#10092e;
-}
-
-html[data-theme="fortnite"] .send-btn{
-  box-shadow:
-    0 0 18px rgba(84,215,255,.14);
-}
-
-html[data-theme="fortnite"] .user-bubble{
-  background:
-    linear-gradient(135deg,rgba(36,20,99,.96),rgba(26,16,81,.96));
-  border:1px solid rgba(139,91,255,.30);
-}
-
-html[data-theme="fortnite"] .tool-searchbar input:focus,
-html[data-theme="fortnite"] .tool-input:focus,
-html[data-theme="fortnite"] .tool-textarea:focus,
-html[data-theme="fortnite"] .profile-username-input:focus{
-  border-color:var(--override-cyan);
-  box-shadow:0 0 0 1px rgba(84,215,255,.15);
-}
-
-html[data-theme="fortnite"] .path-label,
-html[data-theme="fortnite"] .device-field-tag{
-  color:#ff9fd0;
-}
-
-html[data-theme="fortnite"] .asset-result-tags span{
-  border-color:rgba(84,215,255,.20);
-  color:#b9eefe;
-}
-
-html[data-theme="fortnite"] .asset-result-actions .json-view-button:first-child{
-  border-color:rgba(255,255,255,.55);
-  background:#fff;
-  color:#10092e;
-  font-weight:850;
-}
-
-html[data-theme="fortnite"] .asset-result-actions .description-cooldown,
-html[data-theme="fortnite"] .asset-result-actions .description-cooldown:disabled{
-  border-color:#555;
-  background:#4b4960;
-  color:#cfccd8;
-  opacity:1;
-  box-shadow:none;
-}
-
-html[data-theme="fortnite"] .login-link-button{
-  color:var(--override-cyan);
-}
-
-html[data-theme="fortnite"] .override-theme-choice{
-  position:relative;
-  overflow:hidden;
-}
-html[data-theme="fortnite"] .override-theme-choice::after{
-  content:"";
-  position:absolute;
-  left:7px;
-  right:7px;
-  bottom:5px;
-  height:2px;
-  border-radius:999px;
-  background:
-    linear-gradient(
-      90deg,
-      var(--override-magenta),
-      var(--override-cyan),
-      var(--override-green)
-    );
-  opacity:.85;
 }
 
 /* ==========================================================================
@@ -2585,6 +2423,15 @@ html[dir="rtl"] .user-bubble{text-align:right}
 }
 
 @media (max-width:430px){
+  .settings-detail-row{
+    grid-template-columns:minmax(78px,.75fr) minmax(0,1fr) auto;
+    gap:8px;
+    padding-inline:8px;
+  }
+  .settings-account-status{
+    grid-template-columns:minmax(0,1fr) auto;
+  }
+
   .topbar-brand{
     font-size:12px;
   }

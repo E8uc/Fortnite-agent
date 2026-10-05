@@ -9,6 +9,26 @@
 
   const COPY = {
     en: {
+      account: "Account",
+      accountInfo: "Account Info",
+      accountStatus: "Account Status",
+      usage: "Usage",
+      theme: "Theme",
+      siteTheme: "Site Theme",
+      systemTheme: "System Theme",
+      currentTheme: "(Current)",
+      edit: "Edit",
+      profilePicture: "Profile Image",
+      signOut: "Sign Out",
+      accountLogin: "Log In",
+      apiConnected: "Connected To OpenRouter",
+      apiDisconnected: "Not Connected To OpenRouter",
+      reConnect: "ReConnect",
+      signOutPrompt: "Sign out from your account?",
+      logInPrompt: "Log in to your account?",
+      discordCommunity: "Join our Discord community for more Fortnite tools and more",
+      joinNow: "Join Now",
+
       brand: "E8",
       newChat: "New chat",
       moreTools: "More Fortnite Tools",
@@ -65,16 +85,13 @@
         "Change The Theme",
 
       blackTheme:
-        "Black Theme",
+        "Dark Theme",
 
       whiteTheme:
-        "White Theme",
-
-      fortniteTheme:
-        "Override Theme",
+        "Light Theme",
 
       ownerAccounts:
-        "Owner accounts :",
+        "Owner Accounts",
 
       manualSearch:
         "Manual Search",
@@ -201,6 +218,26 @@
     },
 
     fr: {
+      account: "Compte",
+      accountInfo: "Informations du compte",
+      accountStatus: "État du compte",
+      usage: "Utilisation",
+      theme: "Thème",
+      siteTheme: "Thème du site",
+      systemTheme: "Thème système",
+      currentTheme: "(Actuel)",
+      edit: "Modifier",
+      profilePicture: "Photo de profil",
+      signOut: "Se déconnecter",
+      accountLogin: "Se connecter",
+      apiConnected: "Connecté à OpenRouter",
+      apiDisconnected: "Non connecté à OpenRouter",
+      reConnect: "Reconnecter",
+      signOutPrompt: "Se déconnecter de votre compte ?",
+      logInPrompt: "Se connecter à votre compte ?",
+      discordCommunity: "Rejoignez notre communauté Discord pour plus d’outils Fortnite et plus encore",
+      joinNow: "Rejoindre",
+
       brand: "E8",
       newChat: "Nouveau chat",
       moreTools:
@@ -261,16 +298,13 @@
         "Changer le thème",
 
       blackTheme:
-        "Thème noir",
+        "Thème sombre",
 
       whiteTheme:
-        "Thème blanc",
-
-      fortniteTheme:
-        "Thème Override",
+        "Thème clair",
 
       ownerAccounts:
-        "Comptes du propriétaire :",
+        "Comptes du propriétaire",
 
       manualSearch:
         "Recherche manuelle",
@@ -400,6 +434,26 @@
     },
 
     ar: {
+      account: "الحساب",
+      accountInfo: "معلومات الحساب",
+      accountStatus: "حالة الحساب",
+      usage: "الاستخدام",
+      theme: "الثيم",
+      siteTheme: "ثيم الموقع",
+      systemTheme: "ثيم النظام",
+      currentTheme: "(الحالي)",
+      edit: "تعديل",
+      profilePicture: "الصورة الشخصية",
+      signOut: "تسجيل الخروج",
+      accountLogin: "تسجيل الدخول",
+      apiConnected: "متصل بـ OpenRouter",
+      apiDisconnected: "غير متصل بـ OpenRouter",
+      reConnect: "إعادة الربط",
+      signOutPrompt: "تسجيل الخروج من حسابك؟",
+      logInPrompt: "تسجيل الدخول إلى حسابك؟",
+      discordCommunity: "انضم إلى مجتمعنا على Discord للمزيد من أدوات فورتنايت وغيرها",
+      joinNow: "انضم الآن",
+
       brand: "E8",
       newChat: "محادثة جديدة",
       moreTools:
@@ -461,16 +515,13 @@
         "تغيير الثيم",
 
       blackTheme:
-        "الثيم الأسود",
+        "الثيم الداكن",
 
       whiteTheme:
-        "الثيم الأبيض",
-
-      fortniteTheme:
-        "ثيم Override",
+        "الثيم الفاتح",
 
       ownerAccounts:
-        "حسابات المالك :",
+        "حسابات المالك",
 
       manualSearch:
         "البحث اليدوي",

@@ -1,9 +1,0 @@
-{
-  "schema": "novasparx.asset-list.v1",
-  "builtAt": "2026-10-01T13:58:40.4632318+00:00",
-  "fortniteVersion": "\u002B\u002BFortnite\u002BRelease-42.30-CL-58557680-Windows",
-  "entries": 1804101,
-  "bytes": 12746380,
-  "sha256": "162cc264e8e0bf5ebb0a26e820c00db4ea7674c54a624b0e37321296bb038147",
-  "path": "fortnite_assets.gz"
-}
